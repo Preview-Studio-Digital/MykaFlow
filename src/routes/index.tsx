@@ -6,7 +6,6 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
-import { AdminPanel } from "@/components/AdminPanel";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import {
   LogOut,
@@ -16,6 +15,7 @@ import {
   Wallet,
   ChevronLeft,
   ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -105,6 +105,14 @@ function Dashboard() {
             </p>
             <p className="text-sm font-mono">{user.email}</p>
           </div>
+          {role === "admin" && (
+            <button
+              onClick={() => navigate({ to: "/admin" })}
+              className="btn-ghost-neon rounded-lg px-4 py-2 text-xs flex items-center gap-2"
+            >
+              <ShieldCheck className="h-4 w-4" /> Admin
+            </button>
+          )}
           <button
             onClick={async () => {
               await signOut();
@@ -153,6 +161,16 @@ function Dashboard() {
         />
       </section>
 
+      {/* Forms Section - Revenues and Expenses side by side */}
+      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="space-y-4">
+          <TransactionForm onCreated={load} fixedType="expense" />
+        </div>
+        <div className="space-y-4">
+          <TransactionForm onCreated={load} fixedType="income" />
+        </div>
+      </section>
+
       {/* Charts */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CategoryPie
@@ -173,18 +191,6 @@ function Dashboard() {
 
       <section className="mb-6">
         <EvolutionChart data={rows} year={year} />
-      </section>
-
-      {/* Form + Admin */}
-      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TransactionForm onCreated={load} />
-        {role === "admin" ? (
-          <AdminPanel />
-        ) : (
-          <div className="glass rounded-2xl p-6 flex items-center justify-center text-sm text-muted-foreground text-center">
-            Apenas o administrador pode criar novos acessos.
-          </div>
-        )}
       </section>
 
       {/* List */}

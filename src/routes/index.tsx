@@ -161,15 +161,6 @@ function Dashboard() {
         />
       </section>
 
-      {/* Forms Section - Revenues and Expenses side by side */}
-      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="space-y-4">
-          <TransactionForm onCreated={load} fixedType="expense" />
-        </div>
-        <div className="space-y-4">
-          <TransactionForm onCreated={load} fixedType="income" />
-        </div>
-      </section>
 
       {/* Charts */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -191,6 +182,16 @@ function Dashboard() {
 
       <section className="mb-6">
         <EvolutionChart data={rows} year={year} />
+      </section>
+
+      {/* Forms Section - Revenues and Expenses side by side */}
+      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="space-y-4">
+          <TransactionForm onCreated={load} fixedType="expense" />
+        </div>
+        <div className="space-y-4">
+          <TransactionForm onCreated={load} fixedType="income" />
+        </div>
       </section>
 
       {/* List */}

@@ -3,19 +3,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance-constants";
 import { toast } from "sonner";
-import { Plus, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, X } from "lucide-react";
 
 interface Props {
   onCreated: () => void;
   fixedType?: "income" | "expense";
   initialData?: {
+    id: string;
     category: string;
     amount: number;
     description: string | null;
     nature: "fixed" | "variable";
     occurred_on: string;
+    isVirtual?: boolean;
   } | null;
-  suggestions?: string[];
   categories?: string[];
 }
 
@@ -23,50 +24,53 @@ export function TransactionForm({
   onCreated,
   fixedType,
   initialData,
-  suggestions = [],
   categories = [],
 }: Props) {
   const { user } = useAuth();
   const [type, setType] = useState<"income" | "expense">(fixedType || "expense");
   const [nature, setNature] = useState<"fixed" | "variable">("variable");
-  const [category, setCategory] = useState(
-    fixedType === "income" ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]
-  );
+  const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
 
-  const [isNewDescription, setIsNewDescription] = useState(false);
-  const [newDescription, setNewDescription] = useState("");
+  const [isNewCategory, setIsNewCategory] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
+
+  const defaultCats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const availableCategories = Array.from(new Set([...defaultCats, ...categories])).sort();
 
   useEffect(() => {
     if (initialData) {
-      setCategory(initialData.category);
+      const cat = initialData.category;
+      if (availableCategories.includes(cat)) {
+        setCategory(cat);
+        setIsNewCategory(false);
+      } else {
+        setCategory("NEW");
+        setNewCategory(cat);
+        setIsNewCategory(true);
+      }
+      
       setAmount(
         initialData.amount.toLocaleString("pt-BR", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })
       );
-      const desc = (initialData.description || "").replace(/^\* /, "");
-      if (suggestions.includes(desc)) {
-        setDescription(desc);
-        setIsNewDescription(false);
-      } else if (desc) {
-        setDescription("NEW");
-        setNewDescription(desc);
-        setIsNewDescription(true);
-      } else {
-        setDescription("");
-        setIsNewDescription(false);
-      }
       setNature(initialData.nature);
       setDate(initialData.occurred_on);
+    } else {
+      // Reset form if initialData becomes null
+      setCategory("");
+      setAmount("");
+      setIsNewCategory(false);
+      setNewCategory("");
+      setNature("variable");
+      setDate(new Date().toISOString().slice(0, 10));
     }
-  }, [initialData, suggestions]);
+  }, [initialData]); // Only re-run when initialData itself changes
 
-  const defaultCats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
   const isExpense = type === "expense";
   const accentColor = isExpense ? "oklch(0.7 0.2 30)" : "oklch(0.8 0.16 150)";
   const bgColor = isExpense ? "rgba(239, 68, 68, 0.05)" : "rgba(34, 197, 94, 0.05)";
@@ -88,10 +92,16 @@ export function TransactionForm({
     setAmount(formattedValue);
   }
 
+  function formatTitleCase(str: string) {
+    if (!str) return "";
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  }
+
   function switchType(t: "income" | "expense") {
     if (fixedType) return;
     setType(t);
-    setCategory(t === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
+    setCategory("");
+    setIsNewCategory(false);
   }
 
   async function submit(e: React.FormEvent) {
@@ -102,53 +112,77 @@ export function TransactionForm({
       toast.error("Valor inválido");
       return;
     }
-    const finalDescription = isNewDescription ? newDescription : description;
-    if (!finalDescription) {
-      toast.error("Informe um nome");
+    
+    let finalCategory = isNewCategory ? formatTitleCase(newCategory) : category;
+    if (!finalCategory || finalCategory === "NEW") {
+      toast.error("Informe o identificador");
       return;
     }
 
     setBusy(true);
-    const { error } = await supabase.from("transactions").insert({
+
+    const isEdit = initialData && !initialData.isVirtual;
+    const payload = {
       user_id: user.id,
       type,
       nature,
-      category,
-      description: finalDescription || null,
+      category: finalCategory,
+      description: null,
       amount: value,
       occurred_on: date,
-    });
+    };
+
+    let result;
+    if (isEdit) {
+      result = await supabase.from("transactions").update(payload).eq("id", initialData.id);
+    } else {
+      result = await supabase.from("transactions").insert(payload);
+    }
+
     setBusy(false);
-    if (error) {
-      toast.error(error.message);
+    if (result.error) {
+      toast.error(result.error.message);
       return;
     }
-    toast.success(`${isExpense ? "Despesa" : "Receita"} registrada`);
-    setAmount("");
-    setNewDescription("");
-    setIsNewDescription(false);
-    setDescription("");
-    onCreated();
-  }
 
-  const catId = `categories-${fixedType || "all"}`;
+    toast.success(isEdit ? "Atualizado com sucesso" : `${isExpense ? "Despesa" : "Receita"} registrada`);
+    
+    // Clear form
+    setAmount("");
+    setNewCategory("");
+    setIsNewCategory(false);
+    setCategory("");
+    onCreated(); // This will also trigger setEditExpense(null) in parent
+  }
 
   return (
     <form
       onSubmit={submit}
-      className="glass rounded-2xl p-6 space-y-4 border-t-2"
+      className="glass rounded-2xl p-6 space-y-4 border-t-2 relative"
       style={{
         borderTopColor: accentColor,
         background: `linear-gradient(180deg, ${bgColor} 0%, transparent 100%)`,
       }}
     >
-      <h3
-        className="text-lg font-bold tracking-widest uppercase flex items-center gap-2"
-        style={{ color: accentColor }}
-      >
-        {isExpense ? <TrendingDown className="h-5 w-5" /> : <TrendingUp className="h-5 w-5" />}
-        {isExpense ? "Lançar Despesa" : "Lançar Receita"}
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3
+          className="text-lg font-bold tracking-widest uppercase flex items-center gap-2"
+          style={{ color: accentColor }}
+        >
+          {isExpense ? <TrendingDown className="h-5 w-5" /> : <TrendingUp className="h-5 w-5" />}
+          {initialData && !initialData.isVirtual ? "Editar" : isExpense ? "Lançar Despesa" : "Lançar Receita"}
+        </h3>
+        {initialData && (
+          <button 
+            type="button"
+            onClick={() => onCreated()} // Calling onCreated will reset the edit state in index.tsx
+            className="text-muted-foreground hover:text-foreground transition p-1"
+            title="Cancelar edição"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
 
       {!fixedType && (
         <div className="grid grid-cols-2 gap-2">
@@ -180,24 +214,24 @@ export function TransactionForm({
       <div className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
-            Nome / Identificador
+            Identificador
           </span>
           <select
             required
-            value={description}
+            value={category}
             onChange={(e) => {
               const val = e.target.value;
-              setDescription(val);
-              setIsNewDescription(val === "NEW");
+              setCategory(val);
+              setIsNewCategory(val === "NEW");
             }}
             className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
           >
             <option value="" disabled>
-              Selecione um nome...
+              Selecione...
             </option>
-            {suggestions.map((s) => (
-              <option key={s} value={s} className="bg-popover">
-                {s}
+            {availableCategories.map((cat) => (
+              <option key={cat} value={cat} className="bg-popover">
+                {cat}
               </option>
             ))}
             <option value="NEW" className="bg-popover font-bold text-accent">
@@ -206,18 +240,18 @@ export function TransactionForm({
           </select>
         </label>
 
-        {isNewDescription && (
+        {isNewCategory && (
           <div className="animate-in fade-in slide-in-from-top-2 duration-300">
             <label className="block">
               <span className="mb-1 block text-[10px] uppercase tracking-widest text-accent font-bold">
-                Novo Nome Específico
+                Novo Identificador
               </span>
               <input
                 required
                 autoFocus
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="Digite o nome aqui..."
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                placeholder="Ex: Aluguel, Vendas, Internet..."
                 className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none border-accent/50"
               />
             </label>
@@ -226,29 +260,6 @@ export function TransactionForm({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
-            Categoria
-          </span>
-          <input
-            required
-            list={catId}
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
-            placeholder="Selecione ou digite..."
-          />
-          <datalist id={catId}>
-            {defaultCats.map((c) => (
-              <option key={c} value={c} />
-            ))}
-            {categories
-              .filter((c) => !defaultCats.includes(c))
-              .map((c) => (
-                <option key={c} value={c} />
-              ))}
-          </datalist>
-        </label>
         <label className="block">
           <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
             Natureza
@@ -266,22 +277,6 @@ export function TransactionForm({
             </option>
           </select>
         </label>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
-            Valor (R$)
-          </span>
-          <input
-            required
-            inputMode="numeric"
-            value={amount}
-            onChange={handleAmountChange}
-            placeholder="0,00"
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-mono"
-          />
-        </label>
         <label className="block">
           <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
             Data
@@ -292,6 +287,22 @@ export function TransactionForm({
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1">
+        <label className="block">
+          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
+            Valor (R$)
+          </span>
+          <input
+            required
+            inputMode="numeric"
+            value={amount}
+            onChange={handleAmountChange}
+            placeholder="0,00"
+            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-mono text-center text-lg"
           />
         </label>
       </div>
@@ -307,7 +318,7 @@ export function TransactionForm({
           color: "white",
         }}
       >
-        {busy ? "REGISTRANDO..." : isExpense ? "REGISTRAR DESPESA" : "REGISTRAR RECEITA"}
+        {busy ? "PROCESSANDO..." : (initialData && !initialData.isVirtual) ? "SALVAR ALTERAÇÕES" : isExpense ? "REGISTRAR DESPESA" : "REGISTRAR RECEITA"}
       </button>
     </form>
   );

@@ -6,7 +6,7 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
-import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
+import { fmtCurrency, MONTHS_PT, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance-constants";
 import {
   LogOut,
   Zap,
@@ -120,13 +120,8 @@ function Dashboard() {
 
   const allCategories = useMemo(() => {
     const set = new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]);
-    rows.forEach((r) => set.add(r.category));
-    return Array.from(set).sort();
-  }, [rows]);
-
-  const allDescriptions = useMemo(() => {
-    const set = new Set<string>();
     rows.forEach((r) => {
+      if (r.category) set.add(r.category);
       if (r.description) set.add(r.description.replace(/^\* /, ""));
     });
     return Array.from(set).sort();
@@ -247,7 +242,6 @@ function Dashboard() {
             onCreated={load}
             fixedType="expense"
             initialData={editExpense}
-            suggestions={allDescriptions}
             categories={allCategories}
           />
         </div>
@@ -256,7 +250,6 @@ function Dashboard() {
             onCreated={load}
             fixedType="income"
             initialData={editIncome}
-            suggestions={allDescriptions}
             categories={allCategories}
           />
         </div>
@@ -280,7 +273,7 @@ function Dashboard() {
             }
           }}
         />
-      </section>on>
+      </section>
 
       <footer className="mt-10 text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60">
         MykaFlow • {new Date().getFullYear()}

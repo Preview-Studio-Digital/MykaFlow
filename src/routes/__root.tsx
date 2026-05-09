@@ -82,8 +82,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "MykaFlow — Controle Financeiro Empresarial" },
       { name: "twitter:description", content: "MykaFlow: sistema de controle de receitas e despesas." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3104a6bf-f2a6-4bd6-a92d-9a40036a3092/id-preview-55d9d247--423999e2-d9db-4758-befb-2b3c2de33975.lovable.app-1778352335666.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3104a6bf-f2a6-4bd6-a92d-9a40036a3092/id-preview-55d9d247--423999e2-d9db-4758-befb-2b3c2de33975.lovable.app-1778352335666.png" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/816e970f-80ec-4455-8ab2-2d003c0edc92" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/816e970f-80ec-4455-8ab2-2d003c0edc92" },
     ],
     links: [
       {

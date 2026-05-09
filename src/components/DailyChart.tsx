@@ -19,6 +19,7 @@ export function DailyChart({ rows, month, year }: { rows: TxRow[]; month: number
     day: i + 1,
     receitas: 0,
     despesas: 0,
+    saldo: 0,
   }));
 
   rows.forEach((r) => {
@@ -40,6 +41,7 @@ export function DailyChart({ rows, month, year }: { rows: TxRow[]; month: number
     cumulativeExpense += d.despesas;
     d.receitas = cumulativeIncome;
     d.despesas = cumulativeExpense;
+    d.saldo = cumulativeIncome - cumulativeExpense;
   });
 
   return (
@@ -58,6 +60,10 @@ export function DailyChart({ rows, month, year }: { rows: TxRow[]; month: number
               <linearGradient id="dailyExpenseGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.4} />
                 <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="dailyBalanceGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="white" stopOpacity={0.2} />
+                <stop offset="100%" stopColor="white" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke="oklch(0.78 0.16 220 / 0.05)" vertical={false} />
@@ -98,6 +104,14 @@ export function DailyChart({ rows, month, year }: { rows: TxRow[]; month: number
               strokeWidth={2}
               fill="url(#dailyExpenseGrad)"
               name="Despesas"
+            />
+            <Area
+              type="monotone"
+              dataKey="saldo"
+              stroke="white"
+              strokeWidth={3}
+              fill="url(#dailyBalanceGrad)"
+              name="Saldo"
             />
           </AreaChart>
         </ResponsiveContainer>

@@ -23,8 +23,11 @@ export function DailyChart({ rows, month, year }: { rows: TxRow[]; month: number
   }));
 
   rows.forEach((r) => {
-    const d = new Date(r.occurred_on + "T00:00:00");
-    if (d.getMonth() === month && d.getFullYear() === year) {
+    // Robust date parsing: handle both YYYY-MM-DD and full ISO strings
+    const dateStr = r.occurred_on.includes("T") ? r.occurred_on : `${r.occurred_on}T00:00:00`;
+    const d = new Date(dateStr);
+    
+    if (!isNaN(d.getTime())) {
       const dayIdx = d.getDate() - 1;
       if (dayIdx >= 0 && dayIdx < dailyData.length) {
         if (r.type === "income") dailyData[dayIdx].receitas += Number(r.amount);

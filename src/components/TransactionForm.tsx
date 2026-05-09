@@ -32,7 +32,12 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
   useEffect(() => {
     if (initialData) {
       setCategory(initialData.category);
-      setAmount(initialData.amount.toString().replace(".", ","));
+      setAmount(
+        initialData.amount.toLocaleString("pt-BR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      );
       setDescription((initialData.description || "").replace(/^\* /, ""));
       setNature(initialData.nature);
       setDate(initialData.occurred_on);
@@ -183,9 +188,9 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
           </span>
           <input
             required
-            inputMode="decimal"
+            inputMode="numeric"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={handleAmountChange}
             placeholder="0,00"
             className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-mono"
           />

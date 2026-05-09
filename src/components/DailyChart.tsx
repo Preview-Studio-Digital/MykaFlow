@@ -49,9 +49,17 @@ export function DailyChart({ rows, month, year }: { rows: TxRow[]; month: number
 
   return (
     <div className="glass rounded-2xl p-6">
-      <h3 className="text-sm font-bold uppercase tracking-widest text-gradient flex items-center gap-2 mb-4">
-        <CalendarDays className="h-5 w-5" /> Evolução Mensal
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
+          <CalendarDays className="h-5 w-5" /> Evolução Mensal
+        </h3>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground leading-none mb-1">Saldo no Período</p>
+          <p className={`text-2xl font-black tracking-tighter ${dailyData[dailyData.length - 1].saldo >= 0 ? "text-accent" : "text-destructive"}`}>
+            {fmtCurrency(dailyData[dailyData.length - 1].saldo)}
+          </p>
+        </div>
+      </div>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={dailyData}>

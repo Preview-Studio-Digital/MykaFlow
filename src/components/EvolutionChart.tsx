@@ -29,9 +29,17 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
 
   return (
     <div className="glass rounded-2xl p-6">
-      <h3 className="text-base font-bold uppercase tracking-widest text-gradient flex items-center gap-2 mb-4">
-        <Activity className="h-5 w-5" /> Evolução Anual - {year}
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
+          <Activity className="h-5 w-5" /> Evolução Anual - {year}
+        </h3>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground leading-none mb-1">Saldo no Ano</p>
+          <p className="text-2xl font-black tracking-tighter text-accent">
+            {fmtCurrency(monthly.reduce((a, b) => a + (b.receitas - b.despesas), 0))}
+          </p>
+        </div>
+      </div>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={monthly}>

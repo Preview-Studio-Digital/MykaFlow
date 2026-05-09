@@ -1,11 +1,11 @@
-@import "tailwindcss" source(none);
+@import "tailwindcss";
 @import "tw-animate-css";
 
 @source "../src";
 
 @custom-variant dark (&:is(.dark *));
 
-@theme inline {
+@theme {
   --font-display: "Orbitron", system-ui, sans-serif;
   --font-sans: "Rajdhani", system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);

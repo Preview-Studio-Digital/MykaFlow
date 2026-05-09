@@ -139,6 +139,14 @@ function Dashboard() {
     return Array.from(set).sort();
   }, [rows]);
 
+  const monthRows = useMemo(() => {
+    return rows.filter((r) => {
+      const dateStr = r.occurred_on.includes("T") ? r.occurred_on : `${r.occurred_on}T00:00:00`;
+      const d = new Date(dateStr);
+      return !isNaN(d.getTime()) && d.getMonth() === month && d.getFullYear() === year;
+    });
+  }, [rows, month, year]);
+
   if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground">

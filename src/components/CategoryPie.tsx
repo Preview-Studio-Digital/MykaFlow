@@ -76,14 +76,9 @@ export function CategoryPie({
                   borderRadius: 12,
                   fontFamily: "Rajdhani",
                 }}
-                itemStyle={{ color: "white" }}
-                labelStyle={{ color: "white" }}
-                formatter={(v: number, name: string) => {
-                  const percent = total > 0 ? ((v / total) * 100).toFixed(1) : "0.0";
-                  return [`${fmtCurrency(v)} (${percent}%)`, name];
-                }}
+                formatter={(v: number) => fmtCurrency(v)}
               />
-              <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 12, color: "white" }} />
+              <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 12 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>

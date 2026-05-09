@@ -1,4 +1,4 @@
-import { Trash2, Edit2, CheckCircle2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { fmtCurrency } from "@/lib/finance-constants";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -12,25 +12,16 @@ export interface TxRow {
   description: string | null;
   amount: number;
   occurred_on: string;
-  created_at: string;
-  isVirtual?: boolean;
 }
 
 export function TransactionList({
   rows,
   onDeleted,
-  onEdit,
 }: {
   rows: TxRow[];
   onDeleted: () => void;
-  onEdit: (row: TxRow) => void;
 }) {
   async function remove(id: string) {
-    if (id.startsWith("virtual-")) {
-      toast.info("Sugestão removida (apenas visual)");
-      onDeleted(); // Re-trigger load to refresh UI
-      return;
-    }
     if (!confirm("Excluir este lançamento?")) return;
     const { error } = await supabase.from("transactions").delete().eq("id", id);
     if (error) toast.error(error.message);
@@ -66,9 +57,7 @@ export function TransactionList({
           {rows.map((r) => (
             <tr
               key={r.id}
-              className={`border-b border-border/30 transition-colors hover:bg-primary/5 ${
-                r.isVirtual ? "opacity-60 bg-primary/5" : ""
-              }`}
+              className="border-b border-border/30 transition-colors hover:bg-primary/5"
             >
               <td className="px-4 py-3 font-mono text-xs">
                 {new Date(r.occurred_on + "T00:00:00").toLocaleDateString("pt-BR")}
@@ -86,10 +75,7 @@ export function TransactionList({
               </td>
               <td className="px-4 py-3">{r.category}</td>
               <td className="px-4 py-3 text-xs uppercase text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  {r.nature === "fixed" ? "Fixa" : "Variável"}
-                  {r.isVirtual && <span className="text-[10px] text-accent font-bold">*</span>}
-                </div>
+                {r.nature === "fixed" ? "Fixa" : "Variável"}
               </td>
               <td className="px-4 py-3 text-muted-foreground">{r.description || "—"}</td>
               <td
@@ -100,22 +86,13 @@ export function TransactionList({
                 {r.type === "income" ? "+" : "−"} {fmtCurrency(Number(r.amount))}
               </td>
               <td className="px-2 py-3">
-                <div className="flex items-center justify-end gap-1">
-                  <button
-                    onClick={() => onEdit(r)}
-                    className="rounded p-2 text-muted-foreground transition hover:bg-primary/20 hover:text-primary"
-                    title={r.isVirtual ? "Confirmar e Editar" : "Editar"}
-                  >
-                    {r.isVirtual ? <CheckCircle2 className="h-4 w-4" /> : <Edit2 className="h-4 w-4" />}
-                  </button>
-                  <button
-                    onClick={() => remove(r.id)}
-                    className="rounded p-2 text-muted-foreground transition hover:bg-destructive/20 hover:text-destructive"
-                    title="Excluir"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => remove(r.id)}
+                  className="rounded p-2 text-muted-foreground transition hover:bg-destructive/20 hover:text-destructive"
+                  title="Excluir"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </td>
             </tr>
           ))}

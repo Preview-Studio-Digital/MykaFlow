@@ -61,6 +61,8 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<TxRow[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editRow, setEditRow] = useState<TxRow | null>(null);
+  const [defaultType, setDefaultType] = useState<"income" | "expense">("expense");
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
 
@@ -241,7 +243,11 @@ export function Dashboard() {
               <TrendingDown className="h-4 w-4" /> Despesas
             </h2>
             <button
-              onClick={() => setIsFormOpen(true)}
+              onClick={() => {
+                setEditRow(null);
+                setDefaultType("expense");
+                setIsFormOpen(true);
+              }}
               className="btn-futuristic rounded-lg px-4 py-2 text-xs font-bold flex items-center gap-2"
             >
               <Plus className="h-4 w-4" /> Novo Lançamento
@@ -249,7 +255,11 @@ export function Dashboard() {
           </div>
           <TransactionList
             rows={monthRows.filter((r) => r.type === "expense")}
-            onUpdated={load}
+            onDeleted={load}
+            onEdit={(row) => {
+              setEditRow(row);
+              setIsFormOpen(true);
+            }}
           />
         </div>
         <div className="space-y-4">
@@ -257,19 +267,39 @@ export function Dashboard() {
             <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4" /> Receitas
             </h2>
+            <button
+              onClick={() => {
+                setEditRow(null);
+                setDefaultType("income");
+                setIsFormOpen(true);
+              }}
+              className="btn-futuristic rounded-lg px-4 py-2 text-xs font-bold flex items-center gap-2"
+              style={{
+                background: "linear-gradient(135deg, oklch(0.8 0.16 150), oklch(0.6 0.14 140))",
+              }}
+            >
+              <Plus className="h-4 w-4" /> Novo Lançamento
+            </button>
           </div>
           <TransactionList
             rows={monthRows.filter((r) => r.type === "income")}
-            onUpdated={load}
+            onDeleted={load}
+            onEdit={(row) => {
+              setEditRow(row);
+              setIsFormOpen(true);
+            }}
           />
         </div>
       </section>
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog open={isFormOpen} onOpenChange={(open) => {
+        setIsFormOpen(open);
+        if (!open) setEditRow(null);
+      }}>
         <DialogContent className="glass border-white/10 bg-[#0a0c14]/95 text-white backdrop-blur-xl sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="text-gradient text-xl font-bold uppercase tracking-widest">
-              Novo Lançamento
+              {editRow ? "Editar Lançamento" : "Novo Lançamento"}
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
@@ -277,9 +307,15 @@ export function Dashboard() {
               onCreated={() => {
                 load();
                 setIsFormOpen(false);
+                setEditRow(null);
               }}
-              type="expense"
-              categories={expenseCats}
+              fixedType={editRow ? editRow.type : defaultType}
+              initialData={editRow}
+              categories={
+                (editRow?.type || defaultType) === "income" 
+                  ? incomeCats 
+                  : expenseCats
+              }
             />
           </div>
         </DialogContent>

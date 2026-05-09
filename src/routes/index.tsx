@@ -26,7 +26,6 @@ function Dashboard() {
   const { user, loading, role, signOut } = useAuth();
   const navigate = useNavigate();
   const [rows, setRows] = useState<TxRow[]>([]);
-  const [now, setNow] = useState(new Date());
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
 

@@ -228,14 +228,14 @@ function Dashboard() {
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CategoryPie
           title="Despesas por Categoria"
-          data={expenseByCat}
+          rows={monthRows}
           accent="oklch(0.7 0.2 30)"
           icon={<TrendingDown className="h-4 w-4" />}
           type="expense"
         />
         <CategoryPie
           title="Receitas por Categoria"
-          data={incomeByCat}
+          rows={monthRows}
           accent="oklch(0.8 0.16 150)"
           icon={<TrendingUp className="h-4 w-4" />}
           type="income"

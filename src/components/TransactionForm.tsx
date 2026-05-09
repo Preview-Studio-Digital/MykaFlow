@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance-constants";
@@ -8,9 +8,16 @@ import { Plus, TrendingUp, TrendingDown } from "lucide-react";
 interface Props {
   onCreated: () => void;
   fixedType?: "income" | "expense";
+  initialData?: {
+    category: string;
+    amount: number;
+    description: string | null;
+    nature: "fixed" | "variable";
+    occurred_on: string;
+  } | null;
 }
 
-export function TransactionForm({ onCreated, fixedType }: Props) {
+export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
   const { user } = useAuth();
   const [type, setType] = useState<"income" | "expense">(fixedType || "expense");
   const [nature, setNature] = useState<"fixed" | "variable">("variable");
@@ -21,6 +28,16 @@ export function TransactionForm({ onCreated, fixedType }: Props) {
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (initialData) {
+      setCategory(initialData.category);
+      setAmount(initialData.amount.toString().replace(".", ","));
+      setDescription((initialData.description || "").replace(/^\* /, ""));
+      setNature(initialData.nature);
+      setDate(initialData.occurred_on);
+    }
+  }, [initialData]);
 
   const cats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
   const isExpense = type === "expense";
@@ -33,11 +50,28 @@ export function TransactionForm({ onCreated, fixedType }: Props) {
     setCategory(t === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
   }
 
+  function handleAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const rawValue = e.target.value.replace(/\D/g, "");
+    const numericValue = parseInt(rawValue, 10);
+
+    if (isNaN(numericValue)) {
+      setAmount("");
+      return;
+    }
+
+    const formattedValue = (numericValue / 100).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    setAmount(formattedValue);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
-    const value = parseFloat(amount.replace(",", "."));
-    if (isNaN(value) || value < 0) {
+    const value = parseFloat(amount.replace(/\./g, "").replace(",", "."));
+    if (isNaN(value) || value <= 0) {
       toast.error("Valor inválido");
       return;
     }

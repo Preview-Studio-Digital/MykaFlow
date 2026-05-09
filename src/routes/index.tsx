@@ -28,6 +28,8 @@ function Dashboard() {
   const [rows, setRows] = useState<TxRow[]>([]);
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
+  const [editIncome, setEditIncome] = useState<TxRow | null>(null);
+  const [editExpense, setEditExpense] = useState<TxRow | null>(null);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
@@ -39,20 +41,61 @@ function Dashboard() {
       .select("*")
       .order("occurred_on", { ascending: false });
     if (!error && data) setRows(data as TxRow[]);
+    setEditIncome(null);
+    setEditExpense(null);
   }
 
   useEffect(() => {
     if (user) load();
   }, [user]);
 
-  const monthRows = useMemo(
-    () =>
-      rows.filter((r) => {
-        const d = new Date(r.occurred_on + "T00:00:00");
-        return d.getFullYear() === year && d.getMonth() === month;
-      }),
-    [rows, year, month]
-  );
+  const monthRows = useMemo(() => {
+    // 1. Real rows for this month
+    const real = rows.filter((r) => {
+      const d = new Date(r.occurred_on + "T00:00:00");
+      return d.getFullYear() === year && d.getMonth() === month;
+    });
+
+    // 2. Find "Templates": Fixed transactions from ANY month
+    // We want the most recent one for each (type, category, description)
+    const fixedTemplates = new Map<string, TxRow>();
+    const sorted = [...rows].sort(
+      (a, b) => new Date(a.occurred_on).getTime() - new Date(b.occurred_on).getTime()
+    );
+
+    for (const r of sorted) {
+      if (r.nature === "fixed") {
+        const key = `${r.type}-${r.category}-${r.description || ""}`;
+        fixedTemplates.set(key, r);
+      }
+    }
+
+    // 3. For each template, if it doesn't exist in 'real' for THIS month, inject it as virtual
+    const targetDate = new Date(year, month, 1).toISOString().slice(0, 10);
+    const virtual: TxRow[] = [];
+
+    fixedTemplates.forEach((template, key) => {
+      const exists = real.some((r) => `${r.type}-${r.category}-${r.description || ""}` === key);
+      const templateDate = new Date(template.occurred_on + "T00:00:00");
+      const currentMonthDate = new Date(year, month, 1);
+
+      // Only suggest if the template is from a previous or same month
+      if (!exists && templateDate <= currentMonthDate) {
+        virtual.push({
+          ...template,
+          id: `virtual-${template.id}`,
+          occurred_on: targetDate,
+          description: `* ${template.description || ""}`.trim(),
+          isVirtual: true,
+        });
+      }
+    });
+
+    return [...real, ...virtual].sort((a, b) => {
+      if (a.occurred_on !== b.occurred_on) return b.occurred_on.localeCompare(a.occurred_on);
+      return b.created_at.localeCompare(a.created_at);
+    });
+  }, [rows, year, month]);
 
   const expenseByCat = useMemo(() => agg(monthRows.filter((r) => r.type === "expense")), [monthRows]);
   const incomeByCat = useMemo(() => agg(monthRows.filter((r) => r.type === "income")), [monthRows]);
@@ -161,7 +204,6 @@ function Dashboard() {
         />
       </section>
 
-
       {/* Charts */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CategoryPie
@@ -187,10 +229,10 @@ function Dashboard() {
       {/* Forms Section - Revenues and Expenses side by side */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-4">
-          <TransactionForm onCreated={load} fixedType="expense" />
+          <TransactionForm onCreated={load} fixedType="expense" initialData={editExpense} />
         </div>
         <div className="space-y-4">
-          <TransactionForm onCreated={load} fixedType="income" />
+          <TransactionForm onCreated={load} fixedType="income" initialData={editIncome} />
         </div>
       </section>
 
@@ -199,8 +241,20 @@ function Dashboard() {
         <h2 className="mb-3 text-base font-bold uppercase tracking-widest text-muted-foreground">
           Lançamentos de {MONTHS_PT[month]}
         </h2>
-        <TransactionList rows={monthRows} onDeleted={load} />
-      </section>
+        <TransactionList
+          rows={monthRows}
+          onDeleted={load}
+          onEdit={(row) => {
+            if (row.type === "income") {
+              setEditIncome(row);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            } else {
+              setEditExpense(row);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+          }}
+        />
+      </section>on>
 
       <footer className="mt-10 text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60">
         MykaFlow • {new Date().getFullYear()}

@@ -78,8 +78,8 @@ export function CategoryPie({
                 }}
                 itemStyle={{ color: "white" }}
                 labelStyle={{ color: "white" }}
-                formatter={(v: number, name: string, props: any) => {
-                  const percent = (props.payload.percent * 100).toFixed(1);
+                formatter={(v: number, name: string) => {
+                  const percent = total > 0 ? ((v / total) * 100).toFixed(1) : "0.0";
                   return [`${fmtCurrency(v)} (${percent}%)`, name];
                 }}
               />

@@ -198,5 +198,3 @@ export function TransactionForm({ onCreated, fixedType }: Props) {
     </form>
   );
 }
-  );
-}

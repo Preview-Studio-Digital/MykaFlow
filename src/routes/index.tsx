@@ -102,8 +102,13 @@ function Dashboard() {
     });
   }, [rows, year, month]);
 
-  const expenseByCat = useMemo(() => agg(monthRows.filter((r) => r.type === "expense")), [monthRows]);
-  const incomeByCat = useMemo(() => agg(monthRows.filter((r) => r.type === "income")), [monthRows]);
+  const monthRows = useMemo(() => {
+    return rows.filter((r) => {
+      const dateStr = r.occurred_on.includes("T") ? r.occurred_on : `${r.occurred_on}T00:00:00`;
+      const d = new Date(dateStr);
+      return !isNaN(d.getTime()) && d.getMonth() === month && d.getFullYear() === year;
+    });
+  }, [rows, month, year]);
 
   const totalIncome = monthRows.filter((r) => r.type === "income").reduce((a, b) => a + Number(b.amount), 0);
   const totalExpense = monthRows.filter((r) => r.type === "expense").reduce((a, b) => a + Number(b.amount), 0);
@@ -138,14 +143,6 @@ function Dashboard() {
     });
     return Array.from(set).sort();
   }, [rows]);
-
-  const monthRows = useMemo(() => {
-    return rows.filter((r) => {
-      const dateStr = r.occurred_on.includes("T") ? r.occurred_on : `${r.occurred_on}T00:00:00`;
-      const d = new Date(dateStr);
-      return !isNaN(d.getTime()) && d.getMonth() === month && d.getFullYear() === year;
-    });
-  }, [rows, month, year]);
 
   if (loading || !user) {
     return (

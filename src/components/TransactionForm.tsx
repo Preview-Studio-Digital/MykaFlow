@@ -1,9 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance-constants";
 import { toast } from "sonner";
-import { Plus, TrendingUp, TrendingDown, X } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, X, ChevronDown } from "lucide-react";
+
+const STRUCTURE_SUB_CATEGORIES = [
+  "SAAE - Água",
+  "CPFL - Energia",
+  "Contabilidade",
+  "Advocacia",
+  "TI - Tecnologia da Informação",
+  "IPTU",
+  "Telefonia",
+];
 
 interface Props {
   onCreated: () => void;
@@ -38,8 +48,16 @@ export function TransactionForm({
   const [isNewCategory, setIsNewCategory] = useState(false);
   const [newCategory, setNewCategory] = useState("");
 
-  const defaultCats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
-  const availableCategories = Array.from(new Set([...defaultCats, ...categories])).sort();
+  const [subCategory, setSubCategory] = useState("");
+  const [isNewSubCategory, setIsNewSubCategory] = useState(false);
+  const [newSubCategory, setNewSubCategory] = useState("");
+
+  const showSubCategory = type === "expense" && category === "Estrutura Empresarial";
+
+  const availableCategories = useMemo(() => {
+    const defaultCats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+    return Array.from(new Set([...defaultCats, ...categories])).sort();
+  }, [type, categories]);
 
   useEffect(() => {
     if (initialData) {
@@ -72,7 +90,7 @@ export function TransactionForm({
       setDate(new Date().toISOString().slice(0, 10));
       setDescription("");
     }
-  }, [initialData]); // Only re-run when initialData itself changes
+  }, [initialData, availableCategories]); // Only re-run when initialData itself changes
 
   const isExpense = type === "expense";
   const accentColor = isExpense ? "oklch(0.7 0.2 30)" : "oklch(0.8 0.16 150)";
@@ -95,10 +113,7 @@ export function TransactionForm({
     setAmount(formattedValue);
   }
 
-  function formatTitleCase(str: string) {
-    if (!str) return "";
-    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-  }
+
 
   function switchType(t: "income" | "expense") {
     if (fixedType) return;
@@ -116,10 +131,20 @@ export function TransactionForm({
       return;
     }
     
-    let finalCategory = isNewCategory ? formatTitleCase(newCategory) : category;
+    let finalCategory = isNewCategory ? newCategory : category;
     if (!finalCategory || finalCategory === "NEW") {
       toast.error("Informe o identificador");
       return;
+    }
+
+    let finalDescription = description;
+    if (showSubCategory) {
+      const sub = isNewSubCategory ? newSubCategory : subCategory;
+      if (!sub || sub === "NEW") {
+        toast.error("Informe a sub-categoria");
+        return;
+      }
+      finalDescription = `[${sub}] ${description}`.trim();
     }
 
     setBusy(true);
@@ -130,7 +155,7 @@ export function TransactionForm({
       type,
       nature,
       category: finalCategory,
-      description: description || null,
+      description: finalDescription || null,
       amount: value,
       occurred_on: date,
     };
@@ -176,16 +201,6 @@ export function TransactionForm({
           {isExpense ? <TrendingDown className="h-5 w-5" /> : <TrendingUp className="h-5 w-5" />}
           {initialData && !initialData.isVirtual ? "Editar" : isExpense ? "Lançar Despesa" : "Lançar Receita"}
         </h3>
-        {initialData && (
-          <button 
-            type="button"
-            onClick={() => onCreated()} // Calling onCreated will reset the edit state in index.tsx
-            className="text-muted-foreground hover:text-foreground transition p-1"
-            title="Cancelar edição"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
       </div>
 
       {!fixedType && (
@@ -234,11 +249,11 @@ export function TransactionForm({
               Selecione...
             </option>
             {availableCategories.map((cat) => (
-              <option key={cat} value={cat} className="bg-popover">
+              <option key={cat} value={cat}>
                 {cat}
               </option>
             ))}
-            <option value="NEW" className="bg-popover font-bold text-accent">
+            <option value="NEW" className="font-bold text-accent">
               + NOVO (CADASTRAR NOVO)
             </option>
           </select>
@@ -261,6 +276,54 @@ export function TransactionForm({
             </label>
           </div>
         )}
+
+        {showSubCategory && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <label className="block">
+              <span className="mb-1 block text-[10px] uppercase tracking-widest text-accent font-bold">
+                Sub-categoria (Estrutura)
+              </span>
+              <select
+                required
+                value={subCategory}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSubCategory(val);
+                  setIsNewSubCategory(val === "NEW");
+                }}
+                className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
+              >
+                <option value="">Selecione a sub-categoria...</option>
+                {STRUCTURE_SUB_CATEGORIES.map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
+                  </option>
+                ))}
+                <option value="NEW" className="font-bold text-accent">
+                  + NOVO (CADASTRAR NOVO)
+                </option>
+              </select>
+            </label>
+
+            {isNewSubCategory && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <label className="block">
+                  <span className="mb-1 block text-[10px] uppercase tracking-widest text-accent font-bold">
+                    Nova Sub-categoria
+                  </span>
+                  <input
+                    required
+                    autoFocus
+                    value={newSubCategory}
+                    onChange={(e) => setNewSubCategory(e.target.value)}
+                    placeholder="Ex: Condomínio, Manutenção..."
+                    className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none border-accent/50"
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -273,10 +336,10 @@ export function TransactionForm({
             onChange={(e) => setNature(e.target.value as "fixed" | "variable")}
             className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
           >
-            <option value="variable" className="bg-popover">
+            <option value="variable">
               Variável
             </option>
-            <option value="fixed" className="bg-popover">
+            <option value="fixed">
               Fixa
             </option>
           </select>

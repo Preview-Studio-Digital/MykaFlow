@@ -6,8 +6,13 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
-import { IdentifierManager } from "@/components/IdentifierManager";
 import { fmtCurrency, MONTHS_PT, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance-constants";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   LogOut,
   Zap,
@@ -29,8 +34,7 @@ function Dashboard() {
   const [rows, setRows] = useState<TxRow[]>([]);
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
-  const [editIncome, setEditIncome] = useState<TxRow | null>(null);
-  const [editExpense, setEditExpense] = useState<TxRow | null>(null);
+  const [editingRow, setEditingRow] = useState<TxRow | null>(null);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
@@ -42,8 +46,7 @@ function Dashboard() {
       .select("*")
       .order("occurred_on", { ascending: false });
     if (!error && data) setRows(data as TxRow[]);
-    setEditIncome(null);
-    setEditExpense(null);
+    setEditingRow(null);
   }
 
   useEffect(() => {
@@ -182,7 +185,6 @@ function Dashboard() {
           >
             <LogOut className="h-4 w-4" /> Sair
           </button>
-          <IdentifierManager expenseCats={expenseCats} incomeCats={incomeCats} onUpdated={load} />
         </div>
       </header>
 
@@ -250,7 +252,6 @@ function Dashboard() {
           <TransactionForm
             onCreated={load}
             fixedType="expense"
-            initialData={editExpense}
             categories={expenseCats}
           />
         </div>
@@ -258,11 +259,24 @@ function Dashboard() {
           <TransactionForm
             onCreated={load}
             fixedType="income"
-            initialData={editIncome}
             categories={incomeCats}
           />
         </div>
       </section>
+
+      {/* Edit Modal */}
+      <Dialog open={!!editingRow} onOpenChange={(open) => !open && setEditingRow(null)}>
+        <DialogContent className="max-w-lg glass border-white/10 p-0 overflow-hidden">
+          {editingRow && (
+            <TransactionForm
+              onCreated={load}
+              fixedType={editingRow.type}
+              initialData={editingRow}
+              categories={editingRow.type === "expense" ? expenseCats : incomeCats}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* List */}
       <section>
@@ -272,15 +286,7 @@ function Dashboard() {
         <TransactionList
           rows={monthRows}
           onDeleted={load}
-          onEdit={(row) => {
-            if (row.type === "income") {
-              setEditIncome(row);
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            } else {
-              setEditExpense(row);
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }
-          }}
+          onEdit={(row) => setEditingRow(row)}
         />
       </section>
 

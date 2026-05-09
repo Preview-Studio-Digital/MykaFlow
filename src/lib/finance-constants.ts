@@ -1,9 +1,9 @@
 export const EXPENSE_CATEGORIES = [
+  "Estrutura Empresarial",
   "Energia",
   "Água",
-  "Internet",
   "Telefonia",
-  "Pessoal",
+  "Equipe",
   "Contábil",
   "Jurídico",
   "Fornecedores",

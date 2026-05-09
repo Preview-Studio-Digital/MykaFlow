@@ -59,9 +59,11 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
                 borderRadius: 12,
                 fontFamily: "Rajdhani",
               }}
+              itemStyle={{ color: "white" }}
+              labelStyle={{ color: "white" }}
               formatter={(v: number) => fmtCurrency(v)}
             />
-            <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 12, color: "white" }} />
             <Area
               type="monotone"
               dataKey="receitas"

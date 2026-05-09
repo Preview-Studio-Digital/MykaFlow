@@ -1,26 +1,229 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/integrations/supabase/client";
+import { TransactionForm } from "@/components/TransactionForm";
+import { TransactionList, type TxRow } from "@/components/TransactionList";
+import { CategoryPie } from "@/components/CategoryPie";
+import { EvolutionChart } from "@/components/EvolutionChart";
+import { AdminPanel } from "@/components/AdminPanel";
+import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
+import {
+  LogOut,
+  Zap,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  component: Dashboard,
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
+function Dashboard() {
+  const { user, loading, role, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<TxRow[]>([]);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState(new Date().getMonth());
+
+  useEffect(() => {
+    if (!loading && !user) navigate({ to: "/login" });
+  }, [loading, user, navigate]);
+
+  async function load() {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*")
+      .order("occurred_on", { ascending: false });
+    if (!error && data) setRows(data as TxRow[]);
+  }
+
+  useEffect(() => {
+    if (user) load();
+  }, [user]);
+
+  const monthRows = useMemo(
+    () =>
+      rows.filter((r) => {
+        const d = new Date(r.occurred_on + "T00:00:00");
+        return d.getFullYear() === year && d.getMonth() === month;
+      }),
+    [rows, year, month]
+  );
+
+  const expenseByCat = useMemo(() => agg(monthRows.filter((r) => r.type === "expense")), [monthRows]);
+  const incomeByCat = useMemo(() => agg(monthRows.filter((r) => r.type === "income")), [monthRows]);
+
+  const totalIncome = monthRows.filter((r) => r.type === "income").reduce((a, b) => a + Number(b.amount), 0);
+  const totalExpense = monthRows.filter((r) => r.type === "expense").reduce((a, b) => a + Number(b.amount), 0);
+  const balance = totalIncome - totalExpense;
+
+  function shiftMonth(delta: number) {
+    let m = month + delta;
+    let y = year;
+    if (m < 0) {
+      m = 11;
+      y--;
+    } else if (m > 11) {
+      m = 0;
+      y++;
+    }
+    setMonth(m);
+    setYear(y);
+  }
+
+  if (loading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Carregando...
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="relative z-10 min-h-screen px-4 py-8 md:px-8">
+      {/* Header */}
+      <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-primary/20 p-2 glow">
+            <Zap className="h-6 w-6 text-accent" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-widest text-gradient">MYKAFLOW</h1>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              Controle financeiro empresarial
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              {role === "admin" ? "Administrador" : "Funcionário"}
+            </p>
+            <p className="text-sm font-mono">{user.email}</p>
+          </div>
+          <button
+            onClick={async () => {
+              await signOut();
+              navigate({ to: "/login" });
+            }}
+            className="btn-ghost-neon rounded-lg px-4 py-2 text-xs flex items-center gap-2"
+          >
+            <LogOut className="h-4 w-4" /> Sair
+          </button>
+        </div>
+      </header>
+
+      {/* Month selector + KPIs */}
+      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="glass rounded-2xl p-5 flex items-center justify-between md:col-span-1">
+          <button onClick={() => shiftMonth(-1)} className="btn-ghost-neon rounded-lg p-2">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div className="text-center">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Período</p>
+            <p className="text-lg font-bold tracking-widest text-gradient">
+              {MONTHS_PT[month]} {year}
+            </p>
+          </div>
+          <button onClick={() => shiftMonth(1)} className="btn-ghost-neon rounded-lg p-2">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+        <Kpi
+          label="Receitas"
+          value={totalIncome}
+          color="text-accent"
+          icon={<TrendingUp className="h-5 w-5" />}
+        />
+        <Kpi
+          label="Despesas"
+          value={totalExpense}
+          color="text-destructive"
+          icon={<TrendingDown className="h-5 w-5" />}
+        />
+        <Kpi
+          label="Saldo"
+          value={balance}
+          color={balance >= 0 ? "text-accent" : "text-destructive"}
+          icon={<Wallet className="h-5 w-5" />}
+        />
+      </section>
+
+      {/* Charts */}
+      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <CategoryPie
+          title="Despesas por Categoria"
+          data={expenseByCat}
+          accent="oklch(0.7 0.2 30)"
+          icon={<TrendingDown className="h-4 w-4" />}
+        />
+        <CategoryPie
+          title="Receitas por Categoria"
+          data={incomeByCat}
+          accent="oklch(0.85 0.16 200)"
+          icon={<TrendingUp className="h-4 w-4" />}
+        />
+      </section>
+
+      <section className="mb-6">
+        <EvolutionChart data={rows} year={year} />
+      </section>
+
+      {/* Form + Admin */}
+      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <TransactionForm onCreated={load} />
+        {role === "admin" ? (
+          <AdminPanel />
+        ) : (
+          <div className="glass rounded-2xl p-6 flex items-center justify-center text-sm text-muted-foreground text-center">
+            Apenas o administrador pode criar novos acessos.
+          </div>
+        )}
+      </section>
+
+      {/* List */}
+      <section>
+        <h2 className="mb-3 text-base font-bold uppercase tracking-widest text-muted-foreground">
+          Lançamentos de {MONTHS_PT[month]}
+        </h2>
+        <TransactionList rows={monthRows} onDeleted={load} />
+      </section>
+
+      <footer className="mt-10 text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60">
+        MykaFlow • {new Date().getFullYear()}
+      </footer>
     </div>
   );
 }
 
-function Index() {
-  return <PlaceholderIndex />;
+function agg(list: TxRow[]) {
+  const map = new Map<string, number>();
+  for (const r of list) map.set(r.category, (map.get(r.category) ?? 0) + Number(r.amount));
+  return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+}
+
+function Kpi({
+  label,
+  value,
+  color,
+  icon,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="glass rounded-2xl p-5 transition hover:scale-[1.02] hover:glow">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
+        <span className={color}>{icon}</span>
+      </div>
+      <p className={`mt-2 text-2xl font-extrabold font-mono ${color}`}>{fmtCurrency(value)}</p>
+    </div>
+  );
 }

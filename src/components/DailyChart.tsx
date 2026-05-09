@@ -75,7 +75,11 @@ export function DailyChart({ rows, month, year }: { rows: TxRow[]; month: number
               axisLine={false}
             />
             <YAxis
-              hide
+              stroke="oklch(0.7 0.04 235)"
+              fontSize={10}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => `R$ ${(v / 1000).toFixed(1)}k`}
             />
             <Tooltip
               contentStyle={{

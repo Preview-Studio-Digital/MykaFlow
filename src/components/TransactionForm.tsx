@@ -55,9 +55,8 @@ export function TransactionForm({
   const showSubCategory = type === "expense" && category === "Estrutura Empresarial";
 
   const availableCategories = useMemo(() => {
-    const defaultCats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
-    return Array.from(new Set([...defaultCats, ...categories])).sort();
-  }, [type, categories]);
+    return Array.from(new Set(categories)).sort();
+  }, [categories]);
 
   useEffect(() => {
     if (initialData) {

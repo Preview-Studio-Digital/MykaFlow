@@ -30,7 +30,7 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
   return (
     <div className="glass rounded-2xl p-6">
       <h3 className="text-base font-bold uppercase tracking-widest text-gradient flex items-center gap-2 mb-4">
-        <Activity className="h-5 w-5" /> Evolução {year}
+        <Activity className="h-5 w-5" /> Evolução Anual - {year}
       </h3>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">

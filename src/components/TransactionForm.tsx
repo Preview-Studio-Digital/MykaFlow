@@ -31,6 +31,7 @@ export function TransactionForm({
   const [nature, setNature] = useState<"fixed" | "variable">("variable");
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
 
@@ -60,6 +61,7 @@ export function TransactionForm({
       );
       setNature(initialData.nature);
       setDate(initialData.occurred_on);
+      setDescription(initialData.description || "");
     } else {
       // Reset form if initialData becomes null
       setCategory("");
@@ -68,6 +70,7 @@ export function TransactionForm({
       setNewCategory("");
       setNature("variable");
       setDate(new Date().toISOString().slice(0, 10));
+      setDescription("");
     }
   }, [initialData]); // Only re-run when initialData itself changes
 
@@ -127,7 +130,7 @@ export function TransactionForm({
       type,
       nature,
       category: finalCategory,
-      description: null,
+      description: description || null,
       amount: value,
       occurred_on: date,
     };
@@ -152,6 +155,7 @@ export function TransactionForm({
     setNewCategory("");
     setIsNewCategory(false);
     setCategory("");
+    setDescription("");
     onCreated(); // This will also trigger setEditExpense(null) in parent
   }
 
@@ -286,6 +290,20 @@ export function TransactionForm({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
+            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1">
+        <label className="block">
+          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
+            Descrição (Observação)
+          </span>
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Ex: Nota fiscal, observações extras..."
             className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
           />
         </label>

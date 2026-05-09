@@ -6,6 +6,7 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
+import { IdentifierManager } from "@/components/IdentifierManager";
 import { fmtCurrency, MONTHS_PT, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance-constants";
 import {
   LogOut,
@@ -65,7 +66,7 @@ function Dashboard() {
 
     for (const r of sorted) {
       if (r.nature === "fixed") {
-        const key = `${r.type}-${r.category}-${r.description || ""}`;
+        const key = `${r.type}-${r.category}`;
         fixedTemplates.set(key, r);
       }
     }
@@ -75,7 +76,7 @@ function Dashboard() {
     const virtual: TxRow[] = [];
 
     fixedTemplates.forEach((template, key) => {
-      const exists = real.some((r) => `${r.type}-${r.category}-${r.description || ""}` === key);
+      const exists = real.some((r) => `${r.type}-${r.category}` === key);
       const templateDate = new Date(template.occurred_on + "T00:00:00");
       const currentMonthDate = new Date(year, month, 1);
 
@@ -118,11 +119,18 @@ function Dashboard() {
     setYear(y);
   }
 
-  const allCategories = useMemo(() => {
-    const set = new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]);
-    rows.forEach((r) => {
+  const expenseCats = useMemo(() => {
+    const set = new Set([...EXPENSE_CATEGORIES]);
+    rows.filter(r => r.type === "expense").forEach((r) => {
       if (r.category) set.add(r.category);
-      if (r.description) set.add(r.description.replace(/^\* /, ""));
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const incomeCats = useMemo(() => {
+    const set = new Set([...INCOME_CATEGORIES]);
+    rows.filter(r => r.type === "income").forEach((r) => {
+      if (r.category) set.add(r.category);
     });
     return Array.from(set).sort();
   }, [rows]);
@@ -174,6 +182,7 @@ function Dashboard() {
           >
             <LogOut className="h-4 w-4" /> Sair
           </button>
+          <IdentifierManager expenseCats={expenseCats} incomeCats={incomeCats} onUpdated={load} />
         </div>
       </header>
 
@@ -242,7 +251,7 @@ function Dashboard() {
             onCreated={load}
             fixedType="expense"
             initialData={editExpense}
-            categories={allCategories}
+            categories={expenseCats}
           />
         </div>
         <div className="space-y-4">
@@ -250,7 +259,7 @@ function Dashboard() {
             onCreated={load}
             fixedType="income"
             initialData={editIncome}
-            categories={allCategories}
+            categories={incomeCats}
           />
         </div>
       </section>

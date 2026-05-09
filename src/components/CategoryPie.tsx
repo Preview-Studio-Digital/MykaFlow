@@ -94,9 +94,12 @@ export function CategoryPie({
               {icon} {selectedCategory ? `${selectedCategory} (Detalhes)` : title}
             </h3>
           </div>
-          <span className="text-xs uppercase tracking-widest text-muted-foreground">
-            Total: <span className="text-base font-bold ml-1" style={{ color: accent }}>{fmtCurrency(total)}</span>
-          </span>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground leading-none mb-1">Total</p>
+            <p className="text-2xl font-black tracking-tighter" style={{ color: accent }}>
+              {fmtCurrency(total)}
+            </p>
+          </div>
         </div>
       </div>
       {data.length === 0 ? (

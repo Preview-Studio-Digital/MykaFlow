@@ -34,7 +34,7 @@ export function IdentifierManager({ expenseCats, incomeCats, onUpdated }: Props)
         .from("transactions")
         .delete()
         .eq("type", type)
-        .or(`category.eq."${id}",description.eq."${id}",description.eq."* ${id}"`);
+        .or(`category.eq."${id}",description.ilike."%[${id}]%"`);
 
       if (error) throw error;
 

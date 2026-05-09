@@ -27,7 +27,7 @@ function AdminPage() {
   }, [user, role]);
 
   const expenseCats = useMemo(() => {
-    const set = new Set([...EXPENSE_CATEGORIES]);
+    const set = new Set<string>();
     rows.filter(r => r.type === "expense").forEach((r) => {
       if (r.category) set.add(r.category);
     });
@@ -35,7 +35,7 @@ function AdminPage() {
   }, [rows]);
 
   const incomeCats = useMemo(() => {
-    const set = new Set([...INCOME_CATEGORIES]);
+    const set = new Set<string>();
     rows.filter(r => r.type === "income").forEach((r) => {
       if (r.category) set.add(r.category);
     });

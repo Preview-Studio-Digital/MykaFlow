@@ -1,15 +1,26 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { fmtCurrency } from "@/lib/finance-constants";
 
-const COLORS = [
-  "oklch(0.78 0.16 215)",
-  "oklch(0.65 0.2 250)",
-  "oklch(0.55 0.22 280)",
-  "oklch(0.85 0.14 195)",
-  "oklch(0.7 0.18 230)",
-  "oklch(0.6 0.2 200)",
-  "oklch(0.75 0.18 260)",
-  "oklch(0.5 0.22 240)",
+const EXPENSE_COLORS = [
+  "oklch(0.7 0.2 30)",
+  "oklch(0.6 0.18 25)",
+  "oklch(0.5 0.16 20)",
+  "oklch(0.8 0.15 35)",
+  "oklch(0.65 0.22 32)",
+  "oklch(0.55 0.2 28)",
+  "oklch(0.75 0.17 38)",
+  "oklch(0.45 0.15 22)",
+];
+
+const INCOME_COLORS = [
+  "oklch(0.8 0.16 150)",
+  "oklch(0.7 0.18 140)",
+  "oklch(0.6 0.2 130)",
+  "oklch(0.9 0.14 160)",
+  "oklch(0.85 0.16 155)",
+  "oklch(0.75 0.2 145)",
+  "oklch(0.65 0.22 135)",
+  "oklch(0.55 0.2 125)",
 ];
 
 export function CategoryPie({
@@ -17,12 +28,15 @@ export function CategoryPie({
   data,
   accent,
   icon,
+  type = "expense",
 }: {
   title: string;
   data: { name: string; value: number }[];
   accent: string;
   icon: React.ReactNode;
+  type?: "income" | "expense";
 }) {
+  const COLORS = type === "income" ? INCOME_COLORS : EXPENSE_COLORS;
   const total = data.reduce((a, b) => a + b.value, 0);
   return (
     <div className="glass rounded-2xl p-6 h-full">

@@ -37,8 +37,8 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
           <AreaChart data={monthly}>
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="oklch(0.85 0.16 200)" stopOpacity={0.6} />
-                <stop offset="100%" stopColor="oklch(0.85 0.16 200)" stopOpacity={0} />
+                <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.6} />
+                <stop offset="100%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="expenseGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.6} />
@@ -65,7 +65,7 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
             <Area
               type="monotone"
               dataKey="receitas"
-              stroke="oklch(0.85 0.16 200)"
+              stroke="oklch(0.8 0.16 150)"
               strokeWidth={2.5}
               fill="url(#incomeGrad)"
               name="Receitas"

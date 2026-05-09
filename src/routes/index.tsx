@@ -160,12 +160,14 @@ function Dashboard() {
           data={expenseByCat}
           accent="oklch(0.7 0.2 30)"
           icon={<TrendingDown className="h-4 w-4" />}
+          type="expense"
         />
         <CategoryPie
           title="Receitas por Categoria"
           data={incomeByCat}
-          accent="oklch(0.85 0.16 200)"
+          accent="oklch(0.8 0.16 150)"
           icon={<TrendingUp className="h-4 w-4" />}
+          type="income"
         />
       </section>
 

@@ -1,8 +1,5 @@
-import { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { fmtCurrency } from "@/lib/finance-constants";
-import { ChevronLeft } from "lucide-react";
-import { type TxRow } from "./TransactionList";
 
 const EXPENSE_COLORS = [
   "oklch(0.7 0.2 30)",
@@ -28,79 +25,28 @@ const INCOME_COLORS = [
 
 export function CategoryPie({
   title,
-  rows,
+  data,
   accent,
   icon,
   type = "expense",
 }: {
   title: string;
-  rows: TxRow[];
+  data: { name: string; value: number }[];
   accent: string;
   icon: React.ReactNode;
   type?: "income" | "expense";
 }) {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
   const COLORS = type === "income" ? INCOME_COLORS : EXPENSE_COLORS;
-
-  const data = useMemo(() => {
-    if (selectedCategory) {
-      // Drill down into sub-categories of the selected category
-      const subMap: Record<string, number> = {};
-      rows
-        .filter((r) => r.type === type && r.category === selectedCategory)
-        .forEach((r) => {
-          // Extract sub-category from [Sub] description format
-          const match = r.description?.match(/^\[(.*?)\]/);
-          const subName = match ? match[1] : "Sem sub-categoria";
-          subMap[subName] = (subMap[subName] || 0) + Number(r.amount);
-        });
-      
-      return Object.entries(subMap)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value);
-    }
-
-    // Default top-level categories
-    const catMap: Record<string, number> = {};
-    rows
-      .filter((r) => r.type === type)
-      .forEach((r) => {
-        catMap[r.category] = (catMap[r.category] || 0) + Number(r.amount);
-      });
-
-    return Object.entries(catMap)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [rows, selectedCategory, type]);
-
   const total = data.reduce((a, b) => a + b.value, 0);
-
   return (
-    <div className="glass rounded-2xl p-6 h-full transition-all duration-300">
-      <div className="flex flex-col gap-2 mb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {selectedCategory && (
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className="p-1 hover:bg-white/10 rounded-lg transition-colors text-muted-foreground hover:text-foreground"
-                title="Voltar"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-            )}
-            <h3 className="text-sm font-bold tracking-widest uppercase flex items-center gap-2" style={{ color: accent }}>
-              {icon} {selectedCategory ? `${selectedCategory} (Detalhes)` : title}
-            </h3>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground leading-none mb-1">Total</p>
-            <p className="text-2xl font-black tracking-tighter" style={{ color: accent }}>
-              {fmtCurrency(total)}
-            </p>
-          </div>
-        </div>
+    <div className="glass rounded-2xl p-6 h-full">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-base font-bold tracking-widest uppercase flex items-center gap-2" style={{ color: accent }}>
+          {icon} {title}
+        </h3>
+        <span className="text-xs uppercase tracking-widest text-muted-foreground">
+          Total: <span className="text-foreground font-bold">{fmtCurrency(total)}</span>
+        </span>
       </div>
       {data.length === 0 ? (
         <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
@@ -118,15 +64,9 @@ export function CategoryPie({
                 outerRadius={90}
                 paddingAngle={3}
                 stroke="oklch(0.16 0.04 255)"
-                onClick={(entry) => !selectedCategory && setSelectedCategory(entry.name)}
-                style={{ cursor: !selectedCategory ? "pointer" : "default" }}
               >
                 {data.map((_, i) => (
-                  <Cell 
-                    key={i} 
-                    fill={COLORS[i % COLORS.length]}
-                    className="hover:opacity-80 transition-opacity"
-                  />
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip

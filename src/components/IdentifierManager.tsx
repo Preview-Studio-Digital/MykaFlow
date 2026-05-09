@@ -4,19 +4,21 @@ import { toast } from "sonner";
 import { Trash2, Search, Settings2, Edit2, Check, X } from "lucide-react";
 
 interface Props {
-  title: string;
-  type: "expense" | "income";
-  identifiers: string[];
+  expenseCats: string[];
+  incomeCats: string[];
   onUpdated: () => void;
 }
 
-export function IdentifierManager({ title, type, identifiers, onUpdated }: Props) {
+export function IdentifierManager({ expenseCats, incomeCats, onUpdated }: Props) {
+  const [type, setType] = useState<"expense" | "income">("expense");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
 
-  const filteredOnes = identifiers
+  const currentList = type === "expense" ? expenseCats : incomeCats;
+  
+  const filteredOnes = currentList
     .filter((cat) => cat.toLowerCase().includes(search.toLowerCase()));
 
   async function removeIdentifier(id: string) {
@@ -77,12 +79,31 @@ export function IdentifierManager({ title, type, identifiers, onUpdated }: Props
   return (
     <div className="glass rounded-2xl p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold tracking-widest text-gradient flex items-center gap-2 uppercase">
-          <Settings2 className="h-4 w-4" /> {title}
+        <h3 className="text-lg font-bold tracking-widest text-gradient flex items-center gap-2">
+          <Settings2 className="h-5 w-5" /> Gerenciar Identificadores
         </h3>
       </div>
 
       <div className="space-y-4">
+        <div className="flex bg-white/5 p-1 rounded-xl gap-1">
+          <button
+            onClick={() => { setType("expense"); setSearch(""); setEditingId(null); }}
+            className={`flex-1 py-2 text-[10px] uppercase tracking-widest font-bold rounded-lg transition ${
+              type === "expense" ? "bg-destructive/20 text-destructive border border-destructive/40 shadow-lg" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Despesas
+          </button>
+          <button
+            onClick={() => { setType("income"); setSearch(""); setEditingId(null); }}
+            className={`flex-1 py-2 text-[10px] uppercase tracking-widest font-bold rounded-lg transition ${
+              type === "income" ? "bg-accent/20 text-accent border border-accent/40 shadow-lg" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Receitas
+          </button>
+        </div>
+
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input

@@ -118,6 +118,20 @@ function Dashboard() {
     setYear(y);
   }
 
+  const allCategories = useMemo(() => {
+    const set = new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]);
+    rows.forEach((r) => set.add(r.category));
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const allDescriptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      if (r.description) set.add(r.description.replace(/^\* /, ""));
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
   if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground">
@@ -229,10 +243,22 @@ function Dashboard() {
       {/* Forms Section - Revenues and Expenses side by side */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-4">
-          <TransactionForm onCreated={load} fixedType="expense" initialData={editExpense} />
+          <TransactionForm
+            onCreated={load}
+            fixedType="expense"
+            initialData={editExpense}
+            suggestions={allDescriptions}
+            categories={allCategories}
+          />
         </div>
         <div className="space-y-4">
-          <TransactionForm onCreated={load} fixedType="income" initialData={editIncome} />
+          <TransactionForm
+            onCreated={load}
+            fixedType="income"
+            initialData={editIncome}
+            suggestions={allDescriptions}
+            categories={allCategories}
+          />
         </div>
       </section>
 

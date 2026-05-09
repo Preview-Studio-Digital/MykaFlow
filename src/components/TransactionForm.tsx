@@ -15,9 +15,17 @@ interface Props {
     nature: "fixed" | "variable";
     occurred_on: string;
   } | null;
+  suggestions?: string[];
+  categories?: string[];
 }
 
-export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
+export function TransactionForm({
+  onCreated,
+  fixedType,
+  initialData,
+  suggestions = [],
+  categories = [],
+}: Props) {
   const { user } = useAuth();
   const [type, setType] = useState<"income" | "expense">(fixedType || "expense");
   const [nature, setNature] = useState<"fixed" | "variable">("variable");
@@ -29,6 +37,9 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
 
+  const [isNewDescription, setIsNewDescription] = useState(false);
+  const [newDescription, setNewDescription] = useState("");
+
   useEffect(() => {
     if (initialData) {
       setCategory(initialData.category);
@@ -38,22 +49,27 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
           maximumFractionDigits: 2,
         })
       );
-      setDescription((initialData.description || "").replace(/^\* /, ""));
+      const desc = (initialData.description || "").replace(/^\* /, "");
+      if (suggestions.includes(desc)) {
+        setDescription(desc);
+        setIsNewDescription(false);
+      } else if (desc) {
+        setDescription("NEW");
+        setNewDescription(desc);
+        setIsNewDescription(true);
+      } else {
+        setDescription("");
+        setIsNewDescription(false);
+      }
       setNature(initialData.nature);
       setDate(initialData.occurred_on);
     }
-  }, [initialData]);
+  }, [initialData, suggestions]);
 
-  const cats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const defaultCats = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
   const isExpense = type === "expense";
   const accentColor = isExpense ? "oklch(0.7 0.2 30)" : "oklch(0.8 0.16 150)";
   const bgColor = isExpense ? "rgba(239, 68, 68, 0.05)" : "rgba(34, 197, 94, 0.05)";
-
-  function switchType(t: "income" | "expense") {
-    if (fixedType) return;
-    setType(t);
-    setCategory(t === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
-  }
 
   function handleAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
     const rawValue = e.target.value.replace(/\D/g, "");
@@ -72,6 +88,12 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
     setAmount(formattedValue);
   }
 
+  function switchType(t: "income" | "expense") {
+    if (fixedType) return;
+    setType(t);
+    setCategory(t === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
@@ -80,13 +102,19 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
       toast.error("Valor inválido");
       return;
     }
+    const finalDescription = isNewDescription ? newDescription : description;
+    if (!finalDescription) {
+      toast.error("Informe um nome");
+      return;
+    }
+
     setBusy(true);
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
       type,
       nature,
       category,
-      description: description || null,
+      description: finalDescription || null,
       amount: value,
       occurred_on: date,
     });
@@ -97,9 +125,13 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
     }
     toast.success(`${isExpense ? "Despesa" : "Receita"} registrada`);
     setAmount("");
+    setNewDescription("");
+    setIsNewDescription(false);
     setDescription("");
     onCreated();
   }
+
+  const catId = `categories-${fixedType || "all"}`;
 
   return (
     <form
@@ -145,22 +177,77 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
         </div>
       )}
 
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
+            Nome / Identificador
+          </span>
+          <select
+            required
+            value={description}
+            onChange={(e) => {
+              const val = e.target.value;
+              setDescription(val);
+              setIsNewDescription(val === "NEW");
+            }}
+            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
+          >
+            <option value="" disabled>
+              Selecione um nome...
+            </option>
+            {suggestions.map((s) => (
+              <option key={s} value={s} className="bg-popover">
+                {s}
+              </option>
+            ))}
+            <option value="NEW" className="bg-popover font-bold text-accent">
+              + NOVO (CADASTRAR NOVO)
+            </option>
+          </select>
+        </label>
+
+        {isNewDescription && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+            <label className="block">
+              <span className="mb-1 block text-[10px] uppercase tracking-widest text-accent font-bold">
+                Novo Nome Específico
+              </span>
+              <input
+                required
+                autoFocus
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                placeholder="Digite o nome aqui..."
+                className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none border-accent/50"
+              />
+            </label>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
           <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
             Categoria
           </span>
-          <select
+          <input
+            required
+            list={catId}
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
-          >
-            {cats.map((c) => (
-              <option key={c} value={c} className="bg-popover">
-                {c}
-              </option>
+            placeholder="Selecione ou digite..."
+          />
+          <datalist id={catId}>
+            {defaultCats.map((c) => (
+              <option key={c} value={c} />
             ))}
-          </select>
+            {categories
+              .filter((c) => !defaultCats.includes(c))
+              .map((c) => (
+                <option key={c} value={c} />
+              ))}
+          </datalist>
         </label>
         <label className="block">
           <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -208,18 +295,6 @@ export function TransactionForm({ onCreated, fixedType, initialData }: Props) {
           />
         </label>
       </div>
-
-      <label className="block">
-        <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
-          Descrição (opcional)
-        </span>
-        <input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder={isExpense ? "Ex: Pagamento fornecedor" : "Ex: Venda de serviço"}
-          className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
-        />
-      </label>
 
       <button
         disabled={busy}

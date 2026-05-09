@@ -6,6 +6,7 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
+import { DailyChart } from "@/components/DailyChart";
 import { fmtCurrency, MONTHS_PT, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/finance-constants";
 import {
   Dialog,
@@ -244,6 +245,10 @@ function Dashboard() {
 
       <section className="mb-6">
         <EvolutionChart data={rows} year={year} />
+      </section>
+
+      <section className="mb-6">
+        <DailyChart rows={monthRows} month={month} year={year} />
       </section>
 
       {/* Forms Section - Revenues and Expenses side by side */}

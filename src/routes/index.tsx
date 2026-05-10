@@ -48,8 +48,27 @@ function Dashboard() {
       setRows(data as TxRow[]);
       setRefreshKey(prev => prev + 1);
     }
-
   }
+
+  // Escuta o banco de dados em TEMPO REAL
+  useEffect(() => {
+    if (!user) return;
+    
+    const channel = supabase
+      .channel("db-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "transactions" },
+        () => {
+          load(); // Recarrega tudo se houver QUALQUER mudança no banco
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   useEffect(() => {
     if (user) load();
@@ -102,8 +121,8 @@ function Dashboard() {
             <Zap className="h-6 w-6 text-accent" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold tracking-widest text-gradient">MYKAFLOW</h1>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            <h1 className="text-5xl font-black tracking-tighter text-gradient leading-[0.8] mb-2">MYKAFLOW</h1>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground whitespace-nowrap ml-1">
               Controle financeiro empresarial
             </p>
           </div>
@@ -216,7 +235,12 @@ function Dashboard() {
       </section>
 
       <section className="mb-6">
-        <EvolutionChart key={`evolution-${refreshKey}`} data={rows} year={year} />
+        <EvolutionChart 
+          key={`evolution-${refreshKey}`} 
+          data={rows} 
+          year={year} 
+          month={month}
+        />
       </section>
 
       {/* Form */}
@@ -225,6 +249,7 @@ function Dashboard() {
           onCreated={load} 
           defaultMonth={month} 
           defaultYear={year} 
+          onMonthShift={shiftMonth}
         />
       </section>
 

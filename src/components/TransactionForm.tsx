@@ -2,16 +2,17 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { Plus, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 
 interface Props {
   onCreated: () => void;
   defaultMonth?: number;
   defaultYear?: number;
+  onMonthShift?: (delta: number) => void;
 }
 
-export function TransactionForm({ onCreated, defaultMonth, defaultYear }: Props) {
+export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthShift }: Props) {
   const { user, role } = useAuth();
   const [type, setType] = useState<"income" | "expense">("expense");
   const [nature, setNature] = useState<"fixed" | "variable" | "">("");
@@ -128,13 +129,16 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear }: Props)
     
     // Só aplicamos a regra se não estivermos digitando um NOME de nova subcategoria,
     // ou se o ADIANTAMENTO for a categoria pai selecionada.
-    const isAntecipacao = parentName === "ANTECIPAÇÃO" || subCategory === "ANTECIPAÇÃO";
-    const isAdiantamento = parentName === "ADIANTAMENTOS" || subCategory === "ADIANTAMENTOS";
+    const isAntecipacao = parentName.toUpperCase().includes("ANTECIPAÇÃO") || subCategory.toUpperCase().includes("ANTECIPAÇÃO");
+    const isAdiantamento = parentName.toUpperCase().includes("ADIANTAMENTOS") || subCategory.toUpperCase().includes("ADIANTAMENTOS");
+    const isManutencao = parentName.toUpperCase().includes("MANUTENÇÃO") || subCategory.toUpperCase().includes("MANUTENÇÃO");
     
     if (isAntecipacao && !description.startsWith("NOTA FISCAL Nº: ")) {
       setDescription(prev => prev.startsWith("NOTA FISCAL Nº: ") ? prev : "NOTA FISCAL Nº: " + prev.replace("NOTA FISCAL Nº: ", ""));
     } else if (isAdiantamento && !description.startsWith("NF - ")) {
       setDescription(prev => prev.startsWith("NF - ") ? prev : "NF - " + prev.replace("NF - ", ""));
+    } else if (isManutencao && !description.startsWith("CLIENTE - ")) {
+      setDescription(prev => prev.startsWith("CLIENTE - ") ? prev : "CLIENTE - " + prev.replace("CLIENTE - ", ""));
     }
   }, [selectedParentId, subCategory]);
 
@@ -153,8 +157,11 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear }: Props)
       return;
     }
 
-    const isAntecipacao = parentName === "ANTECIPAÇÃO" || subCategory === "ANTECIPAÇÃO";
-    const isAdiantamento = parentName === "ADIANTAMENTOS" || subCategory === "ADIANTAMENTOS";
+    const upperParent = parentName.toUpperCase();
+    const upperSub = subCategory.toUpperCase();
+    const isAntecipacao = upperParent.includes("ANTECIPAÇÃO") || upperSub.includes("ANTECIPAÇÃO");
+    const isAdiantamento = upperParent.includes("ADIANTAMENTOS") || upperSub.includes("ADIANTAMENTOS");
+    const isManutencao = upperParent.includes("MANUTENÇÃO") || upperSub.includes("MANUTENÇÃO");
 
     if (isAntecipacao && (!description || description.trim() === "NOTA FISCAL Nº:")) {
       toast.error("Para ANTECIPAÇÃO, insira o número da NOTA FISCAL.");
@@ -163,6 +170,11 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear }: Props)
     
     if (isAdiantamento && (!description || description.trim() === "NF -")) {
       toast.error("Para ADIANTAMENTOS, insira o número da NF.");
+      return;
+    }
+
+    if (isManutencao && (!description || description.trim() === "CLIENTE -")) {
+      toast.error("Para MANUTENÇÃO, insira o nome do CLIENTE.");
       return;
     }
 
@@ -199,7 +211,6 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear }: Props)
     toast.success("Lançamento registrado!");
     setAmount("");
     setSubCategory("");
-    setCustomSubName("");
     setDescription("");
     setSelectedParentId("");
     onCreated();
@@ -214,8 +225,26 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear }: Props)
           : "bg-cyan-500/10 border-cyan-500/40 shadow-[inset_0_0_50px_rgba(34,211,238,0.15)]"
       } backdrop-blur-md`}
     >
-      <h3 className="text-lg font-bold tracking-widest text-gradient flex items-center justify-center gap-2 uppercase">
-        <Plus className="h-5 w-5" /> Novo Lançamento - {defaultMonth !== undefined ? MONTHS_PT[defaultMonth] : ""}
+      <h3 className="text-lg font-bold tracking-widest text-gradient flex items-center justify-center gap-6 uppercase">
+        <button 
+          type="button" 
+          onClick={() => onMonthShift?.(-1)}
+          className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        
+        <div className="flex items-center gap-2">
+          <Plus className="h-4 w-4" /> Lançamento - {defaultMonth !== undefined ? MONTHS_PT[defaultMonth] : ""}
+        </div>
+
+        <button 
+          type="button" 
+          onClick={() => onMonthShift?.(1)}
+          className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
       </h3>
 
       <div className="grid grid-cols-2 gap-2">
@@ -353,7 +382,11 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear }: Props)
       <button
         disabled={busy}
         type="submit"
-        className="btn-futuristic w-full rounded-lg px-6 py-4 text-sm font-bold uppercase tracking-widest disabled:opacity-50"
+        className={`w-full rounded-lg px-6 py-4 text-sm font-bold uppercase tracking-widest transition-all duration-300 shadow-lg disabled:opacity-50 border-2 ${ 
+          type === "expense" 
+            ? "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30 shadow-red-900/10 glow" 
+            : "bg-accent/20 border-accent/60 text-accent hover:bg-accent/30 shadow-accent-900/10 glow"
+        }`}
       >
         {busy ? "Registrando..." : "Registrar Lançamento"}
       </button>

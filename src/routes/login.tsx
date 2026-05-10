@@ -95,28 +95,11 @@ function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-muted-foreground">
-          {mode === "signin" ? (
-            <button
-              type="button"
-              onClick={() => setMode("signup")}
-              className="inline-flex items-center gap-1 hover:text-accent transition"
-            >
-              <Sparkles className="h-3 w-3" /> Primeiro acesso? Criar ADM
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setMode("signin")}
-              className="hover:text-accent transition"
-            >
-              Já tenho conta — Entrar
-            </button>
-          )}
+        <div className="mt-8 text-center">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground opacity-50">
+            Solicitar acesso ao administrador
+          </p>
         </div>
-        <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
-          O primeiro cadastro vira o administrador. Os demais devem ser criados pelo ADM.
-        </p>
       </div>
     </div>
   );

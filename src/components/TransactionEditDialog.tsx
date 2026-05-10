@@ -93,13 +93,18 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
     const parent = dbCategories.find(c => c.id === selectedParentId) || fallbackParents.find(c => c.id === selectedParentId);
     const parentName = parent?.name || "";
     
-    const isAntecipacao = parentName === "ANTECIPAÇÃO" || subCategory === "ANTECIPAÇÃO";
-    const isAdiantamento = parentName === "ADIANTAMENTOS" || subCategory === "ADIANTAMENTOS";
+    const upperParent = parentName.toUpperCase();
+    const upperSub = subCategory.toUpperCase();
+    const isAntecipacao = upperParent.includes("ANTECIPAÇÃO") || upperSub.includes("ANTECIPAÇÃO");
+    const isAdiantamento = upperParent.includes("ADIANTAMENTOS") || upperSub.includes("ADIANTAMENTOS");
+    const isManutencao = upperParent.includes("MANUTENÇÃO") || upperSub.includes("MANUTENÇÃO");
     
     if (isAntecipacao && !note.startsWith("NOTA FISCAL Nº: ")) {
       setNote(prev => prev ? `NOTA FISCAL Nº: ${prev}` : "NOTA FISCAL Nº: ");
     } else if (isAdiantamento && !note.startsWith("NF - ")) {
       setNote(prev => prev ? `NF - ${prev}` : "NF - ");
+    } else if (isManutencao && !note.startsWith("CLIENTE - ")) {
+      setNote(prev => prev ? `CLIENTE - ${prev}` : "CLIENTE - ");
     }
   }, [selectedParentId, subCategory, isOpen]);
 
@@ -110,8 +115,12 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
 
     const parent = dbCategories.find(c => c.id === selectedParentId) || fallbackParents.find(c => c.id === selectedParentId);
     const parentName = parent?.name || transaction.category;
-    const isAntecipacao = parentName === "ANTECIPAÇÃO" || subCategory === "ANTECIPAÇÃO";
-    const isAdiantamento = parentName === "ADIANTAMENTOS" || subCategory === "ADIANTAMENTOS";
+    
+    const uParent = parentName.toUpperCase();
+    const uSub = subCategory.toUpperCase();
+    const isAntecipacao = uParent.includes("ANTECIPAÇÃO") || uSub.includes("ANTECIPAÇÃO");
+    const isAdiantamento = uParent.includes("ADIANTAMENTOS") || uSub.includes("ADIANTAMENTOS");
+    const isManutencao = uParent.includes("MANUTENÇÃO") || uSub.includes("MANUTENÇÃO");
 
     if (isAntecipacao && (!note || note.trim() === "NOTA FISCAL Nº:")) {
       toast.error("Para ANTECIPAÇÃO, insira o número da NOTA FISCAL.");
@@ -120,6 +129,11 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
 
     if (isAdiantamento && (!note || note.trim() === "NF -")) {
       toast.error("Para ADIANTAMENTOS, insira o número da NF.");
+      return;
+    }
+
+    if (isManutencao && (!note || note.trim() === "CLIENTE -")) {
+      toast.error("Para MANUTENÇÃO, insira o nome do CLIENTE.");
       return;
     }
 

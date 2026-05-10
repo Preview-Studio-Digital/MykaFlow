@@ -52,7 +52,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
+export function EvolutionChart({ data, year, month }: { data: Tx[]; year: number; month: number }) {
   const monthly = MONTHS_PT.map((m, i) => ({ month: m, receitas: 0, despesas: 0, idx: i }));
   for (const t of data) {
     const d = new Date(t.occurred_on + "T00:00:00");
@@ -62,20 +62,23 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
     else m.despesas += Number(t.amount);
   }
 
-  const totalReceitas = monthly.reduce((acc, m) => acc + m.receitas, 0);
-  const totalDespesas = monthly.reduce((acc, m) => acc + m.despesas, 0);
-  const totalSaldo = totalReceitas - totalDespesas;
+  const monthData = monthly[month];
+  const monthSaldo = monthData.receitas - monthData.despesas;
 
   return (
-    <div className="glass rounded-2xl p-6">
+    <div className={`rounded-2xl p-6 transition-all duration-500 border-2 ${ 
+      monthSaldo < 0 
+        ? "bg-red-500/10 border-red-500/30 shadow-[inset_0_0_50px_rgba(239,68,68,0.1)]" 
+        : "bg-cyan-500/10 border-cyan-500/30 shadow-[inset_0_0_50px_rgba(34,211,238,0.1)]"
+    } backdrop-blur-md`}>
       <div className="flex items-center justify-between mb-8">
         <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
           <Activity className="h-6 w-6" /> Evolução Anual {year}
         </h3>
         <div className="flex flex-col items-end">
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">Saldo Anual</span>
-          <span className={`text-xl font-black font-mono tracking-tighter ${totalSaldo >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-destructive drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
-            {fmtCurrency(totalSaldo)}
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">Saldo de {MONTHS_PT[month]}</span>
+          <span className={`text-2xl font-black font-mono tracking-tighter ${monthSaldo >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+            {fmtCurrency(monthSaldo)}
           </span>
         </div>
       </div>

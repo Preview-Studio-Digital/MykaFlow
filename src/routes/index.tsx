@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,7 +6,6 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
-import { AdminPanel } from "@/components/AdminPanel";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import {
   LogOut,
@@ -16,6 +15,8 @@ import {
   Wallet,
   ChevronLeft,
   ChevronRight,
+  Calendar,
+  ShieldCheck,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -98,13 +99,22 @@ function Dashboard() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
+        <div className="flex items-center gap-4">
+          <div className="text-right hidden sm:block">
             <p className="text-xs uppercase tracking-widest text-muted-foreground">
               {role === "admin" ? "Administrador" : "Funcionário"}
             </p>
-            <p className="text-sm font-mono">{user.email}</p>
+            <p className="text-sm font-mono">{user?.email}</p>
           </div>
+          {role === "admin" && (
+            <Link 
+              to="/admin" 
+              className="btn-ghost-neon rounded-lg px-3 py-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest"
+              title="Central Administrativa"
+            >
+              <ShieldCheck className="h-4 w-4" /> ADM
+            </Link>
+          )}
           <button
             onClick={async () => {
               await signOut();
@@ -119,13 +129,15 @@ function Dashboard() {
 
       {/* Month selector + KPIs */}
       <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="glass rounded-2xl p-5 flex items-center justify-between md:col-span-1">
+        <div className="glass rounded-2xl p-5 flex items-center justify-between md:col-span-1 min-h-[120px]">
           <button onClick={() => shiftMonth(-1)} className="btn-ghost-neon rounded-lg p-2">
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <div className="text-center">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Período</p>
-            <p className="text-lg font-bold tracking-widest text-gradient">
+          <div className="text-center flex flex-col items-center gap-1">
+            <p className="text-sm uppercase opacity-80 tracking-widest flex items-center gap-2 text-muted-foreground">
+              <Calendar className="h-6 w-6" /> Período
+            </p>
+            <p className="text-3xl font-bold tracking-widest text-gradient uppercase">
               {MONTHS_PT[month]} {year}
             </p>
           </div>
@@ -156,18 +168,20 @@ function Dashboard() {
       {/* Charts */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CategoryPie
-          title="Despesas por Categoria"
-          data={expenseByCat}
-          accent="oklch(0.7 0.2 30)"
-          icon={<TrendingDown className="h-6 w-6" />}
-          type="expense"
-        />
-        <CategoryPie
           title="Receitas por Categoria"
           data={incomeByCat}
+          transactions={monthRows.filter((r) => r.type === "income")}
           accent="oklch(0.8 0.16 150)"
           icon={<TrendingUp className="h-6 w-6" />}
           type="income"
+        />
+        <CategoryPie
+          title="Despesas por Categoria"
+          data={expenseByCat}
+          transactions={monthRows.filter((r) => r.type === "expense")}
+          accent="oklch(0.7 0.2 30)"
+          icon={<TrendingDown className="h-6 w-6" />}
+          type="expense"
         />
       </section>
 
@@ -175,16 +189,9 @@ function Dashboard() {
         <EvolutionChart data={rows} year={year} />
       </section>
 
-      {/* Form + Admin */}
-      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Form */}
+      <section className="mb-8 max-w-2xl mx-auto">
         <TransactionForm onCreated={load} />
-        {role === "admin" ? (
-          <AdminPanel />
-        ) : (
-          <div className="glass rounded-2xl p-6 flex items-center justify-center text-sm text-muted-foreground text-center">
-            Apenas o administrador pode criar novos acessos.
-          </div>
-        )}
       </section>
 
       {/* List */}
@@ -204,7 +211,13 @@ function Dashboard() {
 
 function agg(list: TxRow[]) {
   const map = new Map<string, number>();
-  for (const r of list) map.set(r.category, (map.get(r.category) ?? 0) + Number(r.amount));
+  for (const r of list) {
+    // Normalizando a categoria e aplicando o mapeamento solicitado
+    let catName = (r.category || "Outros").trim().toUpperCase();
+    if (catName === "ESTRUTURA EMPRESARIAL") catName = "ESTRUTURA";
+    
+    map.set(catName, (map.get(catName) ?? 0) + Number(r.amount));
+  }
   return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
 }
 
@@ -220,14 +233,12 @@ function Kpi({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="glass rounded-2xl p-5 transition hover:scale-[1.02] hover:glow">
-      <div className="flex items-center justify-between">
-        <h4 className={`text-lg font-bold tracking-widest uppercase flex items-center gap-2 ${color}`}>
-          {icon} {label}
-        </h4>
-        <p className={`text-lg font-bold tracking-widest uppercase ${color}`}>
-          {fmtCurrency(value)}
-        </p>
+    <div className="glass rounded-2xl p-6 flex flex-col items-center justify-center text-center transition hover:scale-[1.02] hover:glow min-h-[120px]">
+      <div className={`flex items-center gap-2 text-sm opacity-80 uppercase tracking-widest mb-1 ${color}`}>
+        {icon} {label}
+      </div>
+      <div className={`text-3xl font-bold tracking-widest uppercase ${color}`}>
+        {fmtCurrency(value)}
       </div>
     </div>
   );

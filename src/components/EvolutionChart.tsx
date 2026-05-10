@@ -17,8 +17,43 @@ interface Tx {
   occurred_on: string;
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const receitas = payload[0].value;
+    const despesas = payload[1].value;
+    const saldo = receitas - despesas;
+
+    return (
+      <div className="glass p-4 rounded-xl border border-white/10 backdrop-blur-md shadow-2xl">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] mb-2 border-b border-white/10 pb-2 text-muted-foreground">
+          {label} {new Date().getFullYear()}
+        </p>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-6 text-sm">
+            <span className="flex items-center gap-2 text-accent/80">
+              <div className="h-2 w-2 rounded-full bg-accent" /> Receitas
+            </span>
+            <span className="font-mono font-bold text-accent">{fmtCurrency(receitas)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-6 text-sm">
+            <span className="flex items-center gap-2 text-destructive/80">
+              <div className="h-2 w-2 rounded-full bg-destructive" /> Despesas
+            </span>
+            <span className="font-mono font-bold text-destructive">{fmtCurrency(despesas)}</span>
+          </div>
+          <div className={`flex items-center justify-between gap-6 text-sm pt-2 mt-2 border-t border-white/10 font-bold ${saldo >= 0 ? 'text-accent' : 'text-destructive'}`}>
+            <span>Saldo Mensal</span>
+            <span className="font-mono">{fmtCurrency(saldo)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
-  const monthly = MONTHS_PT.map((m, i) => ({ month: m.slice(0, 3), receitas: 0, despesas: 0, idx: i }));
+  const monthly = MONTHS_PT.map((m, i) => ({ month: m, receitas: 0, despesas: 0, idx: i }));
   for (const t of data) {
     const d = new Date(t.occurred_on + "T00:00:00");
     if (d.getFullYear() !== year) continue;
@@ -27,23 +62,12 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
     else m.despesas += Number(t.amount);
   }
 
-  const totalRec = monthly.reduce((a, b) => a + b.receitas, 0);
-  const totalDes = monthly.reduce((a, b) => a + b.despesas, 0);
-
   return (
     <div className="glass rounded-2xl p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+      <div className="mb-8">
         <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
-          <Activity className="h-6 w-6" /> Evolução {year}
+          <Activity className="h-6 w-6" /> Evolução Anual {year}
         </h3>
-        <div className="flex items-center gap-6">
-          <div className="text-lg font-bold tracking-widest uppercase" style={{ color: "var(--income)" }}>
-            Receitas: {fmtCurrency(totalRec)}
-          </div>
-          <div className="text-lg font-bold tracking-widest uppercase" style={{ color: "var(--expense)" }}>
-            Despesas: {fmtCurrency(totalDes)}
-          </div>
-        </div>
       </div>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
@@ -59,22 +83,19 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
               </linearGradient>
             </defs>
             <CartesianGrid stroke="oklch(0.78 0.16 220 / 0.1)" strokeDasharray="3 3" />
-            <XAxis dataKey="month" stroke="oklch(0.7 0.04 235)" fontSize={11} />
+            <XAxis 
+              dataKey="month" 
+              stroke="oklch(0.7 0.04 235)" 
+              fontSize={13} 
+              tickFormatter={(m) => m.slice(0, 3)}
+            />
             <YAxis
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
               tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
             />
-            <Tooltip
-              contentStyle={{
-                background: "oklch(0.18 0.05 255)",
-                border: "1px solid oklch(0.78 0.16 220 / 0.4)",
-                borderRadius: 12,
-                fontFamily: "Rajdhani",
-              }}
-              formatter={(v: number) => fmtCurrency(v)}
-            />
-            <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 12 }} />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14 }} />
             <Area
               type="monotone"
               dataKey="receitas"

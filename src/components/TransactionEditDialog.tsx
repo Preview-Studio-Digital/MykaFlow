@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
 import { type TxRow } from "./TransactionList";
 import { toast } from "sonner";
 import { X, Save, TrendingUp, TrendingDown } from "lucide-react";
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated }: Props) {
+  const { user } = useAuth();
   const [type, setType] = useState<"income" | "expense">(transaction.type);
   const [nature, setNature] = useState<"fixed" | "variable">(transaction.nature);
   const [dbCategories, setDbCategories] = useState<any[]>([]);
@@ -42,7 +44,8 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
   useEffect(() => {
     async function fetchCats() {
       try {
-        const { data: official } = await supabase.from("categories").select("*").order("name");
+        // const { data: official } = await supabase.from("categories").select("*").order("name");
+        const official: any[] = [];
         const { data: fromTxs } = await supabase.from("transactions").select("category, description, type");
         
         let merged: any[] = (official || []).map(c => ({ ...c, isTemporary: false }));
@@ -142,6 +145,7 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
     const { error } = await supabase
       .from("transactions")
       .update({
+        user_id: user?.id,
         type,
         nature,
         category: parentName,

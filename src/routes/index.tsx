@@ -32,6 +32,7 @@ function Dashboard() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
 
@@ -46,6 +47,11 @@ function Dashboard() {
       .order("occurred_on", { ascending: false });
     if (!error && data) {
       setRows(data as TxRow[]);
+      
+      // Busca perfis para mostrar nomes de autores
+      const { data: pData } = await supabase.from("profiles").select("id, display_name");
+      if (pData) setProfiles(pData);
+
       setRefreshKey(prev => prev + 1);
     }
   }
@@ -258,7 +264,12 @@ function Dashboard() {
         <h2 className="mb-3 text-base font-bold uppercase tracking-widest text-muted-foreground">
           Lançamentos de {MONTHS_PT[month]}
         </h2>
-        <TransactionList key={`list-${refreshKey}`} rows={monthRows} onDeleted={load} />
+        <TransactionList 
+          key={`list-${refreshKey}`} 
+          rows={monthRows} 
+          onDeleted={load} 
+          allProfiles={profiles} 
+        />
       </section>
 
       <footer className="mt-10 text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60">

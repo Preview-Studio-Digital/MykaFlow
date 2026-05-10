@@ -20,12 +20,20 @@ export function ProfileDialog({ isOpen, onClose, currentUser }: ProfileDialogPro
     e.preventDefault();
     setBusy(true);
     try {
-      const { error } = await supabase.auth.updateUser({
+      // 1. Atualiza metadados de autenticação
+      const { error: authError } = await supabase.auth.updateUser({
         email: email,
         data: { display_name: name }
       });
+      if (authError) throw authError;
 
-      if (error) throw error;
+      // 2. Atualiza a tabela de perfis para que o nome apareça na listagem de lançamentos
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ display_name: name })
+        .eq("id", currentUser.id);
+      
+      if (profileError) throw profileError;
       
       toast.success("Perfil atualizado! Se você alterou o e-mail, verifique sua caixa de entrada para confirmar.");
       onClose();

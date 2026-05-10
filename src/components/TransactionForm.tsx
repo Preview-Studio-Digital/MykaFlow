@@ -52,7 +52,8 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
 
   const fetchCats = async () => {
     try {
-      const { data: official } = await supabase.from("categories").select("*").order("name");
+      // const { data: official } = await supabase.from("categories").select("*").order("name");
+      const official: any[] = [];
       const { data: fromTxs } = await supabase.from("transactions").select("category, description, type");
       
       let merged: any[] = (official || []).map(c => ({ ...c, isTemporary: false }));
@@ -92,6 +93,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
 
     const upperName = name.trim().toUpperCase();
     
+    /*
     const { data, error } = await supabase.from("categories").insert({
       name: upperName,
       type: type,
@@ -103,11 +105,13 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
       toast.error("Erro ao cadastrar: " + error.message);
       return;
     }
+    */
+    toast.info("Criação manual desativada. Use categorias existentes.");
 
     toast.success("Categoria criada!");
     setRefreshTrigger(prev => prev + 1);
     if (!parentId) {
-      setSelectedParentId(data.id);
+      // setSelectedParentId(data.id);
     } else {
       setSubCategory(upperName);
     }

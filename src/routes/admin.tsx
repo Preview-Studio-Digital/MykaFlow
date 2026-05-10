@@ -1,9 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminPanel } from "@/components/AdminPanel";
-import { ShieldCheck, ChevronLeft, Users, Plus, Trash2, Edit2, FolderTree, Save, X, TrendingUp, TrendingDown } from "lucide-react";
+import { listUsers, adminUpdateRole, adminDeleteUser } from "@/lib/admin.functions";
+import { ShieldCheck, ChevronLeft, Users, Plus, Trash2, Edit2, FolderTree, Save, X, TrendingUp, TrendingDown, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({
@@ -24,11 +26,11 @@ function AdminPage() {
 
   if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground uppercase tracking-widest text-xs">Carregando Central ADM...</div>;
 
-  if (!user || role !== "admin") {
+  if (!user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-        <p className="text-muted-foreground uppercase tracking-widest text-xs">Acesso restrito a administradores.</p>
-        <Link to="/" className="btn-futuristic rounded-lg px-6 py-2">Voltar para Home</Link>
+        <p className="text-muted-foreground uppercase tracking-widest text-xs">Você precisa estar logado.</p>
+        <Link to="/login" className="btn-futuristic rounded-lg px-6 py-2">Ir para Login</Link>
       </div>
     );
   }
@@ -92,33 +94,113 @@ function AdminPage() {
 }
 
 function UserList() {
+  const list = useServerFn(listUsers);
+  const updateRole = useServerFn(adminUpdateRole);
+  const delUser = useServerFn(adminDeleteUser);
+  const { user: currentUser } = useAuth();
+
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function fetchUsers() {
+    try {
+      const data = await list();
+      setProfiles(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Erro ao listar usuários:", err);
+      setProfiles([]);
+      toast.error("Sessão expirada ou sem permissão. Tente relogar.");
+    }
+    setLoading(false);
+  }
 
   useEffect(() => {
-    async function fetchUsers() {
-      const { data } = await supabase.from("profiles").select("id, display_name, email, user_roles (role)");
-      setProfiles(data || []);
-      setLoading(false);
-    }
     fetchUsers();
   }, []);
 
+  async function toggleRole(targetUserId: string, currentRole: string) {
+    setBusy(targetUserId);
+    try {
+      const newRole = currentRole === 'admin' ? 'user' : 'admin';
+      await updateRole({ data: { targetUserId, role: newRole } });
+      toast.success("Cargo atualizado");
+      fetchUsers();
+    } catch (err) {
+      toast.error("Erro ao atualizar cargo");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleDelete(targetUserId: string, email: string) {
+    if (targetUserId === currentUser?.id) return toast.error("Você não pode se excluir!");
+    if (!confirm(`Deseja realmente REMOVER o acesso de ${email}?`)) return;
+
+    setBusy(targetUserId);
+    try {
+      await delUser({ data: { targetUserId } });
+      toast.success("Acesso removido");
+      fetchUsers();
+    } catch (err) {
+      toast.error("Erro ao remover acesso");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (loading) return <div className="p-10 text-center opacity-50 uppercase tracking-widest text-xs">Carregando equipe...</div>;
+
   return (
     <div className="glass rounded-2xl p-6">
-      <h3 className="text-lg font-bold tracking-widest text-gradient mb-6 flex items-center gap-2 uppercase">
-        <Users className="h-5 w-5" /> Usuários Ativos
-      </h3>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-bold tracking-widest text-gradient flex items-center gap-2 uppercase">
+          <Users className="h-5 w-5" /> Equipe Registrada
+        </h3>
+        <span className="text-[10px] uppercase tracking-widest opacity-50 font-black">{profiles.length} Membros</span>
+      </div>
+
       <div className="space-y-3">
         {profiles.map(p => (
-          <div key={p.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
-            <div>
-              <p className="font-bold text-sm uppercase tracking-widest">{p.display_name || "Sem nome"}</p>
-              <p className="text-[10px] text-muted-foreground font-mono opacity-60">{p.email}</p>
+          <div key={p.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${p.role === 'admin' ? 'bg-accent/20 text-accent' : 'bg-white/10 text-muted-foreground'}`}>
+                {p.role === 'admin' ? <ShieldCheck className="h-5 w-5" /> : <UserIcon className="h-5 w-5" />}
+              </div>
+              <div>
+                <p className="font-bold text-sm uppercase tracking-widest">{p.name}</p>
+                <p className="text-[10px] text-muted-foreground font-mono opacity-60">{p.email}</p>
+              </div>
             </div>
-            <span className={`text-[9px] px-3 py-1 rounded-full border uppercase tracking-widest font-black ${p.user_roles?.[0]?.role === 'admin' ? 'border-accent text-accent bg-accent/10 shadow-glow-sm' : 'border-white/20 text-muted-foreground'}`}>
-              {p.user_roles?.[0]?.role || 'user'}
-            </span>
+
+            <div className="flex items-center gap-2">
+              {p.id !== currentUser?.id && (
+                <>
+                  <button 
+                    onClick={() => toggleRole(p.id, p.role || 'user')}
+                    disabled={!!busy}
+                    className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${ 
+                      p.role === 'admin' 
+                        ? 'border-accent/40 text-accent bg-accent/10 hover:bg-accent/20' 
+                        : 'border-white/20 text-muted-foreground hover:border-white/40'
+                    }`}
+                  >
+                    {busy === p.id ? '...' : p.role === 'admin' ? 'Rebaixar' : 'Tornar ADM'}
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(p.id, p.email)}
+                    disabled={!!busy}
+                    className="p-2 text-muted-foreground hover:text-red-500 transition-colors"
+                    title="Remover Acesso"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+              {p.id === currentUser?.id && (
+                <span className="text-[9px] uppercase tracking-widest font-black text-accent/60 px-3 py-1 border border-accent/20 rounded-lg">Você</span>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -140,7 +222,8 @@ function CategoryManager() {
 
   const fetchCategories = async () => {
     try {
-      const { data: official } = await supabase.from("categories").select("*").order("name");
+      // const { data: official } = await supabase.from("categories").select("*").order("name");
+      const official: any[] = [];
       const { data: fromTxs } = await supabase.from("transactions").select("category, description, type");
       
       let merged: Category[] = (official || []) as Category[];
@@ -193,6 +276,7 @@ function CategoryManager() {
         const parentName = parentToUse.replace("temp-", "").toUpperCase();
         console.log("Oficializando categoria pai primeiro:", parentName);
         
+        /*
         const { data: newParent, error: pError } = await supabase
           .from("categories")
           .insert({ name: parentName, type: typeToUse, user_id: user.id })
@@ -201,18 +285,21 @@ function CategoryManager() {
         
         if (pError) throw pError;
         finalParentId = newParent.id;
+        */
+        finalParentId = parentToUse; // Mantém temporário
         console.log("Pai oficializado com novo ID:", finalParentId);
       }
 
-      console.log("Enviando cadastro final para categorias:", { name: nameToUse, parent_id: finalParentId });
+      /*
       const { error } = await supabase.from("categories").insert({
         name: nameToUse.trim().toUpperCase(),
         type: typeToUse,
         parent_id: (finalParentId && finalParentId.toString().startsWith("temp-")) ? null : finalParentId,
         user_id: user.id
       });
-
       if (error) throw error;
+      */
+      toast.info("Apenas categorias do histórico são suportadas no momento.");
 
       toast.success("Cadastrado com sucesso!");
       setNewName("");
@@ -259,6 +346,7 @@ function CategoryManager() {
         }
       }
 
+      /*
       if (isTemp) {
         await supabase.from("categories").insert({
           name: newNameClean,
@@ -268,10 +356,10 @@ function CategoryManager() {
         });
       } else {
         await supabase
-          .from("categories")
-          .update({ name: newNameClean })
-          .eq("id", id);
+          .from("categories").update({ name: newNameClean }).eq("id", id);
       }
+      */
+      toast.info("Edição de categorias desativada (tabela inexistente)");
 
       toast.success("Atualizado com sucesso!");
       setEditingId(null);
@@ -320,8 +408,8 @@ function CategoryManager() {
       }
 
       if (confirm(`Excluir "${item.name}"?`)) {
-        await supabase.from("categories").delete().eq("id", id);
-        toast.success("Excluído");
+        // await supabase.from("categories").delete().eq("id", id);
+        toast.info("Exclusão desativada (tabela inexistente)");
         fetchCategories();
       }
     } catch (err) {

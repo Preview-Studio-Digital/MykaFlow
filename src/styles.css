@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap");
 @import "tailwindcss";
 @source "../src";
 @import "tw-animate-css";
@@ -5,7 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-display: "Orbitron", system-ui, sans-serif;
+  --font-display: "Rajdhani", system-ui, sans-serif;
   --font-sans: "Rajdhani", system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

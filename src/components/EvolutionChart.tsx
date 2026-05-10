@@ -33,14 +33,14 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
   return (
     <div className="glass rounded-2xl p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-        <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2 font-display">
+        <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
           <Activity className="h-6 w-6" /> Evolução {year}
         </h3>
         <div className="flex items-center gap-6">
-          <div className="text-lg font-bold tracking-widest uppercase font-display" style={{ color: "var(--income)" }}>
+          <div className="text-lg font-bold tracking-widest uppercase" style={{ color: "var(--income)" }}>
             Receitas: {fmtCurrency(totalRec)}
           </div>
-          <div className="text-lg font-bold tracking-widest uppercase font-display" style={{ color: "var(--expense)" }}>
+          <div className="text-lg font-bold tracking-widest uppercase" style={{ color: "var(--expense)" }}>
             Despesas: {fmtCurrency(totalDes)}
           </div>
         </div>

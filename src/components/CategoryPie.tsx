@@ -41,11 +41,11 @@ export function CategoryPie({
   return (
     <div className="glass rounded-2xl p-6 h-full">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-base font-bold tracking-widest uppercase flex items-center gap-2" style={{ color: accent }}>
+        <h3 className="text-lg font-bold tracking-widest uppercase flex items-center gap-2" style={{ color: accent }}>
           {icon} {title}
         </h3>
-        <span className="text-xs uppercase tracking-widest text-muted-foreground">
-          Total: <span className="text-foreground font-bold">{fmtCurrency(total)}</span>
+        <span className="text-sm uppercase tracking-widest font-bold flex items-center gap-1" style={{ color: accent }}>
+          Total: <span className="text-lg">{fmtCurrency(total)}</span>
         </span>
       </div>
       {data.length === 0 ? (

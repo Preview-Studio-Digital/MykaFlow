@@ -70,13 +70,35 @@ export function CategoryPie({
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{
-                  background: "oklch(0.18 0.05 255)",
-                  border: "1px solid oklch(0.78 0.16 220 / 0.4)",
-                  borderRadius: 12,
-                  fontFamily: "Rajdhani",
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const { name, value, fill } = payload[0].payload;
+                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : "0.0";
+                    return (
+                      <div 
+                        className="glass rounded-xl p-3 border shadow-2xl min-w-[140px]" 
+                        style={{ 
+                          borderColor: `${fill}44`,
+                          backgroundColor: "oklch(0.15 0.05 255 / 0.9)",
+                          backdropFilter: "blur(12px)"
+                        }}
+                      >
+                        <p className="text-[10px] uppercase tracking-[0.2em] mb-1 font-bold opacity-70" style={{ color: fill }}>
+                          {name}
+                        </p>
+                        <div className="flex flex-col gap-0">
+                          <p className="text-base font-bold" style={{ color: fill }}>
+                            {fmtCurrency(value)}
+                          </p>
+                          <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: fill }}>
+                            {percentage}% <span className="opacity-60 font-normal">do total</span>
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
                 }}
-                formatter={(v: number) => fmtCurrency(v)}
               />
               <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 12 }} />
             </PieChart>

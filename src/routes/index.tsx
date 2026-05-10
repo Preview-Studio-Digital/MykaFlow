@@ -32,6 +32,8 @@ function Dashboard() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
@@ -42,7 +44,11 @@ function Dashboard() {
       .from("transactions")
       .select("*")
       .order("occurred_on", { ascending: false });
-    if (!error && data) setRows(data as TxRow[]);
+    if (!error && data) {
+      setRows(data as TxRow[]);
+      setRefreshKey(prev => prev + 1);
+    }
+
   }
 
   useEffect(() => {
@@ -189,6 +195,7 @@ function Dashboard() {
       {/* Charts */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CategoryPie
+          key={`income-${refreshKey}`}
           title="Receitas por Categoria"
           data={incomeByCat}
           transactions={monthRows.filter((r) => r.type === "income")}
@@ -197,6 +204,7 @@ function Dashboard() {
           type="income"
         />
         <CategoryPie
+          key={`expense-${refreshKey}`}
           title="Despesas por Categoria"
           data={expenseByCat}
           transactions={monthRows.filter((r) => r.type === "expense")}
@@ -204,15 +212,20 @@ function Dashboard() {
           icon={<TrendingDown className="h-6 w-6" />}
           type="expense"
         />
+
       </section>
 
       <section className="mb-6">
-        <EvolutionChart data={rows} year={year} />
+        <EvolutionChart key={`evolution-${refreshKey}`} data={rows} year={year} />
       </section>
 
       {/* Form */}
       <section className="mb-8 max-w-2xl mx-auto">
-        <TransactionForm onCreated={load} />
+        <TransactionForm 
+          onCreated={load} 
+          defaultMonth={month} 
+          defaultYear={year} 
+        />
       </section>
 
       {/* List */}
@@ -220,7 +233,7 @@ function Dashboard() {
         <h2 className="mb-3 text-base font-bold uppercase tracking-widest text-muted-foreground">
           Lançamentos de {MONTHS_PT[month]}
         </h2>
-        <TransactionList rows={monthRows} onDeleted={load} />
+        <TransactionList key={`list-${refreshKey}`} rows={monthRows} onDeleted={load} />
       </section>
 
       <footer className="mt-10 text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60">

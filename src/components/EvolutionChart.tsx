@@ -62,12 +62,22 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
     else m.despesas += Number(t.amount);
   }
 
+  const totalReceitas = monthly.reduce((acc, m) => acc + m.receitas, 0);
+  const totalDespesas = monthly.reduce((acc, m) => acc + m.despesas, 0);
+  const totalSaldo = totalReceitas - totalDespesas;
+
   return (
     <div className="glass rounded-2xl p-6">
-      <div className="mb-8">
+      <div className="flex items-center justify-between mb-8">
         <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
           <Activity className="h-6 w-6" /> Evolução Anual {year}
         </h3>
+        <div className="flex flex-col items-end">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">Saldo Anual</span>
+          <span className={`text-xl font-black font-mono tracking-tighter ${totalSaldo >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-destructive drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+            {fmtCurrency(totalSaldo)}
+          </span>
+        </div>
       </div>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">

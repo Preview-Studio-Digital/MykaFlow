@@ -88,13 +88,18 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
     ? dbCategories.filter(c => c.parent_id === selectedParentId).map(c => c.name)
     : (fallbackSubs[selectedParentId] || []);
 
-  // Regra da Antecipação
+  // Regras de Auditoria (Antecipação e Adiantamento)
   useEffect(() => {
     const parent = dbCategories.find(c => c.id === selectedParentId) || fallbackParents.find(c => c.id === selectedParentId);
-    const isAntecipacao = parent?.name === "ANTECIPAÇÃO" || subCategory === "ANTECIPAÇÃO";
+    const parentName = parent?.name || "";
+    
+    const isAntecipacao = parentName === "ANTECIPAÇÃO" || subCategory === "ANTECIPAÇÃO";
+    const isAdiantamento = parentName === "ADIANTAMENTOS" || subCategory === "ADIANTAMENTOS";
     
     if (isAntecipacao && !note.startsWith("NOTA FISCAL Nº: ")) {
       setNote(prev => prev ? `NOTA FISCAL Nº: ${prev}` : "NOTA FISCAL Nº: ");
+    } else if (isAdiantamento && !note.startsWith("NF - ")) {
+      setNote(prev => prev ? `NF - ${prev}` : "NF - ");
     }
   }, [selectedParentId, subCategory, isOpen]);
 
@@ -106,9 +111,15 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
     const parent = dbCategories.find(c => c.id === selectedParentId) || fallbackParents.find(c => c.id === selectedParentId);
     const parentName = parent?.name || transaction.category;
     const isAntecipacao = parentName === "ANTECIPAÇÃO" || subCategory === "ANTECIPAÇÃO";
+    const isAdiantamento = parentName === "ADIANTAMENTOS" || subCategory === "ADIANTAMENTOS";
 
     if (isAntecipacao && (!note || note.trim() === "NOTA FISCAL Nº:")) {
       toast.error("Para ANTECIPAÇÃO, insira o número da NOTA FISCAL.");
+      return;
+    }
+
+    if (isAdiantamento && (!note || note.trim() === "NF -")) {
+      toast.error("Para ADIANTAMENTOS, insira o número da NF.");
       return;
     }
 

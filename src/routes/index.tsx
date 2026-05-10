@@ -222,10 +222,13 @@ function Kpi({
   return (
     <div className="glass rounded-2xl p-5 transition hover:scale-[1.02] hover:glow">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
-        <span className={color}>{icon}</span>
+        <h4 className={`text-lg font-bold tracking-widest uppercase flex items-center gap-2 font-display ${color}`}>
+          {icon} {label}
+        </h4>
+        <p className={`text-lg font-bold tracking-widest uppercase font-display ${color}`}>
+          {fmtCurrency(value)}
+        </p>
       </div>
-      <p className={`mt-2 text-2xl font-extrabold font-mono ${color}`}>{fmtCurrency(value)}</p>
     </div>
   );
 }

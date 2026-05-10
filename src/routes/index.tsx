@@ -6,6 +6,7 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
+import { MiniEvolutionChart } from "@/components/MiniEvolutionChart";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import {
@@ -179,65 +180,79 @@ function Dashboard() {
         currentUser={user} 
       />
 
-      {/* Month selector + KPIs */}
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="glass rounded-2xl p-5 flex items-center justify-between md:col-span-1 min-h-[120px]">
-          <button onClick={() => shiftMonth(-1)} className="btn-ghost-neon rounded-lg p-2">
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="text-center flex flex-col items-center gap-1">
-            <p className="text-sm uppercase opacity-80 tracking-widest flex items-center gap-2 text-muted-foreground">
-              <Calendar className="h-6 w-6" /> Período
-            </p>
-            <p className="text-3xl font-bold tracking-widest text-gradient uppercase">
-              {MONTHS_PT[month]} {year}
-            </p>
-          </div>
-          <button onClick={() => shiftMonth(1)} className="btn-ghost-neon rounded-lg p-2">
-            <ChevronRight className="h-4 w-4" />
-          </button>
+      {/* KPIs & Charts - Centralized Layout */}
+      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Left Column: Receitas */}
+        <div className="flex flex-col gap-4">
+          <Kpi
+            label="Receitas"
+            value={totalIncome}
+            color="text-accent"
+            icon={<TrendingUp className="h-6 w-6" />}
+          />
+          <CategoryPie
+            key={`income-${refreshKey}`}
+            title="Receitas por Categoria"
+            data={incomeByCat}
+            transactions={monthRows.filter((r) => r.type === "income")}
+            accent="oklch(0.8 0.16 150)"
+            icon={<TrendingUp className="h-6 w-6" />}
+            type="income"
+            alignTitle="left"
+          />
         </div>
-        <Kpi
-          label="Receitas"
-          value={totalIncome}
-          color="text-accent"
-          icon={<TrendingUp className="h-6 w-6" />}
-        />
-        <Kpi
-          label="Despesas"
-          value={totalExpense}
-          color="text-destructive"
-          icon={<TrendingDown className="h-6 w-6" />}
-        />
-        <Kpi
-          label="Saldo"
-          value={balance}
-          color={balance >= 0 ? "text-accent" : "text-destructive"}
-          icon={<Wallet className="h-6 w-6" />}
-        />
-      </section>
 
-      {/* Charts */}
-      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CategoryPie
-          key={`income-${refreshKey}`}
-          title="Receitas por Categoria"
-          data={incomeByCat}
-          transactions={monthRows.filter((r) => r.type === "income")}
-          accent="oklch(0.8 0.16 150)"
-          icon={<TrendingUp className="h-6 w-6" />}
-          type="income"
-        />
-        <CategoryPie
-          key={`expense-${refreshKey}`}
-          title="Despesas por Categoria"
-          data={expenseByCat}
-          transactions={monthRows.filter((r) => r.type === "expense")}
-          accent="oklch(0.7 0.2 30)"
-          icon={<TrendingDown className="h-6 w-6" />}
-          type="expense"
-        />
+        {/* Center Column: Period Control & Balance */}
+        <div className="flex flex-col gap-4 h-full">
+          <div className="glass rounded-2xl p-5 flex items-center justify-between min-h-[120px]">
+            <button onClick={() => shiftMonth(-1)} className="btn-ghost-neon rounded-lg p-2">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="text-center flex flex-col items-center gap-1">
+              <p className="text-sm uppercase opacity-80 tracking-widest flex items-center gap-2 text-muted-foreground">
+                <Calendar className="h-6 w-6" /> Período
+              </p>
+              <p className="text-3xl font-bold tracking-widest text-gradient uppercase">
+                {MONTHS_PT[month]} {year}
+              </p>
+            </div>
+            <button onClick={() => shiftMonth(1)} className="btn-ghost-neon rounded-lg p-2">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+          <Kpi
+            label="Saldo"
+            value={balance}
+            color={balance >= 0 ? "text-accent" : "text-destructive"}
+            icon={<Wallet className="h-6 w-6" />}
+          />
+          <MiniEvolutionChart 
+            key={`minievo-${refreshKey}`}
+            data={rows} 
+            year={year} 
+            month={month} 
+          />
+        </div>
 
+        {/* Right Column: Despesas */}
+        <div className="flex flex-col gap-4">
+          <Kpi
+            label="Despesas"
+            value={totalExpense}
+            color="text-destructive"
+            icon={<TrendingDown className="h-6 w-6" />}
+          />
+          <CategoryPie
+            key={`expense-${refreshKey}`}
+            title="Despesas por Categoria"
+            data={expenseByCat}
+            transactions={monthRows.filter((r) => r.type === "expense")}
+            accent="oklch(0.7 0.2 30)"
+            icon={<TrendingDown className="h-6 w-6" />}
+            type="expense"
+            alignTitle="right"
+          />
+        </div>
       </section>
 
       <section className="mb-6">
@@ -246,6 +261,7 @@ function Dashboard() {
           data={rows} 
           year={year} 
           month={month}
+          onMonthChange={setMonth}
         />
       </section>
 

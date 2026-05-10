@@ -40,6 +40,7 @@ export function CategoryPie({
   accent,
   icon,
   type = "expense",
+  alignTitle = "left",
 }: {
   title: string;
   data: { name: string; value: number }[];
@@ -47,6 +48,7 @@ export function CategoryPie({
   accent: string;
   icon: React.ReactNode;
   type?: "income" | "expense";
+  alignTitle?: "left" | "right";
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const COLORS = type === "income" ? INCOME_COLORS : EXPENSE_COLORS;
@@ -85,8 +87,8 @@ export function CategoryPie({
 
   return (
     <div className="glass rounded-2xl p-6 h-full min-h-[400px]">
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className={`mb-6 flex items-center ${alignTitle === 'right' ? 'justify-end' : 'justify-between'}`}>
+        <div className={`flex items-center gap-3 ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`}>
           {selectedCategory && (
             <button 
               onClick={() => setSelectedCategory(null)}
@@ -95,8 +97,8 @@ export function CategoryPie({
               <ChevronLeft className="h-4 w-4" />
             </button>
           )}
-          <div>
-            <h3 className="text-lg font-bold tracking-widest uppercase flex items-center gap-2" style={{ color: accent }}>
+          <div className={`flex flex-col ${alignTitle === 'right' ? 'items-end' : 'items-start'}`}>
+            <h3 className={`text-lg font-bold tracking-widest uppercase flex items-center gap-2 ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`} style={{ color: accent }}>
               {!selectedCategory && icon} {selectedCategory || title}
             </h3>
             <p className="text-[10px] uppercase opacity-50 tracking-wider">

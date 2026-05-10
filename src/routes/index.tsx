@@ -137,19 +137,19 @@ function Dashboard() {
           label="Receitas"
           value={totalIncome}
           color="text-accent"
-          icon={<TrendingUp className="h-5 w-5" />}
+          icon={<TrendingUp className="h-6 w-6" />}
         />
         <Kpi
           label="Despesas"
           value={totalExpense}
           color="text-destructive"
-          icon={<TrendingDown className="h-5 w-5" />}
+          icon={<TrendingDown className="h-6 w-6" />}
         />
         <Kpi
           label="Saldo"
           value={balance}
           color={balance >= 0 ? "text-accent" : "text-destructive"}
-          icon={<Wallet className="h-5 w-5" />}
+          icon={<Wallet className="h-6 w-6" />}
         />
       </section>
 
@@ -159,14 +159,14 @@ function Dashboard() {
           title="Despesas por Categoria"
           data={expenseByCat}
           accent="oklch(0.7 0.2 30)"
-          icon={<TrendingDown className="h-4 w-4" />}
+          icon={<TrendingDown className="h-6 w-6" />}
           type="expense"
         />
         <CategoryPie
           title="Receitas por Categoria"
           data={incomeByCat}
           accent="oklch(0.8 0.16 150)"
-          icon={<TrendingUp className="h-4 w-4" />}
+          icon={<TrendingUp className="h-6 w-6" />}
           type="income"
         />
       </section>
@@ -222,10 +222,10 @@ function Kpi({
   return (
     <div className="glass rounded-2xl p-5 transition hover:scale-[1.02] hover:glow">
       <div className="flex items-center justify-between">
-        <h4 className={`text-lg font-bold tracking-widest uppercase flex items-center gap-2 font-display ${color}`}>
+        <h4 className={`text-2xl font-bold tracking-widest uppercase flex items-center gap-2 font-display ${color}`}>
           {icon} {label}
         </h4>
-        <p className={`text-lg font-bold tracking-widest uppercase font-display ${color}`}>
+        <p className={`text-2xl font-bold tracking-widest uppercase font-display ${color}`}>
           {fmtCurrency(value)}
         </p>
       </div>

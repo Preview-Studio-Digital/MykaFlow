@@ -27,11 +27,24 @@ export function EvolutionChart({ data, year }: { data: Tx[]; year: number }) {
     else m.despesas += Number(t.amount);
   }
 
+  const totalRec = monthly.reduce((a, b) => a + b.receitas, 0);
+  const totalDes = monthly.reduce((a, b) => a + b.despesas, 0);
+
   return (
     <div className="glass rounded-2xl p-6">
-      <h3 className="text-base font-bold uppercase tracking-widest text-gradient flex items-center gap-2 mb-4">
-        <Activity className="h-5 w-5" /> Evolução {year}
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <h3 className="text-2xl font-bold uppercase tracking-widest text-gradient flex items-center gap-2 font-display">
+          <Activity className="h-6 w-6" /> Evolução {year}
+        </h3>
+        <div className="flex items-center gap-6">
+          <div className="text-2xl font-bold tracking-widest uppercase font-display" style={{ color: "var(--income)" }}>
+            Receitas: {fmtCurrency(totalRec)}
+          </div>
+          <div className="text-2xl font-bold tracking-widest uppercase font-display" style={{ color: "var(--expense)" }}>
+            Despesas: {fmtCurrency(totalDes)}
+          </div>
+        </div>
+      </div>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={monthly}>

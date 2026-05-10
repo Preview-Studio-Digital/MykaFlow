@@ -66,8 +66,9 @@ export function AdminPanel() {
         />
         <div className="flex gap-2">
           <input
-            readOnly
+            placeholder="Senha personalizada ou gerada"
             value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="input-futuristic flex-1 rounded-lg px-3 py-2.5 font-mono text-sm outline-none"
           />
           <button

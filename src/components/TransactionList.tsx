@@ -1,7 +1,9 @@
-import { Trash2 } from "lucide-react";
+import { Trash2, Edit2 } from "lucide-react";
 import { fmtCurrency } from "@/lib/finance-constants";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useState } from "react";
+import { TransactionEditDialog } from "./TransactionEditDialog";
 
 export interface TxRow {
   id: string;
@@ -21,6 +23,8 @@ export function TransactionList({
   rows: TxRow[];
   onDeleted: () => void;
 }) {
+  const [editingTx, setEditingTx] = useState<TxRow | null>(null);
+
   async function remove(id: string) {
     if (!confirm("Excluir este lançamento?")) return;
     const { error } = await supabase.from("transactions").delete().eq("id", id);
@@ -86,18 +90,36 @@ export function TransactionList({
                 {r.type === "income" ? "+" : "−"} {fmtCurrency(Number(r.amount))}
               </td>
               <td className="px-2 py-3">
-                <button
-                  onClick={() => remove(r.id)}
-                  className="rounded p-2 text-muted-foreground transition hover:bg-destructive/20 hover:text-destructive"
-                  title="Excluir"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setEditingTx(r)}
+                    className="rounded p-2 text-muted-foreground transition hover:bg-accent/20 hover:text-accent"
+                    title="Editar"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => remove(r.id)}
+                    className="rounded p-2 text-muted-foreground transition hover:bg-destructive/20 hover:text-destructive"
+                    title="Excluir"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {editingTx && (
+        <TransactionEditDialog 
+          isOpen={!!editingTx}
+          transaction={editingTx}
+          onClose={() => setEditingTx(null)}
+          onUpdated={onDeleted}
+        />
+      )}
     </div>
   );
 }

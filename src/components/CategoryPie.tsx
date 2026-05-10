@@ -64,8 +64,14 @@ export function CategoryPie({
     const nameMap = new Map<string, number>();
     
     catTxs.forEach(t => {
-      // Normalizando a descrição para agrupar itens idênticos (sem espaços extras e ignorando maiúsculas)
-      const txDesc = (t.description || "Sem descrição").trim().toUpperCase();
+      // Pegamos apenas a primeira parte (subcategoria) antes do " - " para agrupar corretamente
+      let txDesc = (t.description || "OUTROS").split(" - ")[0].trim().toUpperCase();
+      
+      // Unificação conforme solicitado pelo usuário
+      if (txDesc.includes("TI -") || txDesc === "TI") txDesc = "TI - TECNOLOGIA DA INFORMAÇÃO";
+      if (txDesc.includes("FROTA")) txDesc = "FROTA";
+      if (txDesc.includes("TELEFONIA")) txDesc = "TELEFONIA";
+      
       nameMap.set(txDesc, (nameMap.get(txDesc) ?? 0) + Number(t.amount));
     });
 
@@ -105,16 +111,16 @@ export function CategoryPie({
           Sem dados neste período
         </div>
       ) : (
-        <div className="h-64">
+        <div className="h-[350px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={currentData}
                 dataKey="value"
                 nameKey="name"
-                innerRadius={selectedCategory ? 40 : 50}
-                outerRadius={selectedCategory ? 80 : 90}
-                paddingAngle={3}
+                innerRadius={70}
+                outerRadius={125}
+                paddingAngle={2}
                 stroke="oklch(0.16 0.04 255)"
                 onClick={(entry) => !selectedCategory && setSelectedCategory(entry.name)}
                 style={{ cursor: selectedCategory ? 'default' : 'pointer' }}
@@ -137,15 +143,15 @@ export function CategoryPie({
                           backdropFilter: "blur(12px)"
                         }}
                       >
-                        <p className="text-[10px] uppercase tracking-[0.2em] mb-1 font-bold opacity-70" style={{ color: fill }}>
+                        <p className="text-xs uppercase tracking-[0.2em] mb-2 font-black opacity-80" style={{ color: fill }}>
                           {name}
                         </p>
-                        <div className="flex flex-col gap-0">
-                          <p className="text-base font-bold" style={{ color: fill }}>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-2xl font-bold leading-none" style={{ color: fill }}>
                             {fmtCurrency(value)}
                           </p>
-                          <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: fill }}>
-                            {percentage}% <span className="opacity-60 font-normal">do total</span>
+                          <p className="text-sm font-bold uppercase tracking-widest mt-1" style={{ color: fill }}>
+                            {percentage}% <span className="opacity-60 font-medium lowercase">do total</span>
                           </p>
                         </div>
                       </div>

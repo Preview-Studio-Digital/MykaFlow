@@ -7,6 +7,7 @@ import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
+import { ProfileDialog } from "@/components/ProfileDialog";
 import {
   LogOut,
   Zap,
@@ -17,6 +18,7 @@ import {
   ChevronRight,
   Calendar,
   ShieldCheck,
+  User as UserIcon,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -29,6 +31,7 @@ function Dashboard() {
   const [rows, setRows] = useState<TxRow[]>([]);
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
@@ -100,11 +103,22 @@ function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+          <div className="flex flex-col items-end hidden sm:flex">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
               {role === "admin" ? "Administrador" : "Funcionário"}
             </p>
-            <p className="text-sm font-mono">{user?.email}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <button 
+                onClick={() => setIsProfileOpen(true)}
+                className="text-accent hover:text-white transition-colors hover:scale-110"
+                title="Editar Perfil"
+              >
+                <UserIcon className="h-5 w-5" />
+              </button>
+              <p className="text-sm font-black uppercase tracking-widest text-white">
+                {user?.user_metadata?.display_name || user?.email}
+              </p>
+            </div>
           </div>
           {role === "admin" && (
             <Link 
@@ -126,6 +140,13 @@ function Dashboard() {
           </button>
         </div>
       </header>
+
+      {/* Perfil Dialog */}
+      <ProfileDialog 
+        isOpen={isProfileOpen} 
+        onClose={() => setIsProfileOpen(false)} 
+        currentUser={user} 
+      />
 
       {/* Month selector + KPIs */}
       <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">

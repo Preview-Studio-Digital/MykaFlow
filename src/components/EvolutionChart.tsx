@@ -147,6 +147,44 @@ export function EvolutionChart({
     return annualData.slice(0, month + 1).reduce((acc, curr) => acc + (curr.receitas - curr.despesas), 0);
   }, [annualData, month]);
 
+  // Cálculos para o modo Mensal
+  const today = new Date();
+  const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+  const currentDay = today.getDate();
+
+  const saldoAteHoje = useMemo(() => {
+    if (dailyData.length === 0) return 0;
+    // Limitamos ao dia de hoje apenas se estivermos visualizando o MÊS ATUAL.
+    // Para meses passados ou futuros, mostramos o saldo total/final do mês.
+    const limitDay = isCurrentMonth ? currentDay : 999; 
+    
+    const relevantDays = dailyData.filter(d => d.day <= limitDay);
+    if (relevantDays.length === 0) return 0;
+    return relevantDays[relevantDays.length - 1].saldo;
+  }, [dailyData, isCurrentMonth, currentDay]);
+
+  const projecaoMensal = useMemo(() => {
+    if (dailyData.length === 0) return 0;
+    if (!isCurrentMonth) return dailyData[dailyData.length - 1].saldo;
+    
+    const daysInMonth = dailyData.length;
+    // Evitar divisão por zero e garantir que a projeção faça sentido
+    const dayForCalc = Math.max(1, currentDay);
+    
+    // Se o usuário já lançou o mês inteiro (futuro), a projeção é o próprio saldo final
+    const lastBalance = dailyData[dailyData.length - 1].saldo;
+    const basicProj = (saldoAteHoje / dayForCalc) * daysInMonth;
+    
+    // Se o saldo final conhecido (incluindo futuro) for diferente do saldo até hoje,
+    // significa que o usuário já tem lançamentos futuros. 
+    // Nesse caso, o "Saldo Final" do gráfico é uma projeção mais real do que o cálculo matemático.
+    if (Math.abs(lastBalance - saldoAteHoje) > 0.01) {
+      return lastBalance;
+    }
+
+    return basicProj; 
+  }, [dailyData, saldoAteHoje, isCurrentMonth, currentDay]);
+
   const chartData = effectiveViewMode === "annual" ? annualData : dailyData;
   const currentMonthData = annualData[month] || { receitas: 0, despesas: 0 };
   const currentSaldo = (currentMonthData.receitas || 0) - (currentMonthData.despesas || 0);
@@ -270,14 +308,25 @@ export function EvolutionChart({
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
-                Saldo de {MONTHS_PT[month]}
-              </span>
-              <span className={`text-2xl font-black font-mono tracking-tighter ${currentSaldo >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
-                {fmtCurrency(currentSaldo)}
-              </span>
-            </div>
+            <>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                  {isCurrentMonth ? `Saldo até ${currentDay}/${month + 1}` : `Saldo Final ${MONTHS_PT[month]}`}
+                </span>
+                <span className={`text-2xl font-black font-mono tracking-tighter ${saldoAteHoje >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                  {fmtCurrency(saldoAteHoje)}
+                </span>
+              </div>
+
+              <div className="flex flex-col items-end border-l border-white/10 pl-8">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                  Projeção Mensal
+                </span>
+                <span className={`text-2xl font-black font-mono tracking-tighter ${projecaoMensal >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                  {fmtCurrency(projecaoMensal)}
+                </span>
+              </div>
+            </>
           )}
         </div>
       </div>

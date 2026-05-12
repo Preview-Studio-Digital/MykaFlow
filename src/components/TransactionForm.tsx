@@ -10,9 +10,10 @@ interface Props {
   defaultMonth?: number;
   defaultYear?: number;
   onMonthShift?: (delta: number) => void;
+  onMonthYearChange?: (month: number, year: number) => void;
 }
 
-export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthShift }: Props) {
+export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthShift, onMonthYearChange }: Props) {
   const { user, role } = useAuth();
   const [type, setType] = useState<"income" | "expense">("expense");
   const [nature, setNature] = useState<"fixed" | "variable" | "">("");
@@ -92,29 +93,26 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     if (!name || !user) return;
 
     const upperName = name.trim().toUpperCase();
+    const tempId = `temp-${Date.now()}`;
     
-    /*
-    const { data, error } = await supabase.from("categories").insert({
+    const newCat = {
+      id: tempId,
       name: upperName,
       type: type,
       parent_id: parentId || null,
-      user_id: user.id
-    }).select().single();
+      isTemporary: true
+    };
 
-    if (error) {
-      toast.error("Erro ao cadastrar: " + error.message);
-      return;
-    }
-    */
-    toast.info("Criação manual desativada. Use categorias existentes.");
-
-    toast.success("Categoria criada!");
-    setRefreshTrigger(prev => prev + 1);
+    setDbCategories(prev => [...prev, newCat]);
+    
     if (!parentId) {
-      // setSelectedParentId(data.id);
+      setSelectedParentId(tempId);
+      setSubCategory("");
     } else {
       setSubCategory(upperName);
     }
+
+    toast.success(parentId ? "Subcategoria pronta para uso!" : "Categoria pronta para uso!");
   };
 
   // Lógica de seleção (Usa DB se houver, senão Fallback)
@@ -127,25 +125,6 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     : (fallbackSubs[selectedParentId] || []);
 
   // Regras de Auditoria (Antecipação e Adiantamento)
-  useEffect(() => {
-    const parent = dbCategories.find(c => c.id === selectedParentId) || fallbackParents.find(c => c.id === selectedParentId);
-    const parentName = parent?.name || "";
-    
-    // Só aplicamos a regra se não estivermos digitando um NOME de nova subcategoria,
-    // ou se o ADIANTAMENTO for a categoria pai selecionada.
-    const isAntecipacao = parentName.toUpperCase().includes("ANTECIPAÇÃO") || subCategory.toUpperCase().includes("ANTECIPAÇÃO");
-    const isAdiantamento = parentName.toUpperCase().includes("ADIANTAMENTOS") || subCategory.toUpperCase().includes("ADIANTAMENTOS");
-    const isManutencao = parentName.toUpperCase().includes("MANUTENÇÃO") || subCategory.toUpperCase().includes("MANUTENÇÃO");
-    
-    if (isAntecipacao && !description.startsWith("NOTA FISCAL Nº: ")) {
-      setDescription(prev => prev.startsWith("NOTA FISCAL Nº: ") ? prev : "NOTA FISCAL Nº: " + prev.replace("NOTA FISCAL Nº: ", ""));
-    } else if (isAdiantamento && !description.startsWith("NF - ")) {
-      setDescription(prev => prev.startsWith("NF - ") ? prev : "NF - " + prev.replace("NF - ", ""));
-    } else if (isManutencao && !description.startsWith("CLIENTE - ")) {
-      setDescription(prev => prev.startsWith("CLIENTE - ") ? prev : "CLIENTE - " + prev.replace("CLIENTE - ", ""));
-    }
-  }, [selectedParentId, subCategory]);
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!user || !selectedParentId) {
@@ -161,26 +140,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
       return;
     }
 
-    const upperParent = parentName.toUpperCase();
-    const upperSub = subCategory.toUpperCase();
-    const isAntecipacao = upperParent.includes("ANTECIPAÇÃO") || upperSub.includes("ANTECIPAÇÃO");
-    const isAdiantamento = upperParent.includes("ADIANTAMENTOS") || upperSub.includes("ADIANTAMENTOS");
-    const isManutencao = upperParent.includes("MANUTENÇÃO") || upperSub.includes("MANUTENÇÃO");
 
-    if (isAntecipacao && (!description || description.trim() === "NOTA FISCAL Nº:")) {
-      toast.error("Para ANTECIPAÇÃO, insira o número da NOTA FISCAL.");
-      return;
-    }
-    
-    if (isAdiantamento && (!description || description.trim() === "NF -")) {
-      toast.error("Para ADIANTAMENTOS, insira o número da NF.");
-      return;
-    }
-
-    if (isManutencao && (!description || description.trim() === "CLIENTE -")) {
-      toast.error("Para MANUTENÇÃO, insira o nome do CLIENTE.");
-      return;
-    }
 
     // Limpa a formatação brasileira para converter em número puro
     const value = parseFloat(amount.replace(/\./g, "").replace(",", "."));
@@ -223,39 +183,67 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
   return (
     <form 
       onSubmit={submit} 
-      className={`rounded-2xl p-6 space-y-4 transition-all duration-500 border-2 shadow-2xl ${ 
+      className={`rounded-2xl p-3 flex flex-col justify-between transition-all duration-500 border-2 shadow-2xl ${ 
         type === "expense" 
           ? "bg-red-500/10 border-red-500/40 shadow-[inset_0_0_50px_rgba(239,68,68,0.15)]" 
           : "bg-cyan-500/10 border-cyan-500/40 shadow-[inset_0_0_50px_rgba(34,211,238,0.15)]"
-      } backdrop-blur-md`}
+      } backdrop-blur-md h-full`}
     >
-      <h3 className="text-lg font-black tracking-[0.3em] text-gradient flex items-center justify-center gap-6 uppercase">
-        <button 
-          type="button" 
-          onClick={() => onMonthShift?.(-1)}
-          className="text-muted-foreground hover:text-white transition-all hover:scale-125"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        
-        <div className="flex items-center gap-2">
-          <Plus className="h-4 w-4" /> Lançamento - {defaultMonth !== undefined ? MONTHS_PT[defaultMonth] : ""}
+      <p className="text-center text-[11px] uppercase tracking-[0.3em] text-muted-foreground opacity-70 font-black mb-1">Novo Lançamento</p>
+      <h3 className="relative flex items-center justify-between uppercase w-full px-1">
+        <div className="flex items-center gap-2 flex-1">
+          <button 
+            type="button" 
+            onClick={() => onMonthShift?.(-1)}
+            className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+
+          {defaultMonth !== undefined && (
+            <button
+              type="button"
+              onClick={() => onMonthShift?.(-1)}
+              className="text-[10px] font-black tracking-[0.2em] opacity-25 hover:opacity-60 text-gradient transition-all cursor-pointer whitespace-nowrap"
+            >
+              {MONTHS_PT[(defaultMonth + 11) % 12]}
+            </button>
+          )}
         </div>
 
-        <button 
-          type="button" 
-          onClick={() => onMonthShift?.(1)}
-          className="text-muted-foreground hover:text-white transition-all hover:scale-125"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
+        {defaultMonth !== undefined && (
+          <span className="absolute left-1/2 -translate-x-1/2 text-xl font-black tracking-[0.3em] text-gradient whitespace-nowrap">
+            {MONTHS_PT[defaultMonth]}
+          </span>
+        )}
+
+        <div className="flex items-center justify-end gap-2 flex-1">
+          {defaultMonth !== undefined && (
+            <button
+              type="button"
+              onClick={() => onMonthShift?.(1)}
+              className="text-[10px] font-black tracking-[0.2em] opacity-25 hover:opacity-60 text-gradient transition-all cursor-pointer whitespace-nowrap"
+            >
+              {MONTHS_PT[(defaultMonth + 1) % 12]}
+            </button>
+          )}
+
+          <button 
+            type="button" 
+            onClick={() => onMonthShift?.(1)}
+            className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
       </h3>
+
 
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => { setType("expense"); setSelectedParentId(""); setSubCategory(""); }}
-          className={`flex items-center justify-center gap-2 rounded-lg py-3 text-[10px] font-black uppercase tracking-[0.2em] transition ${
+          className={`flex items-center justify-center gap-2 rounded-lg py-2 text-[10px] font-black uppercase tracking-[0.2em] transition ${
             type === "expense" ? "bg-destructive/20 text-destructive border border-destructive/60 glow" : "border border-border/50 text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -264,7 +252,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
         <button
           type="button"
           onClick={() => { setType("income"); setSelectedParentId(""); setSubCategory(""); }}
-          className={`flex items-center justify-center gap-2 rounded-lg py-3 text-[10px] font-black uppercase tracking-[0.2em] transition ${
+          className={`flex items-center justify-center gap-2 rounded-lg py-2 text-[10px] font-black uppercase tracking-[0.2em] transition ${
             type === "income" ? "bg-accent/20 text-accent border border-accent/60 glow" : "border border-border/50 text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -272,15 +260,15 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <div className="block">
-          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Categoria</span>
+          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Categoria</span>
           <div className="flex gap-2">
             <select
               required
               value={selectedParentId}
               onChange={(e) => { setSelectedParentId(e.target.value); setSubCategory(""); }}
-              className="input-futuristic flex-1 rounded-lg px-3 py-2.5 outline-none uppercase font-bold"
+              className="input-futuristic flex-1 h-8 rounded-lg px-2 py-0 outline-none uppercase font-bold text-xs"
             >
               <option value="">SELECIONE...</option>
               {currentParents.map((c) => (
@@ -291,7 +279,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
               <button
                 type="button"
                 onClick={() => handleQuickAdd()}
-                className="flex items-center justify-center p-2.5 rounded-lg border border-border/50 hover:border-accent/50 hover:bg-accent/10 transition text-accent"
+                className="flex items-center justify-center p-1.5 rounded-lg border border-border/50 hover:border-accent/50 hover:bg-accent/10 transition text-accent"
                 title="Nova Categoria Principal"
               >
                 <Plus className="h-5 w-5" />
@@ -300,24 +288,24 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
           </div>
         </div>
         <div className="block">
-          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Subcategoria</span>
+          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Subcategoria</span>
           <div className="flex gap-2">
             <select
               value={subCategory}
               onChange={(e) => setSubCategory(e.target.value)}
               disabled={!selectedParentId}
-              className="input-futuristic flex-1 rounded-lg px-3 py-2.5 outline-none disabled:opacity-30 uppercase font-bold"
+              className="input-futuristic flex-1 h-8 rounded-lg px-2 py-0 outline-none disabled:opacity-30 uppercase font-bold text-xs"
             >
               <option value="">SELECIONE...</option>
               {currentSubs.map((s) => (
                 <option key={s} value={s} className="bg-popover">{s}</option>
               ))}
             </select>
-            {role === "admin" && selectedParentId && !selectedParentId.startsWith("temp") && (
+            {role === "admin" && selectedParentId && (
               <button
                 type="button"
                 onClick={() => handleQuickAdd(selectedParentId)}
-                className="flex items-center justify-center p-2.5 rounded-lg border border-border/50 hover:border-accent/50 hover:bg-accent/10 transition text-accent"
+                className="flex items-center justify-center p-1.5 rounded-lg border border-border/50 hover:border-accent/50 hover:bg-accent/10 transition text-accent"
                 title="Nova Subcategoria"
               >
                 <Plus className="h-5 w-5" />
@@ -327,14 +315,14 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <div className="block">
-          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Tipo de Lançamento</span>
+          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Tipo de Lançamento</span>
           <select
             required
             value={nature}
             onChange={(e) => setNature(e.target.value as "fixed" | "variable")}
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-bold uppercase"
+            className="input-futuristic w-full h-8 rounded-lg px-2 py-0 outline-none font-bold uppercase text-xs"
           >
             <option value="" className="bg-popover">SELECIONE...</option>
             <option value="variable" className="bg-popover uppercase">VARIÁVEL</option>
@@ -342,7 +330,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
           </select>
         </div>
         <label className="block">
-          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Valor (R$)</span>
+          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Valor (R$)</span>
           <input
             required
             inputMode="numeric"
@@ -356,29 +344,38 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
               setAmount(centered);
             }}
             placeholder="0,00"
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-bold text-xl text-accent tracking-wider"
+            className="input-futuristic w-full h-8 rounded-lg px-2 py-0 outline-none font-bold text-xs text-accent tracking-wider"
           />
         </label>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <label className="block">
-          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Data</span>
+          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Data</span>
           <input
             required
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-bold"
+            onChange={(e) => {
+              const newDate = e.target.value;
+              setDate(newDate);
+              if (newDate && onMonthYearChange) {
+                const d = new Date(newDate + "T00:00:00");
+                if (!isNaN(d.getTime())) {
+                  onMonthYearChange(d.getMonth(), d.getFullYear());
+                }
+              }
+            }}
+            className="input-futuristic w-full h-8 rounded-lg px-2 py-0 outline-none font-bold text-xs"
           />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Descrição</span>
+          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Descrição</span>
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value.toUpperCase())}
-            placeholder="EX: REFERENTE AO MÊS 05"
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none uppercase font-bold tracking-wide"
+            placeholder="DIGITE..."
+            className="input-futuristic w-full h-8 rounded-lg px-2 py-0 outline-none uppercase font-bold tracking-wide text-xs"
           />
         </label>
       </div>
@@ -386,7 +383,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
       <button
         disabled={busy}
         type="submit"
-        className={`w-full rounded-lg px-6 py-4 text-xs font-black uppercase tracking-[0.3em] transition-all duration-300 shadow-lg disabled:opacity-50 border-2 ${ 
+        className={`w-full rounded-lg px-6 py-2.5 text-xs font-black uppercase tracking-[0.3em] transition-all duration-300 shadow-lg disabled:opacity-50 border-2 ${ 
           type === "expense" 
             ? "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30 shadow-red-900/10 glow" 
             : "bg-accent/20 border-accent/60 text-accent hover:bg-accent/30 shadow-accent-900/10 glow"

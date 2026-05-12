@@ -47,7 +47,7 @@ export function MiniEvolutionChart({
   const dailyData = useMemo(() => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const days = Array.from({ length: daysInMonth }, (_, i) => ({
-      label: `${i + 1}/${month + 1}`,
+      label: `${i + 1}`,
       receitas: 0,
       despesas: 0,
       day: i + 1,

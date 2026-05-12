@@ -116,7 +116,7 @@ export function CategoryPie({
     <div className="glass rounded-2xl p-4 h-full min-h-[280px]">
       <div className={`mb-1 flex items-start justify-between ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`}>
         <div className={`flex flex-col ${alignTitle === 'right' ? 'items-end' : 'items-start'}`}>
-          <h3 className={`text-sm font-bold tracking-widest uppercase h-6 overflow-hidden`} style={{ color: accent }}>
+          <h3 className={`text-base font-bold tracking-widest uppercase h-6 overflow-hidden`} style={{ color: accent }}>
             {selectedCategory || title}
           </h3>
           <p className="text-[10px] uppercase opacity-50 tracking-wider h-4 overflow-hidden">
@@ -135,7 +135,13 @@ export function CategoryPie({
           </div>
         </div>
         
-        <div className={`text-xl font-black font-mono tracking-tighter drop-shadow-[0_0_8px_rgba(255,255,255,0.1)]`} style={{ color: accent }}>
+        <div 
+          className="text-3xl font-black font-mono tracking-tighter" 
+          style={{ 
+            color: accent,
+            textShadow: `0 0 12px ${accent}`
+          }}
+        >
           {fmtCurrency(total)}
         </div>
       </div>

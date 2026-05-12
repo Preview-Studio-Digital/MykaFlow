@@ -76,12 +76,18 @@ export function EvolutionChart({
   month, 
   onMonthChange,
   forcedViewMode,
+  dashboardMode,
+  onDashboardModeChange,
+  onMonthShift,
 }: { 
   data: Tx[]; 
   year: number; 
   month: number;
   onMonthChange?: (m: number) => void;
+  onMonthShift?: (delta: number) => void;
   forcedViewMode?: "annual" | "monthly";
+  dashboardMode?: "monthly" | "annual";
+  onDashboardModeChange?: (mode: "monthly" | "annual") => void;
 }) {
   const [viewMode, setViewMode] = useState<"annual" | "monthly">("annual");
   const effectiveViewMode = forcedViewMode ?? viewMode;
@@ -109,7 +115,7 @@ export function EvolutionChart({
     
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const days = Array.from({ length: daysInMonth }, (_, i) => ({
-      label: `${i + 1}/${month + 1}`,
+      label: `${i + 1}`,
       receitas: 0,
       despesas: 0,
       day: i + 1
@@ -181,32 +187,13 @@ export function EvolutionChart({
         ? "bg-red-500/10 border-red-500/30 shadow-[inset_0_0_50px_rgba(239,68,68,0.1)]" 
         : "bg-cyan-500/10 border-cyan-500/30 shadow-[inset_0_0_50px_rgba(34,211,238,0.1)]"
     } backdrop-blur-md p-4`}>
-      <div className="flex items-center justify-between mb-4 px-[10px]">
+      <div className="relative flex items-center justify-between mb-4">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-4">
-            {viewMode === "monthly" && (
-              <button 
-                onClick={() => navigateMonth(-1)}
-                className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-all"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-            )}
-            
             <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
               <Activity className="h-6 w-6" /> 
-              {effectiveViewMode === "annual" ? `Evolução Anual ${year}` : `Saldo Mensal: ${MONTHS_PT[month]}`}
+              {effectiveViewMode === "annual" ? "Evolução Anual" : "Saldo Mensal"}
             </h3>
-
-            {viewMode === "monthly" && (
-              <button 
-                onClick={() => navigateMonth(1)}
-                className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-all"
-              >
-                <Activity className="h-5 w-5 rotate-180 opacity-0 absolute" />
-                <ChevronLeft className="h-5 w-5 rotate-180" />
-              </button>
-            )}
           </div>
           
           {effectiveViewMode === "monthly" && !forcedViewMode && (
@@ -219,24 +206,79 @@ export function EvolutionChart({
           )}
         </div>
 
-        <div className="flex items-center gap-8">
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
-              Balanço até {MONTHS_PT[month]}
-            </span>
-            <span className={`text-2xl font-black font-mono tracking-tighter ${currentAnnualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
-              {fmtCurrency(currentAnnualBalance)}
-            </span>
+        {/* Toggle Mensal / Anual */}
+        {onDashboardModeChange && dashboardMode && (
+          <div className="flex flex-col items-center gap-1 absolute left-1/2 -translate-x-1/2">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => onMonthShift?.(dashboardMode === 'annual' ? -12 : -1)}
+                className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-xl font-black tracking-[0.2em] uppercase text-muted-foreground opacity-90 min-w-[150px] text-center">
+                {dashboardMode === 'annual' ? year : MONTHS_PT[month]}
+              </span>
+              <button 
+                onClick={() => onMonthShift?.(dashboardMode === 'annual' ? 12 : 1)}
+                className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+              >
+                <ChevronLeft className="h-4 w-4 rotate-180" />
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onDashboardModeChange('monthly')}
+                className={`btn-ghost-neon rounded-lg px-4 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${
+                  dashboardMode === 'monthly' ? 'glow brightness-125' : 'opacity-50'
+                }`}
+              >
+                Mensal
+              </button>
+              <button
+                onClick={() => onDashboardModeChange('annual')}
+                className={`btn-ghost-neon rounded-lg px-4 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${
+                  dashboardMode === 'annual' ? 'glow brightness-125' : 'opacity-50'
+                }`}
+              >
+                Anual
+              </button>
+            </div>
           </div>
+        )}
 
-          <div className="flex flex-col items-end border-l border-white/10 pl-8">
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
-              Projeção Anual
-            </span>
-            <span className={`text-2xl font-black font-mono tracking-tighter ${annualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
-              {fmtCurrency(annualBalance)}
-            </span>
-          </div>
+        <div className="flex items-center gap-8 pr-[58px]">
+          {effectiveViewMode === "annual" ? (
+            <>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                  Balanço até {MONTHS_PT[month]}
+                </span>
+                <span className={`text-2xl font-black font-mono tracking-tighter ${currentAnnualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                  {fmtCurrency(currentAnnualBalance)}
+                </span>
+              </div>
+
+              <div className="flex flex-col items-end border-l border-white/10 pl-8">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                  Projeção Anual
+                </span>
+                <span className={`text-2xl font-black font-mono tracking-tighter ${annualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                  {fmtCurrency(annualBalance)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                Saldo de {MONTHS_PT[month]}
+              </span>
+              <span className={`text-2xl font-black font-mono tracking-tighter ${currentSaldo >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                {fmtCurrency(currentSaldo)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -245,7 +287,7 @@ export function EvolutionChart({
           <AreaChart 
             data={chartData} 
             onClick={handleChartClick}
-            margin={{ top: 20, right: 60, left: 60, bottom: 0 }}
+            margin={{ top: 20, right: 0, left: 0, bottom: 0 }}
           >
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
@@ -313,6 +355,7 @@ export function EvolutionChart({
             />
             <YAxis
               yAxisId="left"
+              width={58}
               domain={effectiveViewMode === "monthly" ? [dataMin, dataMax] : ['auto', 'auto']}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
@@ -323,6 +366,7 @@ export function EvolutionChart({
             <YAxis
               yAxisId="right"
               orientation="right"
+              width={58}
               domain={effectiveViewMode === "monthly" ? [dataMin, dataMax] : ['auto', 'auto']}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
@@ -395,6 +439,7 @@ export function EvolutionChart({
               fill="transparent"
               legendType="none"
               tooltipType="none"
+              activeDot={false}
               animationDuration={0}
             />
 

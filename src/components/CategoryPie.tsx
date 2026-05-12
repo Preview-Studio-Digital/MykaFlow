@@ -4,7 +4,8 @@ import {
   Cell, 
   ResponsiveContainer, 
   Tooltip, 
-  Legend
+  Legend,
+  Sector
 } from "recharts";
 import { useState, useMemo } from "react";
 import { fmtCurrency } from "@/lib/finance-constants";
@@ -33,12 +34,30 @@ const INCOME_COLORS = [
   "oklch(0.55 0.2 125)",
 ];
 
+const renderActiveShape = (props: any) => {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+
+  return (
+    <g>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius + 10}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        style={{ filter: `drop-shadow(0 0 12px ${fill}88)`, transition: 'all 0.3s' }}
+      />
+    </g>
+  );
+};
+
 export function CategoryPie({
   title,
   data,
   transactions,
   accent,
-  icon,
   type = "expense",
   alignTitle = "left",
 }: {
@@ -46,11 +65,11 @@ export function CategoryPie({
   data: { name: string; value: number }[];
   transactions: TxRow[];
   accent: string;
-  icon: React.ReactNode;
   type?: "income" | "expense";
   alignTitle?: "left" | "right";
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const COLORS = type === "income" ? INCOME_COLORS : EXPENSE_COLORS;
   const total = data.reduce((a, b) => a + b.value, 0);
 
@@ -85,26 +104,37 @@ export function CategoryPie({
   const currentData = selectedCategory ? drillDownData : data;
   const currentTotal = selectedCategory ? drillDownData.reduce((a, b) => a + b.value, 0) : total;
 
+  const onPieEnter = (_: any, index: number) => {
+    setActiveIndex(index);
+  };
+
+  const onPieLeave = () => {
+    setActiveIndex(null);
+  };
+
   return (
     <div className="glass rounded-2xl p-6 h-full min-h-[400px]">
-      <div className={`mb-6 flex items-center ${alignTitle === 'right' ? 'justify-end' : 'justify-between'}`}>
-        <div className={`flex items-center gap-3 ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`}>
+      <div className={`mb-6 flex items-start justify-between ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col ${alignTitle === 'right' ? 'items-end' : 'items-start'}`}>
+          <h3 className={`text-lg font-bold tracking-widest uppercase`} style={{ color: accent }}>
+            {selectedCategory || title}
+          </h3>
+          <p className="text-[10px] uppercase opacity-50 tracking-wider mb-2">
+            {selectedCategory ? "Proporção dos Lançamentos" : "Clique em uma fatia para detalhar"}
+          </p>
           {selectedCategory && (
             <button 
               onClick={() => setSelectedCategory(null)}
-              className="btn-ghost-neon rounded-lg p-2"
+              className="rounded-lg px-2 py-1 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest border transition-all hover:brightness-125"
+              style={{ color: accent, borderColor: `${accent}44`, backgroundColor: `${accent}11` }}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3 w-3" /> Voltar
             </button>
           )}
-          <div className={`flex flex-col ${alignTitle === 'right' ? 'items-end' : 'items-start'}`}>
-            <h3 className={`text-lg font-bold tracking-widest uppercase flex items-center gap-2 ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`} style={{ color: accent }}>
-              {!selectedCategory && icon} {selectedCategory || title}
-            </h3>
-            <p className="text-[10px] uppercase opacity-50 tracking-wider">
-              {selectedCategory ? "Proporção dos Lançamentos" : "Clique em uma fatia para detalhar"}
-            </p>
-          </div>
+        </div>
+        
+        <div className={`text-xl font-black font-mono tracking-tighter drop-shadow-[0_0_8px_rgba(255,255,255,0.1)]`} style={{ color: accent }}>
+          {fmtCurrency(total)}
         </div>
       </div>
 
@@ -124,8 +154,12 @@ export function CategoryPie({
                 outerRadius={125}
                 paddingAngle={2}
                 stroke="oklch(0.16 0.04 255)"
+                activeIndex={activeIndex !== null ? activeIndex : undefined}
+                activeShape={renderActiveShape}
+                onMouseEnter={onPieEnter}
+                onMouseLeave={onPieLeave}
                 onClick={(entry) => !selectedCategory && setSelectedCategory(entry.name)}
-                style={{ cursor: selectedCategory ? 'default' : 'pointer' }}
+                style={{ cursor: selectedCategory ? 'default' : 'pointer', outline: 'none' }}
               >
                 {currentData.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -162,7 +196,10 @@ export function CategoryPie({
                   return null;
                 }}
               />
-              {!selectedCategory && <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14 }} />}
+              <Legend 
+                wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14, paddingTop: "20px" }} 
+                payload={selectedCategory ? [] : undefined}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>

@@ -134,6 +134,10 @@ export function EvolutionChart({
     });
   }, [data, year, viewMode, month]);
 
+  const currentAnnualBalance = useMemo(() => {
+    return annualData.slice(0, month + 1).reduce((acc, curr) => acc + (curr.receitas - curr.despesas), 0);
+  }, [annualData, month]);
+
   const chartData = viewMode === "annual" ? annualData : dailyData;
   const currentMonthData = annualData[month] || { receitas: 0, despesas: 0 };
   const currentSaldo = (currentMonthData.receitas || 0) - (currentMonthData.despesas || 0);
@@ -202,13 +206,24 @@ export function EvolutionChart({
           )}
         </div>
 
-        <div className="flex flex-col items-end">
-          <span className="text-sm uppercase tracking-widest text-muted-foreground font-black">
-            Previsão de Balanço Anual
-          </span>
-          <span className={`text-2xl font-black font-mono tracking-tighter ${annualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
-            {fmtCurrency(annualBalance)}
-          </span>
+        <div className="flex items-center gap-8">
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+              Balanço até {MONTHS_PT[month]}
+            </span>
+            <span className={`text-2xl font-black font-mono tracking-tighter ${currentAnnualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+              {fmtCurrency(currentAnnualBalance)}
+            </span>
+          </div>
+
+          <div className="flex flex-col items-end border-l border-white/10 pl-8">
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+              Projeção Anual
+            </span>
+            <span className={`text-2xl font-black font-mono tracking-tighter ${annualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+              {fmtCurrency(annualBalance)}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -217,6 +232,7 @@ export function EvolutionChart({
           <AreaChart 
             data={chartData} 
             onClick={handleChartClick}
+            margin={{ top: 20, right: 10, left: 10, bottom: 0 }}
           >
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
@@ -242,6 +258,7 @@ export function EvolutionChart({
               dataKey={viewMode === "annual" ? "month" : "label"} 
               stroke="oklch(0.7 0.04 235)" 
               fontSize={11} 
+              fontWeight="bold"
               tickFormatter={(val) => viewMode === "annual" ? val.slice(0, 3) : val}
             />
             <YAxis
@@ -252,14 +269,22 @@ export function EvolutionChart({
             <Tooltip cursor={false} content={<CustomTooltip isMonthly={viewMode === "monthly"} />} />
             {viewMode === "annual" && <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14 }} />}
             
-            <ReferenceLine 
-              x={MONTHS_PT[month]} 
-              stroke="#22d3ee" 
-              strokeWidth={3}
-              strokeOpacity={0.8} 
-              strokeDasharray="4 4" 
-              label={{ value: "SELECIONADO", position: "top", fill: "#22d3ee", fontSize: 10, fontWeight: "bold", opacity: 0.8 }}
-            />
+            {viewMode === "annual" && (
+              <ReferenceLine 
+                x={MONTHS_PT[month]} 
+                stroke="#22d3ee" 
+                strokeWidth={3}
+                strokeOpacity={0.8} 
+                strokeDasharray="4 4" 
+                label={{ 
+                  value: MONTHS_PT[month].slice(0, 3).toUpperCase(), 
+                  position: "top", 
+                  fill: "#22d3ee", 
+                  fontSize: 11, 
+                  fontWeight: "bold"
+                }}
+              />
+            )}
 
             <Area
               type="monotone"
@@ -288,6 +313,7 @@ export function EvolutionChart({
               strokeWidth={3}
               fill="url(#splitColorFill)"
               name="Saldo Acumulado"
+              legendType="none"
               animationDuration={1000}
               hide={viewMode === "annual"}
             />

@@ -145,7 +145,7 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
     const { error } = await supabase
       .from("transactions")
       .update({
-        user_id: user?.id,
+        user_id: user?.id, // Atualiza para o usuário que está editando
         type,
         nature,
         category: parentName,
@@ -246,8 +246,8 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
                 onChange={(e) => setNature(e.target.value as "fixed" | "variable")}
                 className="input-futuristic w-full rounded-xl px-4 py-3.5 text-sm outline-none uppercase font-bold"
               >
-                <option value="variable" className="bg-popover uppercase">Variável</option>
-                <option value="fixed" className="bg-popover uppercase">Fixa</option>
+                <option value="variable" className="bg-popover uppercase">VARIÁVEL</option>
+                <option value="fixed" className="bg-popover uppercase">FIXA</option>
               </select>
             </label>
             <label className="block">

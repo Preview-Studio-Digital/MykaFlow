@@ -90,7 +90,7 @@ export function TransactionList({
                 <td className="px-4 py-3 text-center">{r.category}</td>
                 <td className="px-4 py-3 text-muted-foreground text-center">{sub}</td>
                 <td className="px-4 py-3 text-muted-foreground italic text-xs text-center">{desc}</td>
-                <td className="px-4 py-3 text-[10px] uppercase text-muted-foreground/60 text-center">
+                <td className="px-4 py-3 text-[10px] uppercase tracking-widest text-muted-foreground/80 font-black text-center">
                   {r.nature === "fixed" ? "Fixa" : "Variável"}
                 </td>
                 <td
@@ -101,7 +101,7 @@ export function TransactionList({
                   {r.type === "income" ? "+" : "−"} {fmtCurrency(Number(r.amount))}
                 </td>
                 <td className="px-4 py-3 text-[10px] uppercase tracking-widest text-muted-foreground/80 font-black text-center">
-                  {allProfiles.find(p => p.id === r.user_id)?.display_name || "SISTEMA"}
+                  {allProfiles.find(p => p.id === r.user_id)?.display_name || allProfiles.find(p => p.id === r.user_id)?.email || "AUTOR DESCONHECIDO"}
                 </td>
                 <td className="px-2 py-3">
                   <div className="flex items-center gap-1">

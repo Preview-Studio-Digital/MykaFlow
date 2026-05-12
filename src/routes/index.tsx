@@ -50,9 +50,19 @@ function Dashboard() {
       setRows(data as TxRow[]);
       
       // Busca perfis para mostrar nomes de autores
-      const { data: pData } = await supabase.from("profiles").select("id, display_name");
-      if (pData) setProfiles(pData);
+      const { data: pData } = await supabase.from("profiles").select("id, display_name, email");
+      let profilesList = pData || [];
 
+      // Garante que o usuário atual esteja na lista (mesmo que a tabela de perfis falhe)
+      if (user && !profilesList.find(p => p.id === user.id)) {
+        profilesList.push({
+          id: user.id,
+          display_name: (user.user_metadata?.display_name || user.email?.split("@")[0] || "USUÁRIO").toUpperCase(),
+          email: user.email
+        });
+      }
+
+      setProfiles(profilesList);
       setRefreshKey(prev => prev + 1);
     }
   }
@@ -78,7 +88,28 @@ function Dashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (user) load();
+    if (user) {
+      load();
+      const syncProfile = async () => {
+        try {
+          const { error } = await supabase.from("profiles").upsert({
+            id: user.id,
+            display_name: (user.user_metadata?.display_name || user.email?.split("@")[0] || "USUÁRIO").toUpperCase(),
+            email: user.email
+          });
+          if (error) {
+            console.error("Erro na sincronização de perfil:", error);
+          } else {
+            // Recarrega perfis para garantir que a lista local esteja atualizada
+            const { data: pData } = await supabase.from("profiles").select("id, display_name, email");
+            if (pData) setProfiles(pData);
+          }
+        } catch (err) {
+          console.error("Falha crítica na sincronização:", err);
+        }
+      };
+      syncProfile();
+    }
   }, [user]);
 
   const monthRows = useMemo(
@@ -183,20 +214,13 @@ function Dashboard() {
       {/* KPIs & Charts - Centralized Layout */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Left Column: Receitas */}
-        <div className="flex flex-col gap-4">
-          <Kpi
-            label="Receitas"
-            value={totalIncome}
-            color="text-accent"
-            icon={<TrendingUp className="h-6 w-6" />}
-          />
+        <div className="flex flex-col">
           <CategoryPie
             key={`income-${refreshKey}`}
             title="Receitas por Categoria"
             data={incomeByCat}
             transactions={monthRows.filter((r) => r.type === "income")}
             accent="oklch(0.8 0.16 150)"
-            icon={<TrendingUp className="h-6 w-6" />}
             type="income"
             alignTitle="left"
           />
@@ -212,7 +236,7 @@ function Dashboard() {
               <p className="text-sm uppercase opacity-80 tracking-widest flex items-center gap-2 text-muted-foreground">
                 <Calendar className="h-6 w-6" /> Período
               </p>
-              <p className="text-3xl font-bold tracking-widest text-gradient uppercase">
+              <p className="text-xl font-bold tracking-widest text-gradient uppercase">
                 {MONTHS_PT[month]} {year}
               </p>
             </div>
@@ -235,20 +259,13 @@ function Dashboard() {
         </div>
 
         {/* Right Column: Despesas */}
-        <div className="flex flex-col gap-4">
-          <Kpi
-            label="Despesas"
-            value={totalExpense}
-            color="text-destructive"
-            icon={<TrendingDown className="h-6 w-6" />}
-          />
+        <div className="flex flex-col">
           <CategoryPie
             key={`expense-${refreshKey}`}
             title="Despesas por Categoria"
             data={expenseByCat}
             transactions={monthRows.filter((r) => r.type === "expense")}
             accent="oklch(0.7 0.2 30)"
-            icon={<TrendingDown className="h-6 w-6" />}
             type="expense"
             alignTitle="right"
           />
@@ -323,7 +340,7 @@ function Kpi({
       <div className={`flex items-center gap-2 text-sm opacity-80 uppercase tracking-widest mb-1 ${color}`}>
         {icon} {label}
       </div>
-      <div className={`text-3xl font-bold tracking-widest uppercase ${color}`}>
+      <div className={`text-2xl font-bold tracking-widest uppercase ${color}`}>
         {fmtCurrency(value)}
       </div>
     </div>

@@ -229,7 +229,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
           : "bg-cyan-500/10 border-cyan-500/40 shadow-[inset_0_0_50px_rgba(34,211,238,0.15)]"
       } backdrop-blur-md`}
     >
-      <h3 className="text-lg font-bold tracking-widest text-gradient flex items-center justify-center gap-6 uppercase">
+      <h3 className="text-lg font-black tracking-[0.3em] text-gradient flex items-center justify-center gap-6 uppercase">
         <button 
           type="button" 
           onClick={() => onMonthShift?.(-1)}
@@ -255,7 +255,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
         <button
           type="button"
           onClick={() => { setType("expense"); setSelectedParentId(""); setSubCategory(""); }}
-          className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold uppercase tracking-widest transition ${
+          className={`flex items-center justify-center gap-2 rounded-lg py-3 text-[10px] font-black uppercase tracking-[0.2em] transition ${
             type === "expense" ? "bg-destructive/20 text-destructive border border-destructive/60 glow" : "border border-border/50 text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -264,7 +264,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
         <button
           type="button"
           onClick={() => { setType("income"); setSelectedParentId(""); setSubCategory(""); }}
-          className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold uppercase tracking-widest transition ${
+          className={`flex items-center justify-center gap-2 rounded-lg py-3 text-[10px] font-black uppercase tracking-[0.2em] transition ${
             type === "income" ? "bg-accent/20 text-accent border border-accent/60 glow" : "border border-border/50 text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -274,13 +274,13 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">Categoria</span>
+          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Categoria</span>
           <div className="flex gap-2">
             <select
               required
               value={selectedParentId}
               onChange={(e) => { setSelectedParentId(e.target.value); setSubCategory(""); }}
-              className="input-futuristic flex-1 rounded-lg px-3 py-2.5 outline-none"
+              className="input-futuristic flex-1 rounded-lg px-3 py-2.5 outline-none uppercase font-bold"
             >
               <option value="">SELECIONE...</option>
               {currentParents.map((c) => (
@@ -300,7 +300,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
           </div>
         </div>
         <div className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">Subcategoria</span>
+          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Subcategoria</span>
           <div className="flex gap-2">
             <select
               value={subCategory}
@@ -329,20 +329,20 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">Tipo de Lançamento</span>
+          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Tipo de Lançamento</span>
           <select
             required
             value={nature}
             onChange={(e) => setNature(e.target.value as "fixed" | "variable")}
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-bold"
+            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-bold uppercase"
           >
             <option value="" className="bg-popover">SELECIONE...</option>
-            <option value="variable" className="bg-popover uppercase">Variável</option>
-            <option value="fixed" className="bg-popover uppercase">Fixa</option>
+            <option value="variable" className="bg-popover uppercase">VARIÁVEL</option>
+            <option value="fixed" className="bg-popover uppercase">FIXA</option>
           </select>
         </div>
         <label className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">Valor (R$)</span>
+          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Valor (R$)</span>
           <input
             required
             inputMode="numeric"
@@ -356,29 +356,29 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
               setAmount(centered);
             }}
             placeholder="0,00"
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-bold text-lg text-accent"
+            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-bold text-xl text-accent tracking-wider"
           />
         </label>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">Data</span>
+          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Data</span>
           <input
             required
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
+            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none font-bold"
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">Descrição</span>
+          <span className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Descrição</span>
           <input
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Ex: Referente ao mês 05"
-            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none"
+            onChange={(e) => setDescription(e.target.value.toUpperCase())}
+            placeholder="EX: REFERENTE AO MÊS 05"
+            className="input-futuristic w-full rounded-lg px-3 py-2.5 outline-none uppercase font-bold tracking-wide"
           />
         </label>
       </div>
@@ -386,7 +386,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
       <button
         disabled={busy}
         type="submit"
-        className={`w-full rounded-lg px-6 py-4 text-sm font-bold uppercase tracking-widest transition-all duration-300 shadow-lg disabled:opacity-50 border-2 ${ 
+        className={`w-full rounded-lg px-6 py-4 text-xs font-black uppercase tracking-[0.3em] transition-all duration-300 shadow-lg disabled:opacity-50 border-2 ${ 
           type === "expense" 
             ? "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30 shadow-red-900/10 glow" 
             : "bg-accent/20 border-accent/60 text-accent hover:bg-accent/30 shadow-accent-900/10 glow"

@@ -205,6 +205,10 @@
     border-color: var(--neon);
     box-shadow: 0 0 0 3px oklch(0.78 0.16 220 / 0.2);
   }
+  .input-futuristic::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+  }
   .scanline {
     background: linear-gradient(
       180deg,

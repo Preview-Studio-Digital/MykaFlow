@@ -19,14 +19,18 @@ interface Tx {
   occurred_on: string;
 }
 
-const CustomTooltip = ({ active, payload, label, isMonthly }: any) => {
+const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) => {
   if (active && payload && payload.length) {
     if (isMonthly) {
       const saldo = payload[0].value;
+      const daysOfWeek = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+      const d = new Date(year, month, parseInt(label));
+      const dayName = !isNaN(d.getTime()) ? daysOfWeek[d.getDay()] : "";
+
       return (
         <div className="glass p-4 rounded-xl border border-white/10 backdrop-blur-md shadow-2xl">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] mb-2 border-b border-white/10 pb-2 text-muted-foreground">
-            Dia {label}
+          <p className="text-xs font-bold uppercase tracking-[0.2em] mb-1 text-muted-foreground">
+            Dia {label} • {dayName}
           </p>
           <div className={`flex items-center justify-between gap-6 text-sm font-bold ${saldo >= 0 ? 'text-accent' : 'text-destructive'}`}>
             <span>Saldo Acumulado</span>
@@ -79,6 +83,8 @@ export function EvolutionChart({
   dashboardMode,
   onDashboardModeChange,
   onMonthShift,
+  canShiftPrev,
+  canShiftNext,
 }: { 
   data: Tx[]; 
   year: number; 
@@ -88,6 +94,8 @@ export function EvolutionChart({
   forcedViewMode?: "annual" | "monthly";
   dashboardMode?: "monthly" | "annual";
   onDashboardModeChange?: (mode: "monthly" | "annual") => void;
+  canShiftPrev?: boolean;
+  canShiftNext?: boolean;
 }) {
   const [viewMode, setViewMode] = useState<"annual" | "monthly">("annual");
   const effectiveViewMode = forcedViewMode ?? viewMode;
@@ -149,7 +157,10 @@ export function EvolutionChart({
 
   // Cálculos para o modo Mensal
   const today = new Date();
+  const currentMonthDate = new Date(today.getFullYear(), today.getMonth(), 1);
+  const targetMonthDate = new Date(year, month, 1);
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+  const isFutureMonth = targetMonthDate > currentMonthDate;
   const currentDay = today.getDate();
 
   const saldoAteHoje = useMemo(() => {
@@ -208,11 +219,6 @@ export function EvolutionChart({
     };
   }, [dailyData]);
 
-  const handleChartClick = (state: any) => {
-    if (state && state.activeTooltipIndex !== undefined) {
-      onMonthChange?.(state.activeTooltipIndex);
-    }
-  };
 
   const navigateMonth = (step: number) => {
     const next = (month + step + 12) % 12;
@@ -226,7 +232,7 @@ export function EvolutionChart({
         : "bg-cyan-500/10 border-cyan-500/30 shadow-[inset_0_0_50px_rgba(34,211,238,0.1)]"
     } backdrop-blur-md p-4`}>
       <div className="relative flex items-center justify-between mb-4">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 pl-[34px]">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
               <Activity className="h-6 w-6" /> 
@@ -237,7 +243,7 @@ export function EvolutionChart({
           {effectiveViewMode === "monthly" && !forcedViewMode && (
             <button 
               onClick={() => setViewMode("annual")}
-              className="flex items-center gap-1 text-[10px] uppercase font-black tracking-widest text-accent hover:text-white transition-all w-fit ml-10"
+              className="flex items-center gap-1 text-[10px] uppercase font-black tracking-widest text-accent hover:text-white transition-all w-fit"
             >
               <ChevronLeft className="h-3 w-3" /> Voltar ao Anual
             </button>
@@ -246,21 +252,29 @@ export function EvolutionChart({
 
         {/* Toggle Mensal / Anual */}
         {onDashboardModeChange && dashboardMode && (
-          <div className="flex flex-col items-center gap-1 absolute left-1/2 -translate-x-1/2">
+          <div className="flex flex-col items-center gap-3 absolute left-1/2 -translate-x-1/2">
             <div className="flex items-center gap-3">
               <button 
+                disabled={!canShiftPrev}
                 onClick={() => onMonthShift?.(dashboardMode === 'annual' ? -12 : -1)}
-                className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+                className={`text-muted-foreground transition-all flex items-center gap-2 group ${!canShiftPrev ? 'opacity-20 cursor-not-allowed' : 'hover:text-white hover:scale-110'}`}
               >
                 <ChevronLeft className="h-4 w-4" />
+                <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase hidden sm:inline">
+                  {dashboardMode === 'annual' ? year - 1 : MONTHS_PT[(month + 11) % 12]}
+                </span>
               </button>
               <span className="text-xl font-black tracking-[0.2em] uppercase text-muted-foreground opacity-90 min-w-[150px] text-center">
                 {dashboardMode === 'annual' ? year : MONTHS_PT[month]}
               </span>
               <button 
+                disabled={!canShiftNext}
                 onClick={() => onMonthShift?.(dashboardMode === 'annual' ? 12 : 1)}
-                className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+                className={`text-muted-foreground transition-all flex items-center gap-2 group ${!canShiftNext ? 'opacity-20 cursor-not-allowed' : 'hover:text-white hover:scale-110'}`}
               >
+                <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase hidden sm:inline">
+                  {dashboardMode === 'annual' ? year + 1 : MONTHS_PT[(month + 1) % 12]}
+                </span>
                 <ChevronLeft className="h-4 w-4 rotate-180" />
               </button>
             </div>
@@ -309,21 +323,23 @@ export function EvolutionChart({
             </>
           ) : (
             <>
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
-                  {isCurrentMonth ? `Saldo até ${currentDay}/${month + 1}` : `Saldo Final ${MONTHS_PT[month]}`}
-                </span>
-                <span className={`text-2xl font-black font-mono tracking-tighter ${saldoAteHoje >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
-                  {fmtCurrency(saldoAteHoje)}
-                </span>
-              </div>
+              {isCurrentMonth && (
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                    Saldo até {currentDay} de {MONTHS_PT[month]}
+                  </span>
+                  <span className={`text-2xl font-black font-mono tracking-tighter ${saldoAteHoje >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                    {fmtCurrency(saldoAteHoje)}
+                  </span>
+                </div>
+              )}
 
-              <div className="flex flex-col items-end border-l border-white/10 pl-8">
+              <div className={`flex flex-col items-end ${isCurrentMonth ? 'border-l border-white/10 pl-8' : ''}`}>
                 <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
-                  Projeção Mensal
+                  {isCurrentMonth || isFutureMonth ? "Projeção Mensal" : `Saldo Final ${MONTHS_PT[month]}`}
                 </span>
-                <span className={`text-2xl font-black font-mono tracking-tighter ${projecaoMensal >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
-                  {fmtCurrency(projecaoMensal)}
+                <span className={`text-2xl font-black font-mono tracking-tighter ${(isCurrentMonth || isFutureMonth ? projecaoMensal : saldoAteHoje) >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                  {fmtCurrency(isCurrentMonth || isFutureMonth ? projecaoMensal : saldoAteHoje)}
                 </span>
               </div>
             </>
@@ -331,11 +347,10 @@ export function EvolutionChart({
         </div>
       </div>
 
-      <div className="h-52 cursor-pointer">
+      <div className="h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart 
             data={chartData} 
-            onClick={handleChartClick}
             margin={{ top: 20, right: 0, left: 0, bottom: 0 }}
           >
             <defs>
@@ -423,7 +438,10 @@ export function EvolutionChart({
               tickLine={false}
               tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
             />
-            <Tooltip cursor={false} content={<CustomTooltip isMonthly={effectiveViewMode === "monthly"} />} />
+            <Tooltip 
+              cursor={false} 
+              content={<CustomTooltip isMonthly={effectiveViewMode === "monthly"} year={year} month={month} />} 
+            />
             {effectiveViewMode === "annual" && <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14 }} />}
             
             {effectiveViewMode === "annual" && (
@@ -436,6 +454,24 @@ export function EvolutionChart({
                 strokeDasharray="4 4" 
                 label={{ 
                   value: MONTHS_PT[month].slice(0, 3).toUpperCase(), 
+                  position: "top", 
+                  fill: "#22d3ee", 
+                  fontSize: 11, 
+                  fontWeight: "bold"
+                }}
+              />
+            )}
+
+            {effectiveViewMode === "monthly" && isCurrentMonth && (
+              <ReferenceLine 
+                yAxisId="left"
+                x={String(currentDay)} 
+                stroke="#22d3ee" 
+                strokeWidth={3}
+                strokeOpacity={0.8} 
+                strokeDasharray="4 4" 
+                label={{ 
+                  value: "HOJE", 
                   position: "top", 
                   fill: "#22d3ee", 
                   fontSize: 11, 

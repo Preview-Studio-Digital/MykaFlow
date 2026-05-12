@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
+import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { MONTHS_PT } from "@/lib/finance-constants";
 
 interface Props {
   onCreated: () => void;
@@ -11,26 +11,31 @@ interface Props {
   defaultYear?: number;
   onMonthShift?: (delta: number) => void;
   onMonthYearChange?: (month: number, year: number) => void;
+  initialType?: "income" | "expense";
 }
 
-export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthShift, onMonthYearChange }: Props) {
+export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthShift, onMonthYearChange, initialType }: Props) {
   const { user, role } = useAuth();
-  const [type, setType] = useState<"income" | "expense">("expense");
+  const [type] = useState<"income" | "expense">(initialType || "expense");
   const [nature, setNature] = useState<"fixed" | "variable" | "">("");
   
-  // Estado para categorias do banco
   const [dbCategories, setDbCategories] = useState<any[]>([]);
   const [selectedParentId, setSelectedParentId] = useState("");
   const [subCategory, setSubCategory] = useState("");
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [refreshTrigger] = useState(0);
   
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
 
-  // Sincronizar data com o seletor global
+  // Sincronizar data ao navegar pelos meses (exceto no primeiro carregamento)
   useEffect(() => {
+    if (isFirstLoad) {
+      setIsFirstLoad(false);
+      return;
+    }
     if (defaultMonth !== undefined && defaultYear !== undefined) {
       const d = new Date(defaultYear, defaultMonth, 1);
       const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -38,7 +43,81 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     }
   }, [defaultMonth, defaultYear]);
 
-  // Fallback (Padrões caso o banco esteja vazio/não criado)
+  // Componente de Select Customizado para permitir estilização do hover (fill color)
+  const CustomSelect = ({ 
+    value, 
+    onChange, 
+    options, 
+    placeholder, 
+    disabled = false,
+    label
+  }: { 
+    value: string, 
+    onChange: (val: string) => void, 
+    options: {id: string, name: string}[], 
+    placeholder: string,
+    disabled?: boolean,
+    label: string
+  }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const accentColor = type === 'expense' ? 'oklch(0.7 0.2 30)' : 'oklch(0.78 0.16 150)';
+    const bgColor = type === 'expense' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 211, 238, 0.2)';
+    
+    const selectedName = options.find(o => o.id === value)?.name || placeholder;
+
+    return (
+      <div className="space-y-2 relative">
+        <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">{label}</span>
+        <div className="relative">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setIsOpen(!isOpen)}
+            className={`input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none uppercase font-bold border-2 flex items-center justify-between transition-all ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:border-accent/40'}`}
+            style={{ color: value ? 'white' : 'rgba(255,255,255,0.4)' }}
+          >
+            <span className="truncate">{selectedName}</span>
+            <Plus className={`h-4 w-4 transition-transform duration-300 ${isOpen ? 'rotate-45' : ''}`} style={{ color: accentColor }} />
+          </button>
+
+          {isOpen && !disabled && (
+            <>
+              <div className="fixed inset-0 z-[100]" onClick={() => setIsOpen(false)} />
+              <ul className="absolute top-full left-0 right-0 mt-1 z-[101] bg-[#0d1117] border-2 border-white/10 rounded-xl overflow-hidden max-h-48 overflow-y-auto shadow-[0_10px_50px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200">
+                <li 
+                  onClick={() => { onChange(""); setIsOpen(false); }}
+                  className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest cursor-pointer transition-colors hover:text-white border-b border-white/5"
+                  style={{ 
+                    color: 'rgba(255,255,255,0.4)'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = bgColor}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  {placeholder}
+                </li>
+                {options.map((opt) => (
+                  <li
+                    key={opt.id}
+                    onClick={() => { onChange(opt.id); setIsOpen(false); }}
+                    className="px-4 py-2.5 text-xs font-bold uppercase cursor-pointer transition-colors hover:text-white border-b border-white/5 last:border-0"
+                    style={{ 
+                      backgroundColor: value === opt.id ? bgColor : 'transparent',
+                      color: value === opt.id ? 'white' : 'rgba(255,255,255,0.9)'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = bgColor}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = value === opt.id ? bgColor : 'transparent'}
+                  >
+                    {opt.name}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const fallbackParents = [
     { id: "f1", name: "ESTRUTURA", type: "expense" },
     { id: "f2", name: "AGNALDO", type: "expense" },
@@ -53,24 +132,18 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
 
   const fetchCats = async () => {
     try {
-      // const { data: official } = await supabase.from("categories").select("*").order("name");
-      const official: any[] = [];
       const { data: fromTxs } = await supabase.from("transactions").select("category, description, type");
-      
-      let merged: any[] = (official || []).map(c => ({ ...c, isTemporary: false }));
-      
+      let merged: any[] = [];
       if (fromTxs) {
         fromTxs.forEach(t => {
           const catName = t.category.toUpperCase().trim();
           const txType = t.type;
-          
           let parent = merged.find(m => m.name === catName && !m.parent_id);
           if (!parent) {
             const tempId = `temp-${catName}`;
             parent = { id: tempId, name: catName, type: txType, parent_id: null, isTemporary: true };
             merged.push(parent);
           }
-
           const subName = (t.description || "").split(" - ")[0].toUpperCase().trim();
           if (subName && !merged.find(m => m.name === subName && m.parent_id === parent?.id)) {
             merged.push({ id: `temp-sub-${subName}`, name: subName, type: txType, parent_id: parent?.id || null, isTemporary: true });
@@ -91,31 +164,19 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
   const handleQuickAdd = async (parentId?: string) => {
     const name = prompt(parentId ? "Nome da nova Subcategoria:" : "Nome da nova Categoria Principal:");
     if (!name || !user) return;
-
     const upperName = name.trim().toUpperCase();
     const tempId = `temp-${Date.now()}`;
-    
-    const newCat = {
-      id: tempId,
-      name: upperName,
-      type: type,
-      parent_id: parentId || null,
-      isTemporary: true
-    };
-
+    const newCat = { id: tempId, name: upperName, type: type, parent_id: parentId || null, isTemporary: true };
     setDbCategories(prev => [...prev, newCat]);
-    
     if (!parentId) {
       setSelectedParentId(tempId);
       setSubCategory("");
     } else {
       setSubCategory(upperName);
     }
-
     toast.success(parentId ? "Subcategoria pronta para uso!" : "Categoria pronta para uso!");
   };
 
-  // Lógica de seleção (Usa DB se houver, senão Fallback)
   const currentParents = dbCategories.length > 0 
     ? dbCategories.filter(c => c.type === type && !c.parent_id)
     : fallbackParents.filter(c => c.type === type);
@@ -124,39 +185,28 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     ? dbCategories.filter(c => c.parent_id === selectedParentId).map(c => c.name)
     : (fallbackSubs[selectedParentId] || []);
 
-  // Regras de Auditoria (Antecipação e Adiantamento)
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!user || !selectedParentId) {
       toast.error("Selecione uma categoria");
       return;
     }
-
     const parent = dbCategories.find(c => c.id === selectedParentId) || fallbackParents.find(c => c.id === selectedParentId);
     const parentName = parent?.name || "";
-
     if (!nature) {
-      toast.error("Selecione o tipo de lançamento (Fixa ou Variável)");
+      toast.error("Selecione o tipo de lançamento");
       return;
     }
-
-
-
-    // Limpa a formatação brasileira para converter em número puro
     const value = parseFloat(amount.replace(/\./g, "").replace(",", "."));
     if (isNaN(value) || value <= 0) {
       toast.error("Insira um valor válido");
       return;
     }
-    
     setBusy(true);
-    
-
     let finalDescription = subCategory;
     if (description) {
       finalDescription = subCategory ? `${subCategory} - ${description.trim().toUpperCase()}` : description.trim().toUpperCase();
     }
-
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
       type,
@@ -166,7 +216,6 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
       amount: value,
       occurred_on: date,
     });
-    
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -180,178 +229,147 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     onCreated();
   }
 
+  // Estilo padronizado para todos os campos (Rajdhani)
+  const fontStyle = "font-display";
+
   return (
     <form 
       onSubmit={submit} 
-      className={`rounded-2xl p-3 flex flex-col justify-between transition-all duration-500 border-2 shadow-2xl ${ 
+      className={`rounded-3xl p-8 flex flex-col transition-all duration-500 border-2 shadow-2xl ${fontStyle} ${ 
         type === "expense" 
-          ? "bg-red-500/10 border-red-500/40 shadow-[inset_0_0_50px_rgba(239,68,68,0.15)]" 
-          : "bg-cyan-500/10 border-cyan-500/40 shadow-[inset_0_0_50px_rgba(34,211,238,0.15)]"
-      } backdrop-blur-md h-full`}
+          ? "bg-red-500/10 border-red-500/40 shadow-[inset_0_0_80px_rgba(239,68,68,0.1)]" 
+          : "bg-cyan-500/10 border-cyan-500/40 shadow-[inset_0_0_80px_rgba(34,211,238,0.1)]"
+      } backdrop-blur-xl gap-4`}
     >
-      <p className="text-center text-[11px] uppercase tracking-[0.3em] text-muted-foreground opacity-70 font-black mb-1">Novo Lançamento</p>
-      <h3 className="relative flex items-center justify-between uppercase w-full px-1">
-        <div className="flex items-center gap-2 flex-1">
+      <div className="text-center mb-1">
+        <h2 className={`text-2xl font-black tracking-[0.2em] uppercase ${type === 'expense' ? 'text-red-400' : 'text-accent'}`}>
+          REGISTRO DE {type === 'expense' ? 'DESPESA' : 'RECEITA'}
+        </h2>
+        <div className={`h-1 w-32 mx-auto mt-2 opacity-50 ${type === 'expense' ? 'bg-red-500' : 'bg-accent'}`} />
+      </div>
+
+      <div className="relative flex items-center justify-between uppercase w-full px-4 mb-2">
+        <div className="flex items-center gap-4 flex-1">
           <button 
             type="button" 
             onClick={() => onMonthShift?.(-1)}
-            className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+            className="text-muted-foreground hover:text-white transition-all hover:scale-125 flex items-center gap-2 group"
           >
             <ChevronLeft className="h-5 w-5" />
+            {defaultMonth !== undefined && (
+              <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase">
+                {MONTHS_PT[(defaultMonth + 11) % 12]}
+              </span>
+            )}
           </button>
-
-          {defaultMonth !== undefined && (
-            <button
-              type="button"
-              onClick={() => onMonthShift?.(-1)}
-              className="text-[10px] font-black tracking-[0.2em] opacity-25 hover:opacity-60 text-gradient transition-all cursor-pointer whitespace-nowrap"
-            >
-              {MONTHS_PT[(defaultMonth + 11) % 12]}
-            </button>
-          )}
         </div>
 
         {defaultMonth !== undefined && (
-          <span className="absolute left-1/2 -translate-x-1/2 text-xl font-black tracking-[0.3em] text-gradient whitespace-nowrap">
+          <span className="text-3xl font-black tracking-[0.3em] text-gradient whitespace-nowrap uppercase">
             {MONTHS_PT[defaultMonth]}
           </span>
         )}
 
-        <div className="flex items-center justify-end gap-2 flex-1">
-          {defaultMonth !== undefined && (
-            <button
-              type="button"
-              onClick={() => onMonthShift?.(1)}
-              className="text-[10px] font-black tracking-[0.2em] opacity-25 hover:opacity-60 text-gradient transition-all cursor-pointer whitespace-nowrap"
-            >
-              {MONTHS_PT[(defaultMonth + 1) % 12]}
-            </button>
-          )}
-
+        <div className="flex items-center justify-end gap-4 flex-1">
           <button 
             type="button" 
             onClick={() => onMonthShift?.(1)}
-            className="text-muted-foreground hover:text-white transition-all hover:scale-125"
+            className="text-muted-foreground hover:text-white transition-all hover:scale-125 flex items-center gap-2 group"
           >
+            {defaultMonth !== undefined && (
+              <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase">
+                {MONTHS_PT[(defaultMonth + 1) % 12]}
+              </span>
+            )}
             <ChevronRight className="h-5 w-5" />
           </button>
         </div>
-      </h3>
-
-
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => { setType("expense"); setSelectedParentId(""); setSubCategory(""); }}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2 text-[10px] font-black uppercase tracking-[0.2em] transition ${
-            type === "expense" ? "bg-destructive/20 text-destructive border border-destructive/60 glow" : "border border-border/50 text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <TrendingDown className="h-4 w-4" /> Despesa
-        </button>
-        <button
-          type="button"
-          onClick={() => { setType("income"); setSelectedParentId(""); setSubCategory(""); }}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2 text-[10px] font-black uppercase tracking-[0.2em] transition ${
-            type === "income" ? "bg-accent/20 text-accent border border-accent/60 glow" : "border border-border/50 text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <TrendingUp className="h-4 w-4" /> Receita
-        </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="block">
-          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Categoria</span>
-          <div className="flex gap-2">
-            <select
-              required
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <CustomSelect
+              label="Categoria"
+              placeholder="SELECIONE..."
               value={selectedParentId}
-              onChange={(e) => { setSelectedParentId(e.target.value); setSubCategory(""); }}
-              className="input-futuristic flex-1 h-8 rounded-lg px-2 py-0 outline-none uppercase font-bold text-xs"
-            >
-              <option value="">SELECIONE...</option>
-              {currentParents.map((c) => (
-                <option key={c.id} value={c.id} className="bg-popover">{c.name}</option>
-              ))}
-            </select>
-            {role === "admin" && (
-              <button
-                type="button"
-                onClick={() => handleQuickAdd()}
-                className="flex items-center justify-center p-1.5 rounded-lg border border-border/50 hover:border-accent/50 hover:bg-accent/10 transition text-accent"
-                title="Nova Categoria Principal"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
-            )}
+              onChange={(val) => { setSelectedParentId(val); setSubCategory(""); }}
+              options={currentParents}
+            />
           </div>
+          {role === "admin" && (
+            <button
+              type="button"
+              onClick={() => handleQuickAdd()}
+              className="flex items-center justify-center w-14 h-14 rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:bg-accent/10 transition-all text-accent group mb-0"
+              title="Nova Categoria"
+            >
+              <Plus className="h-6 w-6 group-hover:scale-125 transition-transform" />
+            </button>
+          )}
         </div>
-        <div className="block">
-          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Subcategoria</span>
-          <div className="flex gap-2">
-            <select
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <CustomSelect
+              label="Subcategoria"
+              placeholder="SELECIONE..."
               value={subCategory}
-              onChange={(e) => setSubCategory(e.target.value)}
+              onChange={(val) => setSubCategory(val)}
+              options={currentSubs.map(s => ({id: s, name: s}))}
               disabled={!selectedParentId}
-              className="input-futuristic flex-1 h-8 rounded-lg px-2 py-0 outline-none disabled:opacity-30 uppercase font-bold text-xs"
+            />
+          </div>
+          {role === "admin" && selectedParentId && (
+            <button
+              type="button"
+              onClick={() => handleQuickAdd(selectedParentId)}
+              className="flex items-center justify-center w-14 h-14 rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:bg-accent/10 transition-all text-accent group mb-0"
+              title="Nova Subcategoria"
             >
-              <option value="">SELECIONE...</option>
-              {currentSubs.map((s) => (
-                <option key={s} value={s} className="bg-popover">{s}</option>
-              ))}
-            </select>
-            {role === "admin" && selectedParentId && (
-              <button
-                type="button"
-                onClick={() => handleQuickAdd(selectedParentId)}
-                className="flex items-center justify-center p-1.5 rounded-lg border border-border/50 hover:border-accent/50 hover:bg-accent/10 transition text-accent"
-                title="Nova Subcategoria"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
-            )}
+              <Plus className="h-6 w-6 group-hover:scale-125 transition-transform" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <CustomSelect
+          label="Fluxo de Caixa"
+          placeholder="SELECIONE O TIPO..."
+          value={nature}
+          onChange={(val) => setNature(val as any)}
+          options={[
+            {id: 'variable', name: 'VARIÁVEL (EVENTUAL)'},
+            {id: 'fixed', name: 'FIXO (RECORRENTE)'}
+          ]}
+        />
+        <div className="space-y-2">
+          <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">Valor do Lançamento</span>
+          <div className="relative">
+            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">R$</span>
+            <input
+              required
+              inputMode="numeric"
+              value={amount}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, "");
+                const centered = (Number(val) / 100).toLocaleString("pt-BR", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                });
+                setAmount(centered);
+              }}
+              placeholder="0,00"
+              className="input-futuristic w-full h-14 rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2"
+              style={{ color: type === 'expense' ? 'oklch(0.7 0.2 30)' : 'oklch(0.78 0.16 150)' }}
+            />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="block">
-          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Tipo de Lançamento</span>
-          <select
-            required
-            value={nature}
-            onChange={(e) => setNature(e.target.value as "fixed" | "variable")}
-            className="input-futuristic w-full h-8 rounded-lg px-2 py-0 outline-none font-bold uppercase text-xs"
-          >
-            <option value="" className="bg-popover">SELECIONE...</option>
-            <option value="variable" className="bg-popover uppercase">VARIÁVEL</option>
-            <option value="fixed" className="bg-popover uppercase">FIXA</option>
-          </select>
-        </div>
-        <label className="block">
-          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Valor (R$)</span>
-          <input
-            required
-            inputMode="numeric"
-            value={amount}
-            onChange={(e) => {
-              const val = e.target.value.replace(/\D/g, "");
-              const centered = (Number(val) / 100).toLocaleString("pt-BR", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              });
-              setAmount(centered);
-            }}
-            placeholder="0,00"
-            className="input-futuristic w-full h-8 rounded-lg px-2 py-0 outline-none font-bold text-xs text-accent tracking-wider"
-          />
-        </label>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block">
-          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Data</span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="space-y-2">
+          <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">Data da Ocorrência</span>
           <input
             required
             type="date"
@@ -366,30 +384,35 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
                 }
               }
             }}
-            className="input-futuristic w-full h-8 rounded-lg px-2 py-0 outline-none font-bold text-xs"
+            className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none font-bold border-2"
           />
-        </label>
-        <label className="block">
-          <span className="mb-0.5 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black ml-1">Descrição</span>
+        </div>
+        <div className="space-y-2">
+          <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">Descrição</span>
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value.toUpperCase())}
-            placeholder="DIGITE..."
-            className="input-futuristic w-full h-8 rounded-lg px-2 py-0 outline-none uppercase font-bold tracking-wide text-xs"
+            placeholder="DIGITE INFORMAÇÕES ADICIONAIS..."
+            className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2"
           />
-        </label>
+        </div>
       </div>
 
       <button
         disabled={busy}
         type="submit"
-        className={`w-full rounded-lg px-6 py-2.5 text-xs font-black uppercase tracking-[0.3em] transition-all duration-300 shadow-lg disabled:opacity-50 border-2 ${ 
+        className={`w-full rounded-2xl py-6 text-sm font-black uppercase tracking-[0.4em] transition-all duration-500 disabled:opacity-50 border-2 mt-4 hover:scale-[1.02] active:scale-[0.98] ${ 
           type === "expense" 
-            ? "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30 shadow-red-900/10 glow" 
-            : "bg-accent/20 border-accent/60 text-accent hover:bg-accent/30 shadow-accent-900/10 glow"
+            ? "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/40" 
+            : "bg-accent/20 border-accent/70 text-accent hover:bg-accent/40"
         }`}
+        style={{ 
+          boxShadow: type === 'expense' 
+            ? '0 0 30px rgba(239, 68, 68, 0.3)' 
+            : '0 0 30px rgba(34, 211, 238, 0.3)' 
+        }}
       >
-        {busy ? "Registrando..." : "Registrar Lançamento"}
+        {busy ? "Processando..." : `REGISTRAR ${type === 'expense' ? 'DESPESA' : 'RECEITA'}`}
       </button>
     </form>
   );

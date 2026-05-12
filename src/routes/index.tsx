@@ -2,13 +2,13 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
 import { CategoryPie } from "@/components/CategoryPie";
 import { EvolutionChart } from "@/components/EvolutionChart";
 
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { ProfileDialog } from "@/components/ProfileDialog";
+import { TransactionCreateDialog } from "@/components/TransactionCreateDialog";
 import {
   LogOut,
   Zap,
@@ -28,10 +28,11 @@ function Dashboard() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [addType, setAddType] = useState<"income" | "expense">("expense");
   const [profiles, setProfiles] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dashboardMode, setDashboardMode] = useState<'monthly' | 'annual'>('monthly');
-
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
@@ -45,11 +46,9 @@ function Dashboard() {
     if (!error && data) {
       setRows(data as TxRow[]);
       
-      // Busca perfis para mostrar nomes de autores
       const { data: pData } = await supabase.from("profiles").select("id, display_name, email");
       let profilesList = pData || [];
 
-      // Garante que o usuário atual esteja na lista (mesmo que a tabela de perfis falhe)
       if (user && !profilesList.find(p => p.id === user.id)) {
         profilesList.push({
           id: user.id,
@@ -63,7 +62,6 @@ function Dashboard() {
     }
   }
 
-  // Escuta o banco de dados em TEMPO REAL
   useEffect(() => {
     if (!user) return;
     
@@ -73,7 +71,7 @@ function Dashboard() {
         "postgres_changes",
         { event: "*", schema: "public", table: "transactions" },
         () => {
-          load(); // Recarrega tudo se houver QUALQUER mudança no banco
+          load();
         }
       )
       .subscribe();
@@ -93,15 +91,12 @@ function Dashboard() {
             display_name: (user.user_metadata?.display_name || user.email?.split("@")[0] || "USUÁRIO").toUpperCase(),
             email: user.email
           });
-          if (error) {
-            console.error("Erro na sincronização de perfil:", error);
-          } else {
-            // Recarrega perfis para garantir que a lista local esteja atualizada
+          if (!error) {
             const { data: pData } = await supabase.from("profiles").select("id, display_name, email");
             if (pData) setProfiles(pData);
           }
         } catch (err) {
-          console.error("Falha crítica na sincronização:", err);
+          console.error("Profile sync fail:", err);
         }
       };
       syncProfile();
@@ -126,7 +121,6 @@ function Dashboard() {
   );
 
   const activeRows = dashboardMode === 'annual' ? yearRows : monthRows;
-
   const expenseByCat = useMemo(() => agg(activeRows.filter((r) => r.type === "expense")), [activeRows]);
   const incomeByCat = useMemo(() => agg(activeRows.filter((r) => r.type === "income")), [activeRows]);
 
@@ -134,19 +128,100 @@ function Dashboard() {
   const totalExpense = monthRows.filter((r) => r.type === "expense").reduce((a, b) => a + Number(b.amount), 0);
   const balance = totalIncome - totalExpense;
 
-  function shiftMonth(delta: number) {
-    let m = month + delta;
-    let y = year;
-    if (m < 0) {
-      m = 11;
-      y--;
-    } else if (m > 11) {
-      m = 0;
-      y++;
+  const { minDate, maxDate } = useMemo(() => {
+    if (rows.length === 0) {
+      const now = new Date();
+      return { minDate: now, maxDate: now };
     }
-    setMonth(m);
-    setYear(y);
+    const dates = rows.map(r => new Date(r.occurred_on + "T00:00:00").getTime());
+    return {
+      minDate: new Date(Math.min(...dates)),
+      maxDate: new Date(Math.max(...dates))
+    };
+  }, [rows]);
+
+  const comparisonData = useMemo(() => {
+    const today = new Date();
+    const isThisYear = today.getFullYear() === year;
+    const isThisMonth = isThisYear && today.getMonth() === month;
+    const currentDay = today.getDate();
+
+    if (dashboardMode === 'annual') {
+      const prevY = year - 1;
+      const prevYearRows = rows.filter(r => {
+        const [y] = r.occurred_on.split('-').map(Number);
+        return y === prevY;
+      });
+      
+      const prevIncome = prevYearRows.filter(r => r.type === 'income').reduce((a, b) => a + Number(b.amount), 0);
+      const prevExpense = prevYearRows.filter(r => r.type === 'expense').reduce((a, b) => a + Number(b.amount), 0);
+      
+      return {
+        prevIncome: prevYearRows.some(r => r.type === 'income') ? prevIncome : undefined,
+        prevExpense: prevYearRows.some(r => r.type === 'expense') ? prevExpense : undefined
+      };
+    } else {
+      // Mês passado (Sempre o mês cheio para garantir que os dados apareçam)
+      let prevM = month - 1; 
+      let prevY = year;
+      if (prevM < 0) { prevM = 11; prevY--; }
+      
+      const prevMonthRows = rows.filter(r => {
+        const [y, m] = r.occurred_on.split('-').map(Number);
+        return y === prevY && (m - 1) === prevM;
+      });
+
+      const prevIncome = prevMonthRows.filter(r => r.type === 'income').reduce((a, b) => a + Number(b.amount), 0);
+      const prevExpense = prevMonthRows.filter(r => r.type === 'expense').reduce((a, b) => a + Number(b.amount), 0);
+
+      return {
+        prevIncome: prevMonthRows.some(r => r.type === 'income') ? prevIncome : undefined,
+        prevExpense: prevMonthRows.some(r => r.type === 'expense') ? prevExpense : undefined
+      };
+    }
+  }, [rows, month, year, dashboardMode]);
+
+  function getNextPeriod(m: number, y: number, delta: number) {
+    let nextM = m + delta;
+    let nextY = y;
+    while (nextM < 0) {
+      nextM += 12;
+      nextY--;
+    }
+    while (nextM > 11) {
+      nextM -= 12;
+      nextY++;
+    }
+    return { m: nextM, y: nextY };
   }
+
+  function shiftMonth(delta: number) {
+    const next = getNextPeriod(month, year, delta);
+    const targetDate = new Date(next.y, next.m, 1);
+    const minBound = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+    const maxBound = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+    if (targetDate < minBound || targetDate > maxBound) return;
+    setMonth(next.m);
+    setYear(next.y);
+  }
+
+  function shiftMonthUnrestricted(delta: number) {
+    const next = getNextPeriod(month, year, delta);
+    setMonth(next.m);
+    setYear(next.y);
+  }
+
+  const canShiftPrev = useMemo(() => {
+    const prev = getNextPeriod(month, year, dashboardMode === 'annual' ? -12 : -1);
+    const minB = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+    return new Date(prev.y, prev.m, 1) >= minB;
+  }, [month, year, dashboardMode, minDate]);
+
+  const canShiftNext = useMemo(() => {
+    const next = getNextPeriod(month, year, dashboardMode === 'annual' ? 12 : 1);
+    const maxB = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+    return new Date(next.y, next.m, 1) <= maxB;
+  }, [month, year, dashboardMode, maxDate]);
 
   if (loading || !user) {
     return (
@@ -157,22 +232,21 @@ function Dashboard() {
   }
 
   return (
-    <div className="relative z-10 min-h-screen px-4 py-3 md:px-8">
-      {/* Header */}
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-2">
+    <div className="relative z-10 min-h-screen px-4 py-3 md:px-8 min-w-[1280px] overflow-x-auto">
+      <header className="mb-6 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-primary/20 p-2 glow">
             <Zap className="h-6 w-6 text-accent" />
           </div>
           <div>
-            <h1 className="text-4xl font-black tracking-tighter text-gradient leading-[0.8] mb-1">MYKAFLOW</h1>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground whitespace-nowrap ml-1">
+            <h1 className="text-4xl font-black tracking-[0.12em] text-gradient leading-none mb-1">MYKAFLOW</h1>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground whitespace-nowrap">
               Controle financeiro empresarial
             </p>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex flex-col items-end hidden sm:flex">
+          <div className="flex flex-col items-end">
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
               {role === "admin" ? "Administrador" : "Funcionário"}
             </p>
@@ -180,7 +254,6 @@ function Dashboard() {
               <button 
                 onClick={() => setIsProfileOpen(true)}
                 className="text-accent hover:text-white transition-colors hover:scale-110"
-                title="Editar Perfil"
               >
                 <UserIcon className="h-5 w-5" />
               </button>
@@ -190,11 +263,7 @@ function Dashboard() {
             </div>
           </div>
           {role === "admin" && (
-            <Link 
-              to="/admin" 
-              className="btn-ghost-neon rounded-lg px-3 py-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest"
-              title="Central Administrativa"
-            >
+            <Link to="/admin" className="btn-ghost-neon rounded-lg px-3 py-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
               <ShieldCheck className="h-4 w-4" /> ADM
             </Link>
           )}
@@ -210,51 +279,43 @@ function Dashboard() {
         </div>
       </header>
 
-      {/* Perfil Dialog */}
-      <ProfileDialog 
-        isOpen={isProfileOpen} 
-        onClose={() => setIsProfileOpen(false)} 
-        currentUser={user} 
+      <ProfileDialog isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} currentUser={user} />
+      <TransactionCreateDialog
+        isOpen={isAddOpen}
+        onClose={() => setIsAddOpen(false)}
+        onCreated={load}
+        defaultType={addType}
+        defaultMonth={month}
+        defaultYear={year}
+        onMonthShift={shiftMonthUnrestricted}
+        onMonthYearChange={(m, y) => { setMonth(m); setYear(y); }}
       />
 
-      {/* KPIs & Charts - Centralized Layout */}
-      <section className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {/* Left Column: Receitas */}
-        <div className="flex flex-col">
-          <CategoryPie
-            key={`income-${refreshKey}-${year}-${month}-${dashboardMode}`}
-            title={dashboardMode === 'annual' ? "Receitas Anuais" : "Receitas Mensais"}
-            data={incomeByCat}
-            transactions={monthRows.filter((r) => r.type === "income")}
-            accent="oklch(0.8 0.16 150)"
-            type="income"
-            alignTitle="left"
-          />
-        </div>
-
-        {/* Center Column: Transaction Form */}
-        <div className="flex flex-col h-full">
-          <TransactionForm 
-            onCreated={load} 
-            defaultMonth={month} 
-            defaultYear={year} 
-            onMonthShift={shiftMonth}
-            onMonthYearChange={(m, y) => { setMonth(m); setYear(y); }}
-          />
-        </div>
-
-        {/* Right Column: Despesas */}
-        <div className="flex flex-col">
-          <CategoryPie
-            key={`expense-${refreshKey}-${year}-${month}-${dashboardMode}`}
-            title={dashboardMode === 'annual' ? "Despesas Anuais" : "Despesas Mensais"}
-            data={expenseByCat}
-            transactions={monthRows.filter((r) => r.type === "expense")}
-            accent="oklch(0.7 0.2 30)"
-            type="expense"
-            alignTitle="right"
-          />
-        </div>
+      <section className="mb-3 grid grid-cols-2 gap-3">
+        <CategoryPie
+          key={`income-${refreshKey}-${year}-${month}-${dashboardMode}`}
+          title={dashboardMode === 'annual' ? "Receitas Anuais" : `Receitas ${MONTHS_PT[month]}`}
+          data={incomeByCat}
+          transactions={monthRows.filter((r) => r.type === "income")}
+          accent="oklch(0.8 0.16 150)"
+          type="income"
+          alignTitle="left"
+          onAddClick={() => { setAddType("income"); setIsAddOpen(true); }}
+          prevTotal={comparisonData.prevIncome}
+          comparisonLabel={dashboardMode === 'annual' ? "EM RELAÇÃO AO ANO PASSADO" : "EM RELAÇÃO AO MÊS PASSADO"}
+        />
+        <CategoryPie
+          key={`expense-${refreshKey}-${year}-${month}-${dashboardMode}`}
+          title={dashboardMode === 'annual' ? "Despesas Anuais" : `Despesas ${MONTHS_PT[month]}`}
+          data={expenseByCat}
+          transactions={monthRows.filter((r) => r.type === "expense")}
+          accent="oklch(0.7 0.2 30)"
+          type="expense"
+          alignTitle="right"
+          onAddClick={() => { setAddType("expense"); setIsAddOpen(true); }}
+          prevTotal={comparisonData.prevExpense}
+          comparisonLabel={dashboardMode === 'annual' ? "EM RELAÇÃO AO ANO PASSADO" : "EM RELAÇÃO AO MÊS PASSADO"}
+        />
       </section>
 
       <section className="mb-3">
@@ -268,10 +329,11 @@ function Dashboard() {
           forcedViewMode={dashboardMode === 'annual' ? 'annual' : 'monthly'}
           dashboardMode={dashboardMode}
           onDashboardModeChange={setDashboardMode}
+          canShiftPrev={canShiftPrev}
+          canShiftNext={canShiftNext}
         />
       </section>
 
-      {/* List */}
       <section>
         <h2 className="mb-3 text-base font-bold uppercase tracking-widest text-muted-foreground">
           {dashboardMode === 'annual' ? `Lançamentos de ${year}` : `Lançamentos de ${MONTHS_PT[month]}`}
@@ -294,12 +356,9 @@ function Dashboard() {
 function agg(list: TxRow[]) {
   const map = new Map<string, number>();
   for (const r of list) {
-    // Normalizando a categoria e aplicando o mapeamento solicitado
     let catName = (r.category || "Outros").trim().toUpperCase();
     if (catName === "ESTRUTURA EMPRESARIAL") catName = "ESTRUTURA";
-    
     map.set(catName, (map.get(catName) ?? 0) + Number(r.amount));
   }
   return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
 }
-

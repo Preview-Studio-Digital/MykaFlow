@@ -35,6 +35,7 @@ function Dashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [dashboardMode, setDashboardMode] = useState<'monthly' | 'annual'>('monthly');
 
 
   useEffect(() => {
@@ -121,8 +122,18 @@ function Dashboard() {
     [rows, year, month]
   );
 
-  const expenseByCat = useMemo(() => agg(monthRows.filter((r) => r.type === "expense")), [monthRows]);
-  const incomeByCat = useMemo(() => agg(monthRows.filter((r) => r.type === "income")), [monthRows]);
+  const yearRows = useMemo(
+    () => rows.filter((r) => {
+      const d = new Date(r.occurred_on + "T00:00:00");
+      return d.getFullYear() === year;
+    }),
+    [rows, year]
+  );
+
+  const activeRows = dashboardMode === 'annual' ? yearRows : monthRows;
+
+  const expenseByCat = useMemo(() => agg(activeRows.filter((r) => r.type === "expense")), [activeRows]);
+  const incomeByCat = useMemo(() => agg(activeRows.filter((r) => r.type === "income")), [activeRows]);
 
   const totalIncome = monthRows.filter((r) => r.type === "income").reduce((a, b) => a + Number(b.amount), 0);
   const totalExpense = monthRows.filter((r) => r.type === "expense").reduce((a, b) => a + Number(b.amount), 0);
@@ -151,15 +162,15 @@ function Dashboard() {
   }
 
   return (
-    <div className="relative z-10 min-h-screen px-4 py-8 md:px-8">
+    <div className="relative z-10 min-h-screen px-4 py-3 md:px-8">
       {/* Header */}
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-primary/20 p-2 glow">
             <Zap className="h-6 w-6 text-accent" />
           </div>
           <div>
-            <h1 className="text-5xl font-black tracking-tighter text-gradient leading-[0.8] mb-2">MYKAFLOW</h1>
+            <h1 className="text-3xl font-black tracking-tighter text-gradient leading-[0.8] mb-1">MYKAFLOW</h1>
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground whitespace-nowrap ml-1">
               Controle financeiro empresarial
             </p>
@@ -212,12 +223,12 @@ function Dashboard() {
       />
 
       {/* KPIs & Charts - Centralized Layout */}
-      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <section className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
         {/* Left Column: Receitas */}
         <div className="flex flex-col">
           <CategoryPie
-            key={`income-${refreshKey}`}
-            title="Receitas por Categoria"
+            key={`income-${refreshKey}-${year}-${month}-${dashboardMode}`}
+            title={dashboardMode === 'annual' ? "Receitas Anuais por Categoria" : "Receitas Mensais por Categoria"}
             data={incomeByCat}
             transactions={monthRows.filter((r) => r.type === "income")}
             accent="oklch(0.8 0.16 150)"
@@ -227,8 +238,8 @@ function Dashboard() {
         </div>
 
         {/* Center Column: Period Control & Balance */}
-        <div className="flex flex-col gap-4 h-full">
-          <div className="glass rounded-2xl p-5 flex items-center justify-between min-h-[120px]">
+        <div className="flex flex-col gap-2 h-full">
+          <div className="glass rounded-2xl p-3 flex items-center justify-between min-h-[80px]">
             <button onClick={() => shiftMonth(-1)} className="btn-ghost-neon rounded-lg p-2">
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -250,19 +261,13 @@ function Dashboard() {
             color={balance >= 0 ? "text-accent" : "text-destructive"}
             icon={<Wallet className="h-6 w-6" />}
           />
-          <MiniEvolutionChart 
-            key={`minievo-${refreshKey}`}
-            data={rows} 
-            year={year} 
-            month={month} 
-          />
         </div>
 
         {/* Right Column: Despesas */}
         <div className="flex flex-col">
           <CategoryPie
-            key={`expense-${refreshKey}`}
-            title="Despesas por Categoria"
+            key={`expense-${refreshKey}-${year}-${month}-${dashboardMode}`}
+            title={dashboardMode === 'annual' ? "Despesas Anuais por Categoria" : "Despesas Mensais por Categoria"}
             data={expenseByCat}
             transactions={monthRows.filter((r) => r.type === "expense")}
             accent="oklch(0.7 0.2 30)"
@@ -272,13 +277,33 @@ function Dashboard() {
         </div>
       </section>
 
-      <section className="mb-6">
+      <section className="mb-3">
+        {/* Toggle MENSAL / ANUAL */}
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <button
+            onClick={() => setDashboardMode('monthly')}
+            className={`btn-ghost-neon rounded-lg px-5 py-1.5 text-[11px] font-black uppercase tracking-widest transition-all ${
+              dashboardMode === 'monthly' ? 'glow brightness-125' : 'opacity-50'
+            }`}
+          >
+            Mensal
+          </button>
+          <button
+            onClick={() => setDashboardMode('annual')}
+            className={`btn-ghost-neon rounded-lg px-5 py-1.5 text-[11px] font-black uppercase tracking-widest transition-all ${
+              dashboardMode === 'annual' ? 'glow brightness-125' : 'opacity-50'
+            }`}
+          >
+            Anual
+          </button>
+        </div>
         <EvolutionChart 
           key={`evolution-${refreshKey}`} 
           data={rows} 
           year={year} 
           month={month}
           onMonthChange={setMonth}
+          forcedViewMode={dashboardMode === 'annual' ? 'annual' : 'monthly'}
         />
       </section>
 
@@ -336,7 +361,7 @@ function Kpi({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="glass rounded-2xl p-6 flex flex-col items-center justify-center text-center transition hover:scale-[1.02] hover:glow min-h-[120px]">
+    <div className="glass rounded-2xl p-3 flex flex-col items-center justify-center text-center transition hover:scale-[1.02] hover:glow min-h-[80px]">
       <div className={`flex items-center gap-2 text-sm opacity-80 uppercase tracking-widest mb-1 ${color}`}>
         {icon} {label}
       </div>

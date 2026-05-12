@@ -113,24 +113,26 @@ export function CategoryPie({
   };
 
   return (
-    <div className="glass rounded-2xl p-6 h-full min-h-[400px]">
-      <div className={`mb-6 flex items-start justify-between ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`}>
+    <div className="glass rounded-2xl p-4 h-full min-h-[280px]">
+      <div className={`mb-1 flex items-start justify-between ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`}>
         <div className={`flex flex-col ${alignTitle === 'right' ? 'items-end' : 'items-start'}`}>
-          <h3 className={`text-lg font-bold tracking-widest uppercase`} style={{ color: accent }}>
+          <h3 className={`text-sm font-bold tracking-widest uppercase h-6 overflow-hidden`} style={{ color: accent }}>
             {selectedCategory || title}
           </h3>
-          <p className="text-[10px] uppercase opacity-50 tracking-wider mb-2">
+          <p className="text-[10px] uppercase opacity-50 tracking-wider h-4 overflow-hidden">
             {selectedCategory ? "Proporção dos Lançamentos" : "Clique em uma fatia para detalhar"}
           </p>
-          {selectedCategory && (
-            <button 
-              onClick={() => setSelectedCategory(null)}
-              className="rounded-lg px-2 py-1 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest border transition-all hover:brightness-125"
-              style={{ color: accent, borderColor: `${accent}44`, backgroundColor: `${accent}11` }}
-            >
-              <ChevronLeft className="h-3 w-3" /> Voltar
-            </button>
-          )}
+          <div className="h-8 flex items-center">
+            {selectedCategory && (
+              <button 
+                onClick={() => setSelectedCategory(null)}
+                className="rounded-lg px-4 py-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border transition-all hover:brightness-125"
+                style={{ color: accent, borderColor: `${accent}44`, backgroundColor: `${accent}11` }}
+              >
+                <ChevronLeft className="h-4 w-4" /> Voltar
+              </button>
+            )}
+          </div>
         </div>
         
         <div className={`text-xl font-black font-mono tracking-tighter drop-shadow-[0_0_8px_rgba(255,255,255,0.1)]`} style={{ color: accent }}>
@@ -143,15 +145,16 @@ export function CategoryPie({
           Sem dados neste período
         </div>
       ) : (
-        <div className="h-[350px] w-full">
+        <div className="h-[230px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
+            <PieChart margin={{ top: 12, right: 15, bottom: 0, left: 15 }}>
               <Pie
                 data={currentData}
                 dataKey="value"
                 nameKey="name"
-                innerRadius={70}
-                outerRadius={125}
+                cy="42%"
+                innerRadius={50}
+                outerRadius={90}
                 paddingAngle={2}
                 stroke="oklch(0.16 0.04 255)"
                 activeIndex={activeIndex !== null ? activeIndex : undefined}
@@ -197,7 +200,7 @@ export function CategoryPie({
                 }}
               />
               <Legend 
-                wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14, paddingTop: "20px" }} 
+                wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 12, paddingTop: "16px", minHeight: "40px" }} 
                 payload={selectedCategory ? [] : undefined}
               />
             </PieChart>

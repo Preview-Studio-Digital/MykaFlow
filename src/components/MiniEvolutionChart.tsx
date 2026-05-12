@@ -6,6 +6,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { useMemo } from "react";
@@ -80,13 +81,23 @@ export function MiniEvolutionChart({
     });
   }, [data, year, month]);
 
-  const gradientOffset = useMemo(() => {
-    if (dailyData.length === 0) return 1;
-    const dataMax = Math.max(...dailyData.map((d) => d.saldo), 0);
-    const dataMin = Math.min(...dailyData.map((d) => d.saldo), 0);
-    if (dataMax <= 0) return 0;
-    if (dataMin >= 0) return 1;
-    return dataMax / (dataMax - dataMin);
+  const { gradientOffset, dataMin, dataMax } = useMemo(() => {
+    if (dailyData.length === 0) return { gradientOffset: 1, dataMin: 0, dataMax: 0 };
+    const max = Math.max(...dailyData.map((d) => d.saldo));
+    const min = Math.min(...dailyData.map((d) => d.saldo));
+    
+    // All negative
+    if (max <= 0) return { gradientOffset: 0, dataMin: min, dataMax: 0 };
+    // All positive
+    if (min >= 0) return { gradientOffset: 1, dataMin: 0, dataMax: max };
+    
+    // Mixed: symmetric domain so zero is exactly at 50%
+    const absMax = Math.max(Math.abs(max), Math.abs(min));
+    return { 
+      gradientOffset: 0.5,
+      dataMin: -absMax,
+      dataMax: absMax
+    };
   }, [dailyData]);
 
   if (dailyData.length === 0) {
@@ -98,21 +109,56 @@ export function MiniEvolutionChart({
   }
 
   return (
-    <div className="glass rounded-2xl p-4 flex flex-col flex-1 min-h-[200px]">
+    <div className="glass rounded-2xl p-3 flex flex-col flex-1 min-h-[140px]">
       <h3 className="text-lg font-bold uppercase tracking-widest text-muted-foreground mb-4 text-center opacity-80">
         Evolução de {MONTHS_PT[month]}
       </h3>
       <div className="flex-1 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={dailyData}>
+          <AreaChart 
+            data={dailyData}
+            margin={{ top: 10, right: 40, left: 40, bottom: 0 }}
+          >
             <defs>
               <linearGradient id="miniSplitFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset={gradientOffset} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.4} />
-                <stop offset={gradientOffset} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.4} />
+                {gradientOffset >= 1 ? (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.1} />
+                  </>
+                ) : gradientOffset <= 0 ? (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.1} />
+                  </>
+                ) : (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.4} />
+                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.4} />
+                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.4} />
+                  </>
+                )}
               </linearGradient>
               <linearGradient id="miniSplitStroke" x1="0" y1="0" x2="0" y2="1">
-                <stop offset={gradientOffset} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                <stop offset={gradientOffset} stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                {gradientOffset >= 1 ? (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                    <stop offset="100%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                  </>
+                ) : gradientOffset <= 0 ? (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                  </>
+                ) : (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                  </>
+                )}
               </linearGradient>
             </defs>
             <CartesianGrid stroke="oklch(0.78 0.16 220 / 0.1)" strokeDasharray="3 3" vertical={false} />
@@ -120,9 +166,23 @@ export function MiniEvolutionChart({
               dataKey="day" 
               stroke="oklch(0.7 0.04 235)" 
               fontSize={10} 
+              axisLine={false}
               tickLine={false}
             />
             <YAxis
+              yAxisId="left"
+              domain={[dataMin, dataMax]}
+              stroke="oklch(0.7 0.04 235)"
+              fontSize={10}
+              tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+              width={35}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              domain={[dataMin, dataMax]}
               stroke="oklch(0.7 0.04 235)"
               fontSize={10}
               tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
@@ -132,6 +192,7 @@ export function MiniEvolutionChart({
             />
             <Tooltip cursor={false} content={<CustomTooltip />} />
             <Area
+              yAxisId="left"
               type="monotone"
               dataKey="saldo"
               stroke="url(#miniSplitStroke)"
@@ -139,6 +200,17 @@ export function MiniEvolutionChart({
               fill="url(#miniSplitFill)"
               animationDuration={1000}
             />
+            <Area
+              yAxisId="right"
+              type="monotone"
+              dataKey="saldo"
+              stroke="transparent"
+              fill="transparent"
+              legendType="none"
+              tooltipType="none"
+              animationDuration={0}
+            />
+            <ReferenceLine yAxisId="left" y={0} stroke="white" strokeWidth={1} strokeOpacity={0.5} />
           </AreaChart>
         </ResponsiveContainer>
       </div>

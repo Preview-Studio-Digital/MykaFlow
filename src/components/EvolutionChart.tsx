@@ -74,14 +74,17 @@ export function EvolutionChart({
   data, 
   year, 
   month, 
-  onMonthChange 
+  onMonthChange,
+  forcedViewMode,
 }: { 
   data: Tx[]; 
   year: number; 
   month: number;
   onMonthChange?: (m: number) => void;
+  forcedViewMode?: "annual" | "monthly";
 }) {
   const [viewMode, setViewMode] = useState<"annual" | "monthly">("annual");
+  const effectiveViewMode = forcedViewMode ?? viewMode;
 
   // Dados Anuais (por mês)
   const annualData = useMemo(() => {
@@ -102,7 +105,7 @@ export function EvolutionChart({
 
   // Dados Mensais (por dia) - Cumulativos
   const dailyData = useMemo(() => {
-    if (viewMode === "annual") return [];
+    if (effectiveViewMode === "annual") return [];
     
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const days = Array.from({ length: daysInMonth }, (_, i) => ({
@@ -132,23 +135,33 @@ export function EvolutionChart({
         saldo: runningSaldo
       };
     });
-  }, [data, year, viewMode, month]);
+  }, [data, year, effectiveViewMode, month]);
 
   const currentAnnualBalance = useMemo(() => {
     return annualData.slice(0, month + 1).reduce((acc, curr) => acc + (curr.receitas - curr.despesas), 0);
   }, [annualData, month]);
 
-  const chartData = viewMode === "annual" ? annualData : dailyData;
+  const chartData = effectiveViewMode === "annual" ? annualData : dailyData;
   const currentMonthData = annualData[month] || { receitas: 0, despesas: 0 };
   const currentSaldo = (currentMonthData.receitas || 0) - (currentMonthData.despesas || 0);
 
-  const gradientOffset = useMemo(() => {
-    if (dailyData.length === 0) return 1;
-    const dataMax = Math.max(...dailyData.map((d) => d.saldo), 0);
-    const dataMin = Math.min(...dailyData.map((d) => d.saldo), 0);
-    if (dataMax <= 0) return 0;
-    if (dataMin >= 0) return 1;
-    return dataMax / (dataMax - dataMin);
+  const { gradientOffset, dataMin, dataMax } = useMemo(() => {
+    if (dailyData.length === 0) return { gradientOffset: 1, dataMin: 0, dataMax: 0 };
+    const max = Math.max(...dailyData.map((d) => d.saldo));
+    const min = Math.min(...dailyData.map((d) => d.saldo));
+    
+    // All negative
+    if (max <= 0) return { gradientOffset: 0, dataMin: min, dataMax: 0 };
+    // All positive
+    if (min >= 0) return { gradientOffset: 1, dataMin: 0, dataMax: max };
+    
+    // Mixed: use symmetric domain so zero is exactly at 50%
+    const absMax = Math.max(Math.abs(max), Math.abs(min));
+    return { 
+      gradientOffset: 0.5,
+      dataMin: -absMax,
+      dataMax: absMax
+    };
   }, [dailyData]);
 
   const handleChartClick = (state: any) => {
@@ -167,8 +180,8 @@ export function EvolutionChart({
       currentSaldo < 0 
         ? "bg-red-500/10 border-red-500/30 shadow-[inset_0_0_50px_rgba(239,68,68,0.1)]" 
         : "bg-cyan-500/10 border-cyan-500/30 shadow-[inset_0_0_50px_rgba(34,211,238,0.1)]"
-    } backdrop-blur-md`}>
-      <div className="flex items-center justify-between mb-8">
+    } backdrop-blur-md p-4`}>
+      <div className="flex items-center justify-between mb-4 px-[10px]">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-4">
             {viewMode === "monthly" && (
@@ -182,7 +195,7 @@ export function EvolutionChart({
             
             <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
               <Activity className="h-6 w-6" /> 
-              {viewMode === "annual" ? `Evolução Anual ${year}` : `Saldo Mensal: ${MONTHS_PT[month]}`}
+              {effectiveViewMode === "annual" ? `Evolução Anual ${year}` : `Saldo Mensal: ${MONTHS_PT[month]}`}
             </h3>
 
             {viewMode === "monthly" && (
@@ -196,7 +209,7 @@ export function EvolutionChart({
             )}
           </div>
           
-          {viewMode === "monthly" && (
+          {effectiveViewMode === "monthly" && !forcedViewMode && (
             <button 
               onClick={() => setViewMode("annual")}
               className="flex items-center gap-1 text-[10px] uppercase font-black tracking-widest text-accent hover:text-white transition-all w-fit ml-10"
@@ -227,12 +240,12 @@ export function EvolutionChart({
         </div>
       </div>
 
-      <div className="h-72 cursor-pointer">
+      <div className="h-52 cursor-pointer">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart 
             data={chartData} 
             onClick={handleChartClick}
-            margin={{ top: 20, right: 10, left: 10, bottom: 0 }}
+            margin={{ top: 20, right: 60, left: 60, bottom: 0 }}
           >
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
@@ -245,32 +258,84 @@ export function EvolutionChart({
               </linearGradient>
               {/* Gradiente Split (Dinâmico Positivo/Negativo) */}
               <linearGradient id="splitColorFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset={gradientOffset} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
-                <stop offset={gradientOffset} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
+                {gradientOffset >= 1 ? (
+                  // All positive - pure green
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.1} />
+                  </>
+                ) : gradientOffset <= 0 ? (
+                  // All negative - pure red
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.1} />
+                  </>
+                ) : (
+                  // Mixed - sharp split at zero
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
+                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
+                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
+                  </>
+                )}
               </linearGradient>
               <linearGradient id="splitColorStroke" x1="0" y1="0" x2="0" y2="1">
-                <stop offset={gradientOffset} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                <stop offset={gradientOffset} stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                {gradientOffset >= 1 ? (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                    <stop offset="100%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                  </>
+                ) : gradientOffset <= 0 ? (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                  </>
+                ) : (
+                  <>
+                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                  </>
+                )}
               </linearGradient>
             </defs>
             <CartesianGrid stroke="oklch(0.78 0.16 220 / 0.1)" strokeDasharray="3 3" />
             <XAxis 
-              dataKey={viewMode === "annual" ? "month" : "label"} 
+              dataKey={effectiveViewMode === "annual" ? "month" : "label"} 
               stroke="oklch(0.7 0.04 235)" 
               fontSize={11} 
               fontWeight="bold"
-              tickFormatter={(val) => viewMode === "annual" ? val.slice(0, 3) : val}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(val) => effectiveViewMode === "annual" ? val.slice(0, 3) : val}
             />
             <YAxis
+              yAxisId="left"
+              domain={effectiveViewMode === "monthly" ? [dataMin, dataMax] : ['auto', 'auto']}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
+              axisLine={false}
+              tickLine={false}
               tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
             />
-            <Tooltip cursor={false} content={<CustomTooltip isMonthly={viewMode === "monthly"} />} />
-            {viewMode === "annual" && <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14 }} />}
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              domain={effectiveViewMode === "monthly" ? [dataMin, dataMax] : ['auto', 'auto']}
+              stroke="oklch(0.7 0.04 235)"
+              fontSize={11}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
+            />
+            <Tooltip cursor={false} content={<CustomTooltip isMonthly={effectiveViewMode === "monthly"} />} />
+            {effectiveViewMode === "annual" && <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14 }} />}
             
-            {viewMode === "annual" && (
+            {effectiveViewMode === "annual" && (
               <ReferenceLine 
+                yAxisId="left"
                 x={MONTHS_PT[month]} 
                 stroke="#22d3ee" 
                 strokeWidth={3}
@@ -287,6 +352,7 @@ export function EvolutionChart({
             )}
 
             <Area
+              yAxisId="left"
               type="monotone"
               dataKey="receitas"
               stroke="oklch(0.8 0.16 150)"
@@ -294,9 +360,10 @@ export function EvolutionChart({
               fill="url(#incomeGrad)"
               name="Receitas"
               animationDuration={1000}
-              hide={viewMode !== "annual"}
+              hide={effectiveViewMode !== "annual"}
             />
             <Area
+              yAxisId="left"
               type="monotone"
               dataKey="despesas"
               stroke="oklch(0.7 0.2 30)"
@@ -304,9 +371,10 @@ export function EvolutionChart({
               fill="url(#expenseGrad)"
               name="Despesas"
               animationDuration={1000}
-              hide={viewMode !== "annual"}
+              hide={effectiveViewMode !== "annual"}
             />
             <Area
+              yAxisId="left"
               type="monotone"
               dataKey="saldo"
               stroke="url(#splitColorStroke)"
@@ -315,8 +383,30 @@ export function EvolutionChart({
               name="Saldo Acumulado"
               legendType="none"
               animationDuration={1000}
-              hide={viewMode === "annual"}
+              hide={effectiveViewMode === "annual"}
             />
+
+            {/* Invisible Area to sync Right Axis scale */}
+            <Area
+              yAxisId="right"
+              type="monotone"
+              dataKey={effectiveViewMode === "annual" ? "receitas" : "saldo"}
+              stroke="transparent"
+              fill="transparent"
+              legendType="none"
+              tooltipType="none"
+              animationDuration={0}
+            />
+
+            {effectiveViewMode === "monthly" && (
+              <ReferenceLine 
+                yAxisId="left"
+                y={0} 
+                stroke="white" 
+                strokeWidth={1} 
+                strokeOpacity={0.5} 
+              />
+            )}
           </AreaChart>
         </ResponsiveContainer>
       </div>

@@ -152,36 +152,66 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
   }, [type, refreshTrigger]);
 
   const handleQuickAdd = async (parentId?: string) => {
-    const name = prompt(parentId ? "Nome da nova Subcategoria:" : "Nome da nova Categoria Principal:");
-    if (!name || !user) return;
-    const upperName = name.trim().toUpperCase();
+    console.log("DEBUG: Clique no botão (+). User:", user);
     
-    setBusy(true);
-    if (!parentId) {
-      const { data, error } = await supabase.from("categories").insert({
-        name: upperName,
-        type: type
-      }).select().single();
-      
-      if (!error && data) {
-        setDbCategories(prev => [...prev, data]);
-        setSelectedParentId(data.id);
-        setSelectedSubId("");
-        toast.success("Categoria criada!");
-      }
-    } else {
-      const { data, error } = await supabase.from("subcategories").insert({
-        name: upperName,
-        category_id: parentId
-      }).select().single();
-      
-      if (!error && data) {
-        setDbSubCategories(prev => [...prev, data]);
-        setSelectedSubId(data.id);
-        toast.success("Subcategoria criada!");
-      }
+    if (!user) {
+      window.alert("ERRO: Você precisa estar logado para cadastrar categorias.");
+      return;
     }
-    setBusy(false);
+
+    const name = window.prompt(parentId ? "Nome da nova Subcategoria:" : "Nome da nova Categoria Principal:");
+    if (!name) return;
+    
+    const upperName = name.trim().toUpperCase();
+    setBusy(true);
+    
+    try {
+      if (!parentId) {
+        console.log("DEBUG: Salvando categoria para o usuário:", user.id);
+        const { data, error } = await supabase.from("categories").insert({
+          name: upperName,
+          type: type,
+          user_id: user.id
+        }).select().single();
+        
+        if (error) {
+          console.error("DEBUG: Erro Supabase:", error);
+          window.alert("ERRO SUPABASE: " + error.message);
+          return;
+        }
+        
+        if (data) {
+          setDbCategories(prev => [...prev, data]);
+          setSelectedParentId(data.id);
+          setSelectedSubId("");
+          toast.success("Categoria criada!");
+        }
+      } else {
+        const { data, error } = await supabase.from("subcategories").insert({
+          name: upperName,
+          category_id: parentId,
+          user_id: user.id
+        }).select().single();
+        
+        if (error) {
+          console.error("DEBUG: Erro Supabase:", error);
+          window.alert("ERRO SUPABASE (Sub): " + error.message);
+          return;
+        }
+        
+        if (data) {
+          setDbSubCategories(prev => [...prev, data]);
+          setSelectedSubId(data.id);
+          toast.success("Subcategoria criada!");
+        }
+      }
+    } catch (err: any) {
+      console.error("DEBUG: Erro inesperado:", err);
+      window.alert("Erro inesperado. Veja o console.");
+    } finally {
+      setBusy(false);
+      setRefreshTrigger(prev => prev + 1);
+    }
   };
 
   const currentParents = dbCategories;

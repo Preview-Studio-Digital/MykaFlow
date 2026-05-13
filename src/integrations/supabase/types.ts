@@ -14,32 +14,61 @@ export type Database = {
   }
   public: {
     Tables: {
-      categories: {
+      financial_categories: {
         Row: {
-          color: string | null
           created_at: string
-          icon: string | null
           id: string
           name: string
           type: Database["public"]["Enums"]["transaction_type"]
+          user_id: string | null
         }
         Insert: {
-          color?: string | null
           created_at?: string
-          icon?: string | null
           id?: string
           name: string
           type: Database["public"]["Enums"]["transaction_type"]
+          user_id?: string | null
         }
         Update: {
-          color?: string | null
           created_at?: string
-          icon?: string | null
           id?: string
           name?: string
           type?: Database["public"]["Enums"]["transaction_type"]
+          user_id?: string | null
         }
         Relationships: []
+      }
+      financial_subcategories: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          id: string
+          name: string
+          user_id: string | null
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          user_id?: string | null
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_subcategories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "financial_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -62,88 +91,59 @@ export type Database = {
         }
         Relationships: []
       }
-      subcategories: {
-        Row: {
-          category_id: string | null
-          created_at: string
-          id: string
-          name: string
-        }
-        Insert: {
-          category_id?: string | null
-          created_at?: string
-          id?: string
-          name: string
-        }
-        Update: {
-          category_id?: string | null
-          created_at?: string
-          id?: string
-          name?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "subcategories_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       transactions: {
         Row: {
           amount: number
           category: string
-          category_id: string | null
+          category_id_v2: string | null
           created_at: string
           description: string | null
           id: string
           nature: Database["public"]["Enums"]["transaction_nature"]
           occurred_on: string
-          subcategory_id: string | null
+          subcategory_id_v2: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
         }
         Insert: {
           amount: number
           category: string
-          category_id?: string | null
+          category_id_v2?: string | null
           created_at?: string
           description?: string | null
           id?: string
           nature?: Database["public"]["Enums"]["transaction_nature"]
           occurred_on?: string
-          subcategory_id?: string | null
+          subcategory_id_v2?: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
         }
         Update: {
           amount?: number
           category?: string
-          category_id?: string | null
+          category_id_v2?: string | null
           created_at?: string
           description?: string | null
           id?: string
           nature?: Database["public"]["Enums"]["transaction_nature"]
           occurred_on?: string
-          subcategory_id?: string | null
+          subcategory_id_v2?: string | null
           type?: Database["public"]["Enums"]["transaction_type"]
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "transactions_category_id_fkey"
-            columns: ["category_id"]
+            foreignKeyName: "transactions_category_id_v2_fkey"
+            columns: ["category_id_v2"]
             isOneToOne: false
-            referencedRelation: "categories"
+            referencedRelation: "financial_categories"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "transactions_subcategory_id_fkey"
-            columns: ["subcategory_id"]
+            foreignKeyName: "transactions_subcategory_id_v2_fkey"
+            columns: ["subcategory_id_v2"]
             isOneToOne: false
-            referencedRelation: "subcategories"
+            referencedRelation: "financial_subcategories"
             referencedColumns: ["id"]
           },
         ]

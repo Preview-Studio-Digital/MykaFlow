@@ -130,13 +130,13 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
   const fetchCats = async () => {
     try {
       const { data: cats } = await supabase
-        .from("categories")
+        .from("financial_categories")
         .select("*")
         .eq("type", type)
         .order("name");
       
       const { data: subs } = await supabase
-        .from("subcategories")
+        .from("financial_subcategories")
         .select("*")
         .order("name");
 
@@ -168,7 +168,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     try {
       if (!parentId) {
         console.log("DEBUG: Salvando categoria para o usuário:", user.id);
-        const { data, error } = await supabase.from("categories").insert({
+        const { data, error } = await supabase.from("financial_categories").insert({
           name: upperName,
           type: type,
           user_id: user.id
@@ -187,7 +187,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
           toast.success("Categoria criada!");
         }
       } else {
-        const { data, error } = await supabase.from("subcategories").insert({
+        const { data, error } = await supabase.from("financial_subcategories").insert({
           name: upperName,
           category_id: parentId,
           user_id: user.id
@@ -242,8 +242,8 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
       type,
       nature,
       category: parent?.name || "OUTROS",
-      category_id: selectedParentId,
-      subcategory_id: selectedSubId || null,
+      category_id_v2: selectedParentId,
+      subcategory_id_v2: selectedSubId || null,
       description: description.trim().toUpperCase() || (sub?.name || null),
       amount: value,
       occurred_on: date,

@@ -22,7 +22,7 @@ interface Tx {
 const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) => {
   if (active && payload && payload.length) {
     if (isMonthly) {
-      const saldo = payload[0].value;
+      const saldo = payload.find((p: any) => p.dataKey === "saldo")?.value ?? (payload[0]?.value || 0);
       const daysOfWeek = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
       const d = new Date(year, month, parseInt(label));
       const dayName = !isNaN(d.getTime()) ? daysOfWeek[d.getDay()] : "";
@@ -129,7 +129,7 @@ export function EvolutionChart({
       day: i + 1
     }));
 
-    // 1. Primeiro, soma os valores exatos de cada dia
+    // 1. Soma os valores exatos de cada dia
     for (const t of data) {
       const d = new Date(t.occurred_on + "T00:00:00");
       if (d.getFullYear() === year && d.getMonth() === month) {
@@ -201,23 +201,27 @@ export function EvolutionChart({
   const currentSaldo = (currentMonthData.receitas || 0) - (currentMonthData.despesas || 0);
 
   const { gradientOffset, dataMin, dataMax } = useMemo(() => {
-    if (dailyData.length === 0) return { gradientOffset: 1, dataMin: 0, dataMax: 0 };
-    const max = Math.max(...dailyData.map((d) => d.saldo));
-    const min = Math.min(...dailyData.map((d) => d.saldo));
+    const vals = chartData.map((d: any) => d.saldo).filter((v: any) => v !== undefined);
+    if (vals.length === 0) return { gradientOffset: 1, dataMin: 0, dataMax: 0 };
     
-    // All negative
-    if (max <= 0) return { gradientOffset: 0, dataMin: min, dataMax: 0 };
-    // All positive
-    if (min >= 0) return { gradientOffset: 1, dataMin: 0, dataMax: max };
+    const max = Math.max(...vals);
+    const min = Math.min(...vals);
     
-    // Mixed: use symmetric domain so zero is exactly at 50%
-    const absMax = Math.max(Math.abs(max), Math.abs(min));
+    // Se for tudo positivo
+    if (min >= 0) return { gradientOffset: 1, dataMin: 0, dataMax: max * 1.1 };
+    // Se for tudo negativo
+    if (max <= 0) return { gradientOffset: 0, dataMin: min * 1.1, dataMax: 0 };
+    
+    // Misto: offset = max / (max - min)
+    // Para o gradiente bater com o preenchimento até o fundo, o domínio deve ser [min, max]
+    // mas adicionamos uma folga de 10%
+    const range = max - min;
     return { 
-      gradientOffset: 0.5,
-      dataMin: -absMax,
-      dataMax: absMax
+      gradientOffset: max / range,
+      dataMin: min - (range * 0.1),
+      dataMax: max + (range * 0.1)
     };
-  }, [dailyData]);
+  }, [chartData]);
 
 
   const navigateMonth = (step: number) => {
@@ -362,49 +366,17 @@ export function EvolutionChart({
                 <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.6} />
                 <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0} />
               </linearGradient>
-              {/* Gradiente Split (Dinâmico Positivo/Negativo) */}
               <linearGradient id="splitColorFill" x1="0" y1="0" x2="0" y2="1">
-                {gradientOffset >= 1 ? (
-                  // All positive - pure green
-                  <>
-                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.1} />
-                  </>
-                ) : gradientOffset <= 0 ? (
-                  // All negative - pure red
-                  <>
-                    <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.1} />
-                  </>
-                ) : (
-                  // Mixed - sharp split at zero
-                  <>
-                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
-                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
-                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
-                  </>
-                )}
+                <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
+                <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
+                <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
+                <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
               </linearGradient>
               <linearGradient id="splitColorStroke" x1="0" y1="0" x2="0" y2="1">
-                {gradientOffset >= 1 ? (
-                  <>
-                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                    <stop offset="100%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                  </>
-                ) : gradientOffset <= 0 ? (
-                  <>
-                    <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
-                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
-                  </>
-                ) : (
-                  <>
-                    <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
-                    <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
-                  </>
-                )}
+                <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
+                <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke="oklch(0.78 0.16 220 / 0.1)" strokeDasharray="3 3" />
@@ -415,6 +387,7 @@ export function EvolutionChart({
               fontWeight="bold"
               axisLine={false}
               tickLine={false}
+              padding={{ left: 0, right: 0 }}
               tickFormatter={(val) => effectiveViewMode === "annual" ? val.slice(0, 3) : val}
             />
             <YAxis
@@ -509,32 +482,21 @@ export function EvolutionChart({
               stroke="url(#splitColorStroke)"
               strokeWidth={3}
               fill="url(#splitColorFill)"
+              baseValue="dataMin"
               name="Saldo Acumulado"
-              legendType="none"
               animationDuration={1000}
               hide={effectiveViewMode === "annual"}
             />
 
-            {/* Invisible Area to sync Right Axis scale */}
-            <Area
-              yAxisId="right"
-              type="monotone"
-              dataKey={effectiveViewMode === "annual" ? "receitas" : "saldo"}
-              stroke="transparent"
-              fill="transparent"
-              legendType="none"
-              tooltipType="none"
-              activeDot={false}
-              animationDuration={0}
-            />
 
             {effectiveViewMode === "monthly" && (
               <ReferenceLine 
                 yAxisId="left"
                 y={0} 
                 stroke="white" 
-                strokeWidth={1} 
-                strokeOpacity={0.5} 
+                strokeWidth={1.5} 
+                strokeOpacity={0.8} 
+                strokeDasharray="4 4"
               />
             )}
           </AreaChart>

@@ -26,20 +26,28 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
   
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [busy, setBusy] = useState(false);
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
-
-  // Sincronizar data ao navegar pelos meses (exceto no primeiro carregamento)
-  useEffect(() => {
-    if (isFirstLoad) {
-      setIsFirstLoad(false);
-      return;
+  
+  const getInitialDate = (m?: number, y?: number) => {
+    const now = new Date();
+    const targetM = m ?? now.getMonth();
+    const targetY = y ?? now.getFullYear();
+    
+    if (now.getFullYear() === targetY && now.getMonth() === targetM) {
+      // Mes atual: retorna dia atual (local)
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    } else {
+      // Outro mes: retorna dia 01
+      return `${targetY}-${String(targetM + 1).padStart(2, '0')}-01`;
     }
+  };
+
+  const [date, setDate] = useState(() => getInitialDate(defaultMonth, defaultYear));
+  const [busy, setBusy] = useState(false);
+
+  // Sincronizar data ao navegar pelos meses
+  useEffect(() => {
     if (defaultMonth !== undefined && defaultYear !== undefined) {
-      const d = new Date(defaultYear, defaultMonth, 1);
-      const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-      setDate(iso);
+      setDate(getInitialDate(defaultMonth, defaultYear));
     }
   }, [defaultMonth, defaultYear]);
 

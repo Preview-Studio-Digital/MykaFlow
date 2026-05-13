@@ -33,7 +33,7 @@ const INCOME_COLORS = [
 ];
 
 const renderActiveShape = (props: any) => {
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, className } = props;
 
   return (
     <g>
@@ -45,6 +45,7 @@ const renderActiveShape = (props: any) => {
         startAngle={startAngle}
         endAngle={endAngle}
         fill={fill}
+        className={className}
         style={{ filter: `drop-shadow(0 0 12px ${fill}88)`, transition: 'all 0.3s' }}
       />
     </g>
@@ -198,28 +199,57 @@ export function CategoryPie({
           {/* Custom Legend Side (Absolute to keep Pie centered) */}
           {!selectedCategory && (
             <div 
-              className={`absolute top-0 bottom-0 z-10 flex flex-col gap-3 min-w-[150px] max-w-[220px] justify-center overflow-y-auto pr-4 custom-scrollbar ${
-                alignTitle === 'right' ? 'right-4 items-end text-right' : 'left-4 items-start text-left'
+              className={`absolute top-0 bottom-0 z-10 flex flex-col gap-3 min-w-[150px] max-w-[240px] justify-center pr-6 pl-6 custom-scrollbar ${
+                alignTitle === 'right' ? 'right-0 items-end text-right' : 'left-0 items-start text-left'
               }`}
+              style={{ overflowY: 'auto', overflowX: 'visible' }}
             >
-              {currentData.map((entry, index) => (
-                <div 
-                  key={index} 
-                  className={`flex flex-col group cursor-pointer transition-all hover:scale-105 px-2 py-1 rounded-lg ${
-                    alignTitle === 'right' ? 'hover:origin-right' : 'hover:origin-left'
-                  }`}
-                  onClick={() => setSelectedCategory(entry.name)}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onMouseLeave={() => setActiveIndex(null)}
-                >
-                  <div className={`flex items-center gap-3 ${alignTitle === 'right' ? 'flex-row-reverse' : 'flex-row'}`}>
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                    <span className="text-xs font-black uppercase tracking-widest truncate text-white/70 group-hover:text-white">
-                      {entry.name}
-                    </span>
+              {currentData.map((entry, index) => {
+                const isSpecial = entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+                const percentageValue = currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
+                let pulseClass = "";
+                let classification = "";
+                if (isSpecial) {
+                  if (percentageValue <= 25) {
+                    pulseClass = "animate-pulse-green";
+                    classification = "NÍVEL SEGURO";
+                  } else if (percentageValue <= 50) {
+                    pulseClass = "animate-pulse-yellow";
+                    classification = "NÍVEL ALERTA";
+                  } else if (percentageValue <= 75) {
+                    pulseClass = "animate-pulse-orange";
+                    classification = "NÍVEL CRÍTICO";
+                  } else {
+                    pulseClass = "animate-pulse-red";
+                    classification = "NÍVEL INSOLVENTE";
+                  }
+                }
+
+                return (
+                  <div 
+                    key={index} 
+                    className={`flex flex-col group cursor-pointer transition-all hover:scale-105 px-2 py-1 rounded-lg relative ${
+                      alignTitle === 'right' ? 'hover:origin-right' : 'hover:origin-left'
+                    }`}
+                    style={{ overflow: 'visible' }}
+                    onClick={() => setSelectedCategory(entry.name)}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onMouseLeave={() => setActiveIndex(null)}
+                  >
+                    <div className={`flex items-center gap-3 relative ${alignTitle === 'right' ? 'flex-row-reverse' : 'flex-row'}`} style={{ overflow: 'visible' }}>
+                      <div 
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 relative z-10 ${pulseClass}`} 
+                        style={{ backgroundColor: pulseClass ? undefined : COLORS[index % COLORS.length] }} 
+                      />
+                      <div className={`flex flex-col ${alignTitle === 'right' ? 'items-end' : 'items-start'}`}>
+                        <span className={`text-xs font-black uppercase tracking-widest truncate text-white/70 group-hover:text-white ${isSpecial ? 'text-white' : ''}`}>
+                          {entry.name}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -232,28 +262,56 @@ export function CategoryPie({
             >
               {(() => {
                 const entry = currentData[activeIndex];
-                const color = COLORS[activeIndex % COLORS.length];
-                const percentage = currentTotal > 0 ? ((entry.value / currentTotal) * 100).toFixed(1) : "0.0";
+                const isSpecial = entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+                const percentageValue = currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
+                
+                let color = COLORS[activeIndex % COLORS.length];
+                let classification = "";
+                if (isSpecial) {
+                  if (percentageValue <= 25) {
+                    color = "oklch(0.78 0.16 150)"; // Green
+                    classification = "NÍVEL SEGURO";
+                  } else if (percentageValue <= 50) {
+                    color = "oklch(0.85 0.18 95)"; // Yellow
+                    classification = "NÍVEL ALERTA";
+                  } else if (percentageValue <= 75) {
+                    color = "oklch(0.7 0.2 45)"; // Orange
+                    classification = "NÍVEL CRÍTICO";
+                  } else {
+                    color = "oklch(0.6 0.22 25)"; // Red
+                    classification = "NÍVEL INSOLVENTE";
+                  }
+                }
+                
+                const percentageStr = currentTotal > 0 ? ((entry.value / currentTotal) * 100).toFixed(1) : "0.0";
                 return (
                   <div 
-                    className="glass rounded-xl p-3 border shadow-2xl min-w-[140px]" 
+                    className="glass rounded-xl p-2.5 border shadow-2xl min-w-[140px]" 
                     style={{ 
                       borderColor: `${color}44`,
                       backgroundColor: "oklch(0.15 0.05 255 / 0.9)",
                       backdropFilter: "blur(12px)"
                     }}
                   >
-                    <p className="text-xs uppercase tracking-[0.2em] mb-2 font-black opacity-80" style={{ color: color }}>
+                    <p className="text-[10px] uppercase tracking-[0.2em] mb-1 font-black opacity-80" style={{ color: color }}>
                       {entry.name}
                     </p>
-                    <div className="flex flex-col gap-1">
-                      <p className="text-2xl font-bold leading-none" style={{ color: color }}>
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-xl font-bold leading-tight" style={{ color: color }}>
                         {fmtCurrency(entry.value)}
                       </p>
-                      <p className="text-sm font-bold uppercase tracking-widest mt-1" style={{ color: color }}>
-                        {percentage}% <span className="opacity-60 font-medium lowercase">do total</span>
+                      <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: color }}>
+                        {percentageStr}% <span className="opacity-60 font-medium lowercase">do total</span>
                       </p>
                     </div>
+                    {isSpecial && (
+                      <p 
+                        className={`text-[9px] font-black tracking-widest mt-2 pt-1.5 border-t border-white/10 uppercase animate-pulse`} 
+                        style={{ color: color }}
+                      >
+                        {classification}
+                      </p>
+                    )}
                   </div>
                 );
               })()}
@@ -280,9 +338,27 @@ export function CategoryPie({
                   onClick={(entry) => !selectedCategory && setSelectedCategory(entry.name)}
                   style={{ cursor: selectedCategory ? 'default' : 'pointer', outline: 'none' }}
                 >
-                  {currentData.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
+                  {currentData.map((entry, i) => {
+                    const isSpecial = entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+                    const percentageValue = currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
+                    let pulseClass = "";
+                    if (isSpecial) {
+                      if (percentageValue <= 25) pulseClass = "animate-pulse-green";
+                      else if (percentageValue <= 50) pulseClass = "animate-pulse-yellow";
+                      else if (percentageValue <= 75) pulseClass = "animate-pulse-orange";
+                      else pulseClass = "animate-pulse-red";
+                    }
+                    
+                    return (
+                      <Cell 
+                        key={i} 
+                        fill={pulseClass ? undefined : COLORS[i % COLORS.length]} 
+                        className={pulseClass}
+                        // @ts-ignore - Recharts doesn't strictly type extra props but Sector will receive them
+                        pulseClass={pulseClass} 
+                      />
+                    );
+                  })}
                 </Pie>
               </PieChart>
             </ResponsiveContainer>

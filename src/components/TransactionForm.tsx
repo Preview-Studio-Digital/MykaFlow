@@ -20,9 +20,10 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
   const [nature, setNature] = useState<"fixed" | "variable" | "">("");
   
   const [dbCategories, setDbCategories] = useState<any[]>([]);
+  const [dbSubCategories, setDbSubCategories] = useState<any[]>([]);
   const [selectedParentId, setSelectedParentId] = useState("");
-  const [subCategory, setSubCategory] = useState("");
-  const [refreshTrigger] = useState(0);
+  const [selectedSubId, setSelectedSubId] = useState("");
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -126,42 +127,23 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     );
   };
 
-  const fallbackParents = [
-    { id: "f1", name: "ESTRUTURA", type: "expense" },
-    { id: "f2", name: "AGNALDO", type: "expense" },
-    { id: "f3", name: "EQUIPE", type: "expense" },
-    { id: "f4", name: "FORNECEDORES", type: "expense" },
-    { id: "f5", name: "ANTECIPAÇÃO", type: "income" }
-  ];
-
-  const fallbackSubs: Record<string, string[]> = {
-    "f1": ["TI - TECNOLOGIA DE INFORMAÇÃO", "FROTA", "ADVOCACIA", "CONTABILIDADE", "TELEFONIA", "CPFL - ENERGIA", "SAAE - ÁGUA", "IPTU - COMÉRCIO"]
-  };
-
   const fetchCats = async () => {
     try {
-      const { data: fromTxs } = await supabase.from("transactions").select("category, description, type");
-      let merged: any[] = [];
-      if (fromTxs) {
-        fromTxs.forEach(t => {
-          const catName = t.category.toUpperCase().trim();
-          const txType = t.type;
-          let parent = merged.find(m => m.name === catName && !m.parent_id);
-          if (!parent) {
-            const tempId = `temp-${catName}`;
-            parent = { id: tempId, name: catName, type: txType, parent_id: null, isTemporary: true };
-            merged.push(parent);
-          }
-          const subName = (t.description || "").split(" - ")[0].toUpperCase().trim();
-          if (subName && !merged.find(m => m.name === subName && m.parent_id === parent?.id)) {
-            merged.push({ id: `temp-sub-${subName}`, name: subName, type: txType, parent_id: parent?.id || null, isTemporary: true });
-          }
-        });
-      }
-      setDbCategories(merged);
+      const { data: cats } = await supabase
+        .from("categories")
+        .select("*")
+        .eq("type", type)
+        .order("name");
+      
+      const { data: subs } = await supabase
+        .from("subcategories")
+        .select("*")
+        .order("name");
+
+      setDbCategories(cats || []);
+      setDbSubCategories(subs || []);
     } catch (err) { 
       console.error(err);
-      setDbCategories([]);
     }
   };
 
@@ -173,25 +155,37 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     const name = prompt(parentId ? "Nome da nova Subcategoria:" : "Nome da nova Categoria Principal:");
     if (!name || !user) return;
     const upperName = name.trim().toUpperCase();
-    const tempId = `temp-${Date.now()}`;
-    const newCat = { id: tempId, name: upperName, type: type, parent_id: parentId || null, isTemporary: true };
-    setDbCategories(prev => [...prev, newCat]);
+    
+    setBusy(true);
     if (!parentId) {
-      setSelectedParentId(tempId);
-      setSubCategory("");
+      const { data, error } = await supabase.from("categories").insert({
+        name: upperName,
+        type: type
+      }).select().single();
+      
+      if (!error && data) {
+        setDbCategories(prev => [...prev, data]);
+        setSelectedParentId(data.id);
+        setSelectedSubId("");
+        toast.success("Categoria criada!");
+      }
     } else {
-      setSubCategory(upperName);
+      const { data, error } = await supabase.from("subcategories").insert({
+        name: upperName,
+        category_id: parentId
+      }).select().single();
+      
+      if (!error && data) {
+        setDbSubCategories(prev => [...prev, data]);
+        setSelectedSubId(data.id);
+        toast.success("Subcategoria criada!");
+      }
     }
-    toast.success(parentId ? "Subcategoria pronta para uso!" : "Categoria pronta para uso!");
+    setBusy(false);
   };
 
-  const currentParents = dbCategories.length > 0 
-    ? dbCategories.filter(c => c.type === type && !c.parent_id)
-    : fallbackParents.filter(c => c.type === type);
-
-  const currentSubs = dbCategories.length > 0
-    ? dbCategories.filter(c => c.parent_id === selectedParentId).map(c => c.name)
-    : (fallbackSubs[selectedParentId] || []);
+  const currentParents = dbCategories;
+  const currentSubs = dbSubCategories.filter(s => s.category_id === selectedParentId);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -199,8 +193,9 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
       toast.error("Selecione uma categoria");
       return;
     }
-    const parent = dbCategories.find(c => c.id === selectedParentId) || fallbackParents.find(c => c.id === selectedParentId);
-    const parentName = parent?.name || "";
+    const parent = dbCategories.find(c => c.id === selectedParentId);
+    const sub = dbSubCategories.find(s => s.id === selectedSubId);
+    
     if (!nature) {
       toast.error("Selecione o tipo de lançamento");
       return;
@@ -211,19 +206,19 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
       return;
     }
     setBusy(true);
-    let finalDescription = subCategory;
-    if (description) {
-      finalDescription = subCategory ? `${subCategory} - ${description.trim().toUpperCase()}` : description.trim().toUpperCase();
-    }
+    
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
       type,
       nature,
-      category: parentName,
-      description: finalDescription || null,
+      category: parent?.name || "OUTROS",
+      category_id: selectedParentId,
+      subcategory_id: selectedSubId || null,
+      description: description.trim().toUpperCase() || (sub?.name || null),
       amount: value,
       occurred_on: date,
     });
+
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -231,7 +226,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
     }
     toast.success("Lançamento registrado!");
     setAmount("");
-    setSubCategory("");
+    setSelectedSubId("");
     setDescription("");
     setSelectedParentId("");
     onCreated();
@@ -319,9 +314,9 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
             <CustomSelect
               label="Subcategoria"
               placeholder="SELECIONE..."
-              value={subCategory}
-              onChange={(val) => setSubCategory(val)}
-              options={currentSubs.map(s => ({id: s, name: s}))}
+              value={selectedSubId}
+              onChange={(val) => setSelectedSubId(val)}
+              options={currentSubs.map(s => ({id: s.id, name: s.name}))}
               disabled={!selectedParentId}
             />
           </div>

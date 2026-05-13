@@ -97,17 +97,10 @@ function LoginPage() {
 
         {/* Opção de criar ADM removida conforme solicitação */}
 
-        <div className="mt-8 space-y-4 border-t border-white/10 pt-8 text-center">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground opacity-50 mb-2">
-            {mode === 'signin' ? "Não tem uma conta?" : "Já possui acesso?"}
+        <div className="mt-8 text-center">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground opacity-50">
+            Acesso exclusivo para funcionários autorizados
           </p>
-          <button 
-            type="button"
-            onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-            className="w-full btn-ghost-neon rounded-xl py-4 text-xs font-black uppercase tracking-[0.2em] transition-all hover:scale-105"
-          >
-            {mode === 'signin' ? '✨ Criar Minha Conta AGORA' : '⬅️ Voltar para o Login'}
-          </button>
         </div>
       </div>
     </div>

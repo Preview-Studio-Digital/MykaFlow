@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-type Role = "admin" | "user" | null;
+type Role = "admin" | "user" | "pending" | null;
 
 interface AuthCtx {
   user: User | null;
@@ -28,30 +28,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
-        setTimeout(() => fetchRole(sess.user.id), 0);
+        fetchRole(sess.user.id);
       } else {
         setRole(null);
+        setLoading(false);
       }
     });
+
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setUser(data.session?.user ?? null);
-      if (data.session?.user) fetchRole(data.session.user.id);
-      setLoading(false);
+      if (data.session?.user) {
+        fetchRole(data.session.user.id);
+      } else {
+        setLoading(false);
+      }
     });
+
     return () => sub.subscription.unsubscribe();
   }, []);
 
   async function fetchRole(uid: string) {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", uid)
-      .maybeSingle();
-    setRole((data?.role as Role) ?? "user");
+    try {
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid)
+        .maybeSingle();
+      
+      // Se não tiver role, assumimos que é 'pending' para os novos
+      setRole((data?.role as Role) ?? "pending");
+    } catch (err) {
+      console.error("Auth: Falha ao buscar cargo:", err);
+      setRole("pending");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const signIn: AuthCtx["signIn"] = async (email, password) => {
+    setLoading(true); // Garante que mostre carregando ao trocar de usuário
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error?.message ?? null };
   };
@@ -66,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    setLoading(true);
     await supabase.auth.signOut();
   };
 

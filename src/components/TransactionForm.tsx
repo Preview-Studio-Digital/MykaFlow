@@ -305,16 +305,14 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
               options={currentParents}
             />
           </div>
-          {role === "admin" && (
-            <button
-              type="button"
-              onClick={() => handleQuickAdd()}
-              className="flex items-center justify-center w-14 h-14 rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:bg-accent/10 transition-all text-accent group mb-0"
-              title="Nova Categoria"
-            >
-              <Plus className="h-6 w-6 group-hover:scale-125 transition-transform" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => handleQuickAdd()}
+            className="flex items-center justify-center w-14 h-14 rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:bg-accent/10 transition-all text-accent group mb-0"
+            title="Nova Categoria"
+          >
+            <Plus className="h-6 w-6 group-hover:scale-125 transition-transform" />
+          </button>
         </div>
         <div className="flex gap-3 items-end">
           <div className="flex-1">
@@ -327,7 +325,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
               disabled={!selectedParentId}
             />
           </div>
-          {role === "admin" && selectedParentId && (
+          {selectedParentId && (
             <button
               type="button"
               onClick={() => handleQuickAdd(selectedParentId)}

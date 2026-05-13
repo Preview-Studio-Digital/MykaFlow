@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ShieldCheck,
   User as UserIcon,
+  Lock,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -239,6 +240,35 @@ function Dashboard() {
     );
   }
 
+  // NOVA TRAVA DE SEGURANÇA: Bloqueio para usuários pendentes
+  if (role !== "admin" && role !== "user") {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4 py-12 bg-background">
+        <div className="glass max-w-md w-full p-8 rounded-2xl text-center space-y-6 float-up">
+          <div className="inline-flex p-4 rounded-full bg-accent/20 mb-4 pulse-glow">
+            <Lock className="h-12 w-12 text-accent" />
+          </div>
+          <h1 className="text-3xl font-black tracking-widest text-gradient">ACESSO PENDENTE</h1>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Olá, <span className="text-white font-bold">{user.email}</span>!<br/>
+            Seu cadastro foi realizado com sucesso, mas o administrador **DIEGO** precisa validar seu acesso antes de você visualizar os dados da empresa.
+          </p>
+          <div className="pt-6 border-t border-white/10">
+            <button
+              onClick={async () => {
+                await signOut();
+                navigate({ to: "/login" });
+              }}
+              className="btn-ghost-neon w-full rounded-xl py-3 text-xs font-bold flex items-center justify-center gap-2"
+            >
+              <LogOut className="h-4 w-4" /> Sair do Sistema
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative z-10 min-h-screen px-4 py-3 md:px-8 min-w-[1280px] overflow-x-auto">
       <header className="mb-6 flex items-center justify-between gap-2">
@@ -247,7 +277,7 @@ function Dashboard() {
             <Zap className="h-6 w-6 text-accent" />
           </div>
           <div>
-            <h1 className="text-5xl font-black tracking-[0.12em] text-gradient leading-none mb-1">MYKAFLOW</h1>
+            <h1 className="text-4xl font-black tracking-[0.12em] text-gradient leading-none mb-1">MYKAFLOW</h1>
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground whitespace-nowrap">
               Controle financeiro empresarial
             </p>
@@ -343,14 +373,12 @@ function Dashboard() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-base font-bold uppercase tracking-widest text-muted-foreground">
-          {dashboardMode === 'annual' ? `Lançamentos de ${year}` : `Lançamentos de ${MONTHS_PT[month]}`}
-        </h2>
         <TransactionList 
           key={`list-${refreshKey}-${year}-${month}-${dashboardMode}`} 
           rows={activeRows} 
           onDeleted={load} 
           allProfiles={profiles} 
+          title={dashboardMode === 'annual' ? `Lançamentos de ${year}` : `Lançamentos de ${MONTHS_PT[month]}`}
         />
       </section>
 

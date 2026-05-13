@@ -294,9 +294,12 @@ export function CategoryPie({
                       <p className="text-xl font-bold leading-tight" style={{ color: color }}>
                         {fmtCurrency(entry.value)}
                       </p>
-                      <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: color }}>
-                        {percentageStr}% <span className="opacity-60 font-medium lowercase">do total</span>
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <p className="text-sm font-black tracking-widest px-1.5 py-0.5 rounded bg-white/10" style={{ color: color }}>
+                          {percentageStr}%
+                        </p>
+                        <span className="text-[10px] uppercase opacity-50 font-bold">do total</span>
+                      </div>
                     </div>
                     {isSpecial && (
                       <p 

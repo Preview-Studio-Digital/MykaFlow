@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { adminCreateUser, promoteToAdmin, listUsers } from "@/lib/admin.functions";
+import { forceCreateUser } from "@/lib/user.control";
+import { promoteToAdmin } from "@/lib/admin.functions";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { ShieldCheck, Copy, RefreshCw, UserPlus, ShieldAlert, Users, Mail } from "lucide-react";
@@ -14,32 +15,18 @@ function genPassword(len = 14) {
   return p;
 }
 
-export function AdminPanel() {
-  const { role } = useAuth();
-  const create = useServerFn(adminCreateUser);
+export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
+  const { user, role, fetchRole } = useAuth();
+  const isAdmin = role === 'admin';
+  const create = useServerFn(forceCreateUser) as any;
   const promote = useServerFn(promoteToAdmin);
-  const list = useServerFn(listUsers);
+  // Removendo listUsers daqui pois já temos a lista principal no AdminPage
   
-  const [userList, setUserList] = useState<any[]>([]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState(genPassword());
   const [busy, setBusy] = useState(false);
   const [lastCreated, setLastCreated] = useState<{ email: string; password: string } | null>(null);
-
-  async function fetchUsers() {
-    if (role !== 'admin') return;
-    try {
-      const data = await list();
-      setUserList(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Erro ao buscar usuários", err);
-    }
-  }
-
-  useEffect(() => {
-    fetchUsers();
-  }, [role]);
 
   async function handlePromote() {
     setBusy(true);
@@ -58,15 +45,22 @@ export function AdminPanel() {
     e.preventDefault();
     setBusy(true);
     try {
-      await create({ data: { email, password, displayName: name } });
-      toast.success("Funcionário criado");
+      // Corrigindo o envio: enviando os dados diretamente, sem o invólucro { data: ... }
+      const res = await create({ email, password, displayName: name });
+      toast.success(`[V7] RESPOSTA: ${JSON.stringify(res)}`);
       setLastCreated({ email, password });
       setEmail("");
       setName("");
       setPassword(genPassword());
-      fetchUsers();
-    } catch (err) {
-      toast.error("Erro ao criar usuário");
+      if (onSuccess) {
+        // Pequeno delay para garantir consistência no Supabase antes do refresh
+        setTimeout(() => onSuccess(), 500);
+      }
+    } catch (err: any) {
+      console.error("Erro ao criar:", err);
+      // Tenta extrair a mensagem do erro se for um Response
+      const msg = err instanceof Response ? await err.text() : (err.message || "Falha na conexão");
+      toast.error(`Erro ao criar usuário: ${msg}`);
     } finally {
       setBusy(false);
     }
@@ -79,8 +73,8 @@ export function AdminPanel() {
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5" /> Painel ADM
           </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${role === 'admin' ? 'border-accent text-accent' : 'border-red-500 text-red-500'}`}>
-            {role?.toUpperCase() || 'OFFLINE'}
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${isAdmin ? 'border-accent text-accent' : role ? 'border-red-500 text-red-500' : 'border-white/20 text-muted-foreground'}`}>
+            {role?.toUpperCase() || 'CARREGANDO...'}
           </span>
         </h3>
 
@@ -103,7 +97,8 @@ export function AdminPanel() {
           </div>
         )}
 
-        <form onSubmit={submit} className={`space-y-3 ${role !== 'admin' ? 'opacity-30 pointer-events-none' : ''}`}>
+        {/* DIAGNÓSTICO: Forçando o formulário a ficar ativo */}
+        <form onSubmit={submit} className={`space-y-3`}>
           <input required placeholder="Nome" value={name} onChange={e => setName(e.target.value)} className="input-futuristic w-full rounded-lg px-3 py-2 outline-none" />
           <input required type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} className="input-futuristic w-full rounded-lg px-3 py-2 outline-none" />
           <div className="flex gap-2">
@@ -120,25 +115,6 @@ export function AdminPanel() {
           </div>
         )}
       </div>
-
-      {role === 'admin' && userList.length > 0 && (
-        <div className="pt-6 border-t border-white/10 space-y-3">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-            <Users className="h-4 w-4" /> Equipe ({userList.length})
-          </h4>
-          <div className="space-y-2">
-            {userList.map(u => (
-              <div key={u.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold">{u.name}</span>
-                  <span className="text-[10px] opacity-50">{u.email}</span>
-                </div>
-                <Mail className="h-3 w-3 opacity-30" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

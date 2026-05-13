@@ -212,14 +212,14 @@ export function EvolutionChart({
     // Se for tudo negativo
     if (max <= 0) return { gradientOffset: 0, dataMin: min * 1.1, dataMax: 0 };
     
-    // Misto: offset = max / (max - min)
-    // Para o gradiente bater com o preenchimento até o fundo, o domínio deve ser [min, max]
-    // mas adicionamos uma folga de 10%
     const range = max - min;
+    
+    // Para o gradiente da linha de contorno bater com o zero
+    // o domínio total é [min, max]. O zero está em max / range do topo.
     return { 
       gradientOffset: max / range,
-      dataMin: min - (range * 0.1),
-      dataMax: max + (range * 0.1)
+      dataMin: min,
+      dataMax: max
     };
   }, [chartData]);
 
@@ -366,12 +366,23 @@ export function EvolutionChart({
                 <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.6} />
                 <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0} />
               </linearGradient>
-              <linearGradient id="splitColorFill" x1="0" y1="0" x2="0" y2="1">
+              
+              {/* Gradiente para preencher APENAS acima de zero (Verde) */}
+              <linearGradient id="fillPositive" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
                 <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
+                <stop offset={`${gradientOffset * 100}%`} stopColor="transparent" stopOpacity={0} />
+                <stop offset="100%" stopColor="transparent" stopOpacity={0} />
+              </linearGradient>
+
+              {/* Gradiente para preencher APENAS abaixo de zero (Vermelho) */}
+              <linearGradient id="fillNegative" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="transparent" stopOpacity={0} />
+                <stop offset={`${gradientOffset * 100}%`} stopColor="transparent" stopOpacity={0} />
                 <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
                 <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
               </linearGradient>
+
               <linearGradient id="splitColorStroke" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
                 <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
@@ -475,14 +486,40 @@ export function EvolutionChart({
               animationDuration={1000}
               hide={effectiveViewMode !== "annual"}
             />
+            {/* Áreas de Preenchimento Técnicas (Usando Gradientes de Máscara) */}
+            <Area
+              yAxisId="left"
+              type="monotone"
+              dataKey="saldo"
+              stroke="none"
+              fill="url(#fillPositive)"
+              baseValue={dataMin}
+              legendType="none"
+              tooltipType="none"
+              animationDuration={1000}
+              hide={effectiveViewMode === "annual"}
+            />
+            <Area
+              yAxisId="left"
+              type="monotone"
+              dataKey="saldo"
+              stroke="none"
+              fill="url(#fillNegative)"
+              baseValue={dataMax}
+              legendType="none"
+              tooltipType="none"
+              animationDuration={1000}
+              hide={effectiveViewMode === "annual"}
+            />
+
+            {/* Linha de Contorno Principal */}
             <Area
               yAxisId="left"
               type="monotone"
               dataKey="saldo"
               stroke="url(#splitColorStroke)"
               strokeWidth={3}
-              fill="url(#splitColorFill)"
-              baseValue="dataMin"
+              fill="none"
               name="Saldo Acumulado"
               animationDuration={1000}
               hide={effectiveViewMode === "annual"}

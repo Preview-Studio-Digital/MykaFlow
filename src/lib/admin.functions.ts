@@ -34,13 +34,19 @@ export const adminCreateUser = createServerFn({ method: "POST" })
     });
     if (error) throw new Response(error.message, { status: 400 });
 
-    // Cria o perfil na tabela 'profiles' para exibição correta de autoria
+    // Cria o perfil na tabela 'profiles' e o papel inicial
     if (created.user) {
-      await supabaseAdmin.from("profiles").upsert({
-        id: created.user.id,
-        display_name: data.displayName.toUpperCase(),
-        email: data.email
-      });
+      await Promise.all([
+        supabaseAdmin.from("profiles").upsert({
+          id: created.user.id,
+          display_name: data.displayName.toUpperCase(),
+          email: data.email
+        }),
+        supabaseAdmin.from("user_roles").upsert({
+          user_id: created.user.id,
+          role: "user"
+        })
+      ]);
     }
 
     return { id: created.user?.id ?? null, email: data.email };

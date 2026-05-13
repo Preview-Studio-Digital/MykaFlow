@@ -75,6 +75,11 @@ export function CategoryPie({
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
+  // Reset active index when category changes to prevent crash with stale index
+  useMemo(() => {
+    setActiveIndex(null);
+  }, [selectedCategory]);
   const COLORS = type === "income" ? INCOME_COLORS : EXPENSE_COLORS;
   const total = data.reduce((a, b) => a + b.value, 0);
 
@@ -116,8 +121,8 @@ export function CategoryPie({
   return (
     <div className="glass rounded-2xl h-full min-h-[260px] relative overflow-hidden">
       {/* Header Area - Absolute to not affect vertical centering of the Pie */}
-      <div className={`absolute top-4 left-4 right-4 z-20 flex items-start justify-between gap-4 ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`}>
-        <div className={`flex flex-col flex-1 px-2 ${alignTitle === 'right' ? 'items-end text-right pr-6' : 'items-start text-left'}`}>
+      <div className={`absolute top-4 left-4 right-4 z-20 flex items-start justify-between gap-4 pointer-events-none ${alignTitle === 'right' ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col flex-1 px-2 pointer-events-auto ${alignTitle === 'right' ? 'items-end text-right pr-6' : 'items-start text-left'}`}>
           <h3 className="text-lg font-black tracking-widest uppercase text-gradient leading-tight" style={{ color: accent }}>
             {selectedCategory ? `DETALHAMENTO ${selectedCategory}` : title}
           </h3>
@@ -138,7 +143,7 @@ export function CategoryPie({
           )}
         </div>
         
-        <div className={`flex flex-col ${alignTitle === 'right' ? 'items-start' : 'items-end'}`}>
+        <div className={`flex flex-col pointer-events-auto ${alignTitle === 'right' ? 'items-start' : 'items-end'}`}>
           <div className="group/comp flex flex-col items-inherit">
             <div 
               className="text-2xl font-black font-mono tracking-tighter cursor-help" 
@@ -197,61 +202,49 @@ export function CategoryPie({
       ) : (
         <div className="h-full w-full flex items-center justify-center pt-8">
           {/* Custom Legend Side (Absolute to keep Pie centered) */}
-          {!selectedCategory && (
-            <div 
-              className={`absolute top-0 bottom-0 z-10 flex flex-col gap-3 min-w-[150px] max-w-[240px] justify-center pr-6 pl-6 custom-scrollbar ${
-                alignTitle === 'right' ? 'right-0 items-end text-right' : 'left-0 items-start text-left'
-              }`}
-              style={{ overflowY: 'auto', overflowX: 'visible' }}
-            >
-              {currentData.map((entry, index) => {
-                const isSpecial = entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
-                const percentageValue = currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
-                let pulseClass = "";
-                let classification = "";
-                if (isSpecial) {
-                  if (percentageValue <= 25) {
-                    pulseClass = "animate-pulse-green";
-                    classification = "NÍVEL SEGURO";
-                  } else if (percentageValue <= 50) {
-                    pulseClass = "animate-pulse-yellow";
-                    classification = "NÍVEL ALERTA";
-                  } else if (percentageValue <= 75) {
-                    pulseClass = "animate-pulse-orange";
-                    classification = "NÍVEL CRÍTICO";
-                  } else {
-                    pulseClass = "animate-pulse-red";
-                    classification = "NÍVEL INSOLVENTE";
-                  }
-                }
+          <div 
+            className={`absolute top-0 bottom-0 z-10 flex flex-col gap-3 min-w-[150px] max-w-[240px] justify-center pr-6 pl-6 pt-20 pb-10 custom-scrollbar ${
+              alignTitle === 'right' ? 'right-0 items-end text-right' : 'left-0 items-start text-left'
+            }`}
+            style={{ overflowY: 'auto', overflowX: 'visible' }}
+          >
+            {currentData.map((entry, index) => {
+              const isSpecial = !selectedCategory && entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+              const percentageValue = currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
+              let pulseClass = "";
+              if (isSpecial) {
+                if (percentageValue <= 25) pulseClass = "animate-pulse-green";
+                else if (percentageValue <= 50) pulseClass = "animate-pulse-yellow";
+                else if (percentageValue <= 75) pulseClass = "animate-pulse-orange";
+                else pulseClass = "animate-pulse-red";
+              }
 
-                return (
-                  <div 
-                    key={index} 
-                    className={`flex flex-col group cursor-pointer transition-all hover:scale-105 px-2 py-1 rounded-lg relative ${
-                      alignTitle === 'right' ? 'hover:origin-right' : 'hover:origin-left'
-                    }`}
-                    style={{ overflow: 'visible' }}
-                    onClick={() => setSelectedCategory(entry.name)}
-                    onMouseEnter={() => setActiveIndex(index)}
-                    onMouseLeave={() => setActiveIndex(null)}
-                  >
-                    <div className={`flex items-center gap-3 relative ${alignTitle === 'right' ? 'flex-row-reverse' : 'flex-row'}`} style={{ overflow: 'visible' }}>
-                      <div 
-                        className={`w-2.5 h-2.5 rounded-full shrink-0 relative z-10 ${pulseClass}`} 
-                        style={{ backgroundColor: pulseClass ? undefined : COLORS[index % COLORS.length] }} 
-                      />
-                      <div className={`flex flex-col ${alignTitle === 'right' ? 'items-end' : 'items-start'}`}>
-                        <span className={`text-xs font-black uppercase tracking-widest truncate text-white/70 group-hover:text-white ${isSpecial ? 'text-white' : ''}`}>
-                          {entry.name}
-                        </span>
-                      </div>
+              return (
+                <div 
+                  key={index} 
+                  className={`flex flex-col group transition-all hover:scale-105 px-2 py-1 rounded-lg relative ${
+                    alignTitle === 'right' ? 'hover:origin-right' : 'hover:origin-left'
+                  } ${selectedCategory ? 'cursor-default' : 'cursor-pointer'}`}
+                  style={{ overflow: 'visible' }}
+                  onClick={() => !selectedCategory && setSelectedCategory(entry.name)}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onMouseLeave={() => setActiveIndex(null)}
+                >
+                  <div className={`flex items-center gap-3 relative ${alignTitle === 'right' ? 'flex-row-reverse' : 'flex-row'}`} style={{ overflow: 'visible' }}>
+                    <div 
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 relative z-10 ${pulseClass}`} 
+                      style={{ backgroundColor: pulseClass ? undefined : COLORS[index % COLORS.length] }} 
+                    />
+                    <div className={`flex flex-col ${alignTitle === 'right' ? 'items-end' : 'items-start'}`}>
+                      <span className={`text-[10px] font-black uppercase tracking-widest truncate text-white/70 group-hover:text-white ${isSpecial ? 'text-white' : ''}`}>
+                        {entry.name}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
 
           {/* Custom Tooltip that reacts to legend hover too */}
           {activeIndex !== null && (
@@ -262,7 +255,8 @@ export function CategoryPie({
             >
               {(() => {
                 const entry = currentData[activeIndex];
-                const isSpecial = entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+                if (!entry) return null;
+                const isSpecial = entry.name && entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
                 const percentageValue = currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
                 
                 let color = COLORS[activeIndex % COLORS.length];

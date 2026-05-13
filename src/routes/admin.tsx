@@ -45,7 +45,7 @@ function AdminPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-3">
               <ShieldCheck className="h-8 w-8 text-accent animate-pulse" />
-              <h1 className="text-3xl font-black tracking-[0.15em] text-gradient uppercase">
+              <h1 className="text-4xl font-black tracking-[0.15em] text-gradient uppercase">
                 Central Administrativa
               </h1>
             </div>
@@ -222,8 +222,7 @@ function CategoryManager() {
 
   const fetchCategories = async () => {
     try {
-      // const { data: official } = await supabase.from("categories").select("*").order("name");
-      const official: any[] = [];
+      const { data: official } = await supabase.from("categories").select("*").order("name");
       const { data: fromTxs } = await supabase.from("transactions").select("category, description, type");
       
       let merged: Category[] = (official || []) as Category[];
@@ -290,7 +289,6 @@ function CategoryManager() {
         console.log("Pai oficializado com novo ID:", finalParentId);
       }
 
-      /*
       const { error } = await supabase.from("categories").insert({
         name: nameToUse.trim().toUpperCase(),
         type: typeToUse,
@@ -298,8 +296,6 @@ function CategoryManager() {
         user_id: user.id
       });
       if (error) throw error;
-      */
-      toast.info("Apenas categorias do histórico são suportadas no momento.");
 
       toast.success("Cadastrado com sucesso!");
       setNewName("");
@@ -346,7 +342,6 @@ function CategoryManager() {
         }
       }
 
-      /*
       if (isTemp) {
         await supabase.from("categories").insert({
           name: newNameClean,
@@ -358,8 +353,6 @@ function CategoryManager() {
         await supabase
           .from("categories").update({ name: newNameClean }).eq("id", id);
       }
-      */
-      toast.info("Edição de categorias desativada (tabela inexistente)");
 
       toast.success("Atualizado com sucesso!");
       setEditingId(null);
@@ -408,8 +401,7 @@ function CategoryManager() {
       }
 
       if (confirm(`Excluir "${item.name}"?`)) {
-        // await supabase.from("categories").delete().eq("id", id);
-        toast.info("Exclusão desativada (tabela inexistente)");
+        await supabase.from("categories").delete().eq("id", id);
         fetchCategories();
       }
     } catch (err) {

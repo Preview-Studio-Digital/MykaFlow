@@ -86,17 +86,25 @@ function Dashboard() {
       load();
       const syncProfile = async () => {
         try {
-          const { error } = await supabase.from("profiles").upsert({
+          const profilePromise = supabase.from("profiles").upsert({
             id: user.id,
             display_name: (user.user_metadata?.display_name || user.email?.split("@")[0] || "USUÁRIO").toUpperCase(),
             email: user.email
           });
-          if (!error) {
-            const { data: pData } = await supabase.from("profiles").select("id, display_name, email");
-            if (pData) setProfiles(pData);
-          }
+          
+          // Garante que o usuário tenha pelo menos a role 'user' se não tiver nada
+          const rolePromise = supabase.from("user_roles").select("role").eq("user_id", user.id).maybeSingle().then(({ data }) => {
+            if (!data) {
+              return supabase.from("user_roles").insert({ user_id: user.id, role: "user" });
+            }
+          });
+
+          await Promise.all([profilePromise, rolePromise]);
+          
+          const { data: pData } = await supabase.from("profiles").select("id, display_name, email");
+          if (pData) setProfiles(pData);
         } catch (err) {
-          console.error("Profile sync fail:", err);
+          console.error("Profile/Role sync fail:", err);
         }
       };
       syncProfile();
@@ -239,7 +247,7 @@ function Dashboard() {
             <Zap className="h-6 w-6 text-accent" />
           </div>
           <div>
-            <h1 className="text-4xl font-black tracking-[0.12em] text-gradient leading-none mb-1">MYKAFLOW</h1>
+            <h1 className="text-5xl font-black tracking-[0.12em] text-gradient leading-none mb-1">MYKAFLOW</h1>
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground whitespace-nowrap">
               Controle financeiro empresarial
             </p>

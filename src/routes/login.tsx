@@ -45,7 +45,7 @@ function LoginPage() {
         <div className="mb-8 flex flex-col items-center gap-2 text-center">
           <div className="flex items-center gap-2">
             <Zap className="h-8 w-8 text-accent" />
-            <h1 className="text-3xl font-extrabold tracking-widest text-gradient">MYKAFLOW</h1>
+            <h1 className="text-4xl font-extrabold tracking-widest text-gradient">MYKAFLOW</h1>
           </div>
           <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground">
             {mode === "signin" ? "Acesso seguro" : "Registro ADM"}

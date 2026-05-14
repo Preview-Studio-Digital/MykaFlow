@@ -88,10 +88,6 @@ export function CategoryPie({
   const COLORS = type === "income" ? INCOME_COLORS : EXPENSE_COLORS;
   const total = data.reduce((a, b) => a + b.value, 0);
 
-  if (!mounted) {
-    return <div className="glass rounded-2xl h-full min-h-[260px] animate-pulse bg-white/5" />;
-  }
-
   const drillDownData = useMemo(() => {
     if (!selectedCategory) return [];
     
@@ -115,6 +111,10 @@ export function CategoryPie({
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
   }, [selectedCategory, transactions]);
+
+  if (!mounted) {
+    return <div className="glass rounded-2xl h-full min-h-[260px] animate-pulse bg-white/5" />;
+  }
 
   const currentData = selectedCategory ? drillDownData : data;
   const currentTotal = selectedCategory ? drillDownData.reduce((a, b) => a + b.value, 0) : total;

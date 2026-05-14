@@ -16,24 +16,24 @@ export type Database = {
     Tables: {
       financial_categories: {
         Row: {
-          created_at: string
+          created_at: string | null
           id: string
           name: string
-          type: Database["public"]["Enums"]["transaction_type"]
+          type: string
           user_id: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           id?: string
           name: string
-          type: Database["public"]["Enums"]["transaction_type"]
+          type: string
           user_id?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           id?: string
           name?: string
-          type?: Database["public"]["Enums"]["transaction_type"]
+          type?: string
           user_id?: string | null
         }
         Relationships: []
@@ -41,21 +41,21 @@ export type Database = {
       financial_subcategories: {
         Row: {
           category_id: string | null
-          created_at: string
+          created_at: string | null
           id: string
           name: string
           user_id: string | null
         }
         Insert: {
           category_id?: string | null
-          created_at?: string
+          created_at?: string | null
           id?: string
           name: string
           user_id?: string | null
         }
         Update: {
           category_id?: string | null
-          created_at?: string
+          created_at?: string | null
           id?: string
           name?: string
           user_id?: string | null
@@ -95,12 +95,14 @@ export type Database = {
         Row: {
           amount: number
           category: string
+          category_id: string | null
           category_id_v2: string | null
           created_at: string
           description: string | null
           id: string
           nature: Database["public"]["Enums"]["transaction_nature"]
           occurred_on: string
+          subcategory_id: string | null
           subcategory_id_v2: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
@@ -108,12 +110,14 @@ export type Database = {
         Insert: {
           amount: number
           category: string
+          category_id?: string | null
           category_id_v2?: string | null
           created_at?: string
           description?: string | null
           id?: string
           nature?: Database["public"]["Enums"]["transaction_nature"]
           occurred_on?: string
+          subcategory_id?: string | null
           subcategory_id_v2?: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
@@ -121,12 +125,14 @@ export type Database = {
         Update: {
           amount?: number
           category?: string
+          category_id?: string | null
           category_id_v2?: string | null
           created_at?: string
           description?: string | null
           id?: string
           nature?: Database["public"]["Enums"]["transaction_nature"]
           occurred_on?: string
+          subcategory_id?: string | null
           subcategory_id_v2?: string | null
           type?: Database["public"]["Enums"]["transaction_type"]
           user_id?: string

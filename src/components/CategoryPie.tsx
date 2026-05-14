@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, 
   Sector
 } from "recharts";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { fmtCurrency } from "@/lib/finance-constants";
 import { ChevronLeft } from "lucide-react";
 import { type TxRow } from "./TransactionList";

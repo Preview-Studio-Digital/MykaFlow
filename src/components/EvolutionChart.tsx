@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { Activity, ChevronLeft } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 interface Tx {
   type: "income" | "expense";
@@ -513,7 +513,7 @@ export function EvolutionChart({
               dataKey="saldo"
               stroke="none"
               fill="url(#fillPositive)"
-              baseValue={dataMin}
+              baseValue="dataMin"
               legendType="none"
               tooltipType="none"
               animationDuration={1000}
@@ -525,7 +525,7 @@ export function EvolutionChart({
               dataKey="saldo"
               stroke="none"
               fill="url(#fillNegative)"
-              baseValue={dataMax}
+              baseValue="dataMax"
               legendType="none"
               tooltipType="none"
               animationDuration={1000}

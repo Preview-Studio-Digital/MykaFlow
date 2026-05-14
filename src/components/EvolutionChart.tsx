@@ -123,16 +123,27 @@ export function EvolutionChart({
   const annualData = useMemo(() => {
     if (!mounted) return [];
     const monthly = MONTHS_PT.map((m, i) => ({ month: m, receitas: 0, despesas: 0, idx: i }));
+    
+    let initialBalance = 0;
     for (const t of data) {
       const d = new Date(t.occurred_on + "T00:00:00");
-      if (d.getFullYear() !== year) continue;
-      const m = monthly[d.getMonth()];
-      if (t.type === "income") m.receitas += Number(t.amount);
-      else m.despesas += Number(t.amount);
+      const amount = Number(t.amount) || 0;
+      
+      if (d.getFullYear() < year) {
+        initialBalance += t.type === "income" ? amount : -amount;
+        continue;
+      }
+      
+      if (d.getFullYear() === year) {
+        const m = monthly[d.getMonth()];
+        if (m) {
+          if (t.type === "income") m.receitas += amount;
+          else m.despesas += amount;
+        }
+      }
     }
 
-    // Adiciona o saldo acumulado mês a mês para a curva anual
-    let running = 0;
+    let running = initialBalance;
     return monthly.map((m) => {
       running += m.receitas - m.despesas;
       return { ...m, saldo: running };
@@ -145,7 +156,7 @@ export function EvolutionChart({
 
   // Dados Mensais (por dia) - Cumulativos
   const dailyData = useMemo(() => {
-    if (effectiveViewMode === "annual") return [];
+    if (effectiveViewMode === "annual" || !mounted) return [];
 
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const days = Array.from({ length: daysInMonth }, (_, i) => ({
@@ -155,19 +166,26 @@ export function EvolutionChart({
       day: i + 1,
     }));
 
-    // 1. Soma os valores exatos de cada dia
+    let initialBalance = 0;
+    const startOfMonth = new Date(year, month, 1).getTime();
+
     for (const t of data) {
       const d = new Date(t.occurred_on + "T00:00:00");
-      if (d.getFullYear() === year && d.getMonth() === month) {
+      const tTime = d.getTime();
+      const amount = Number(t.amount) || 0;
+
+      if (tTime < startOfMonth) {
+        initialBalance += t.type === "income" ? amount : -amount;
+      } else if (d.getFullYear() === year && d.getMonth() === month) {
         const dayIdx = d.getDate() - 1;
         if (days[dayIdx]) {
-          if (t.type === "income") days[dayIdx].receitas += Number(t.amount);
-          else days[dayIdx].despesas += Number(t.amount);
+          if (t.type === "income") days[dayIdx].receitas += amount;
+          else days[dayIdx].despesas += amount;
         }
       }
     }
 
-    let runningSaldo = 0;
+    let runningSaldo = initialBalance;
     return days.map((d) => {
       runningSaldo += d.receitas - d.despesas;
       return {
@@ -175,7 +193,7 @@ export function EvolutionChart({
         saldo: runningSaldo,
       };
     });
-  }, [data, year, effectiveViewMode, month]);
+  }, [data, year, effectiveViewMode, month, mounted]);
 
   const currentAnnualBalance = useMemo(() => {
     return annualData
@@ -463,7 +481,10 @@ export function EvolutionChart({
               fontSize={11}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v) => {
+                if (Math.abs(v) >= 1000) return `R$ ${(v / 1000).toFixed(1)}k`;
+                return `R$ ${v.toFixed(0)}`;
+              }}
             />
             <YAxis
               yAxisId="right"
@@ -474,7 +495,10 @@ export function EvolutionChart({
               fontSize={11}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v) => {
+                if (Math.abs(v) >= 1000) return `R$ ${(v / 1000).toFixed(1)}k`;
+                return `R$ ${v.toFixed(0)}`;
+              }}
             />
             <Tooltip
               cursor={false}

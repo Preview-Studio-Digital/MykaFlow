@@ -54,7 +54,7 @@ function Dashboard() {
         profilesList.push({
           id: user.id,
           display_name: (user.user_metadata?.display_name || user.email?.split("@")[0] || "USUÁRIO").toUpperCase(),
-          email: user.email
+          email: user.email ?? null
         });
       }
 

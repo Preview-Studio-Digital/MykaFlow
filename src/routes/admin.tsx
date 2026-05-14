@@ -240,7 +240,7 @@ function CategoryManager() {
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase.from("categories").select("*").order("name");
+    const { data, error } = await supabase.from("financial_categories").select("*").order("name");
     if (!error && data) setCategories(data);
     setLoading(false);
   }
@@ -249,13 +249,13 @@ function CategoryManager() {
 
   async function handleAdd() {
     if (!newName) return;
-    const { error } = await supabase.from("categories").insert({ name: newName.trim().toUpperCase(), type: newType });
+    const { error } = await supabase.from("financial_categories").insert({ name: newName.trim().toUpperCase(), type: newType });
     if (!error) { toast.success("Categoria adicionada"); setNewName(""); load(); }
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Excluir categoria?")) return;
-    const { error } = await supabase.from("categories").delete().eq("id", id);
+    const { error } = await supabase.from("financial_categories").delete().eq("id", id);
     if (!error) { toast.success("Excluída"); load(); }
   }
 

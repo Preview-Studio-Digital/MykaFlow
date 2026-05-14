@@ -40,21 +40,21 @@ export type Database = {
       }
       financial_subcategories: {
         Row: {
-          category_id: string | null
+          category_id: string
           created_at: string | null
           id: string
           name: string
           user_id: string | null
         }
         Insert: {
-          category_id?: string | null
+          category_id: string
           created_at?: string | null
           id?: string
           name: string
           user_id?: string | null
         }
         Update: {
-          category_id?: string | null
+          category_id?: string
           created_at?: string | null
           id?: string
           name?: string

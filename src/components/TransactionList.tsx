@@ -38,10 +38,10 @@ export function TransactionList({
   const [filterNature, setFilterNature] = useState("");
   const [filterUser, setFilterUser] = useState("");
 
-  const filteredRows = rows.filter(r => {
+  const filteredRows = rows.filter((r) => {
     const day = new Date(r.occurred_on + "T00:00:00").getDate().toString();
     const sub = (r.description || "").split(" - ")[0] || "";
-    
+
     if (filterDay && day !== filterDay) return false;
     if (filterType && r.type !== filterType) return false;
     if (filterCategory && r.category !== filterCategory) return false;
@@ -51,10 +51,16 @@ export function TransactionList({
     return true;
   });
 
-  const uniqueDays = Array.from(new Set(rows.map(r => new Date(r.occurred_on + "T00:00:00").getDate().toString()))).sort((a,b) => Number(a)-Number(b));
-  const uniqueCats = Array.from(new Set(rows.map(r => r.category))).sort();
-  const uniqueSubs = Array.from(new Set(rows.map(r => (r.description || "").split(" - ")[0] || ""))).filter(Boolean).sort();
-  const uniqueUsers = Array.from(new Set(rows.map(r => r.user_id)));
+  const uniqueDays = Array.from(
+    new Set(rows.map((r) => new Date(r.occurred_on + "T00:00:00").getDate().toString())),
+  ).sort((a, b) => Number(a) - Number(b));
+  const uniqueCats = Array.from(new Set(rows.map((r) => r.category))).sort();
+  const uniqueSubs = Array.from(
+    new Set(rows.map((r) => (r.description || "").split(" - ")[0] || "")),
+  )
+    .filter(Boolean)
+    .sort();
+  const uniqueUsers = Array.from(new Set(rows.map((r) => r.user_id)));
 
   async function remove(id: string) {
     if (!confirm("Excluir este lançamento?")) return;
@@ -80,49 +86,101 @@ export function TransactionList({
         {/* Filters Bar - Now inside the table container */}
         <div className="p-4 bg-white/[0.02] border-b border-white/5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="flex flex-col gap-1">
-            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">Dia</span>
-            <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none">
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">
+              Dia
+            </span>
+            <select
+              value={filterDay}
+              onChange={(e) => setFilterDay(e.target.value)}
+              className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none"
+            >
               <option value="">TODOS</option>
-              {uniqueDays.map(d => <option key={d} value={d}>{d}</option>)}
+              {uniqueDays.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">Tipo</span>
-            <select value={filterType} onChange={e => setFilterType(e.target.value)} className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none">
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">
+              Tipo
+            </span>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none"
+            >
               <option value="">TODOS</option>
               <option value="income">RECEITA</option>
               <option value="expense">DESPESA</option>
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">Categoria</span>
-            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none">
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">
+              Categoria
+            </span>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none"
+            >
               <option value="">TODAS</option>
-              {uniqueCats.map(c => <option key={c} value={c}>{c}</option>)}
+              {uniqueCats.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">Subcategoria</span>
-            <select value={filterSub} onChange={e => setFilterSub(e.target.value)} className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none">
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">
+              Subcategoria
+            </span>
+            <select
+              value={filterSub}
+              onChange={(e) => setFilterSub(e.target.value)}
+              className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none"
+            >
               <option value="">TODAS</option>
-              {uniqueSubs.map(s => <option key={s} value={s}>{s}</option>)}
+              {uniqueSubs.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">Natureza</span>
-            <select value={filterNature} onChange={e => setFilterNature(e.target.value)} className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none">
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">
+              Natureza
+            </span>
+            <select
+              value={filterNature}
+              onChange={(e) => setFilterNature(e.target.value)}
+              className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none"
+            >
               <option value="">TODAS</option>
               <option value="fixed">FIXA</option>
               <option value="variable">VARIÁVEL</option>
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">Autor</span>
-            <select value={filterUser} onChange={e => setFilterUser(e.target.value)} className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none">
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground ml-1">
+              Autor
+            </span>
+            <select
+              value={filterUser}
+              onChange={(e) => setFilterUser(e.target.value)}
+              className="input-futuristic h-9 rounded-xl px-3 py-0 text-[10px] uppercase font-bold outline-none"
+            >
               <option value="">TODOS</option>
-              {uniqueUsers.map(u => {
-                const p = allProfiles.find(ap => ap.id === u);
-                return <option key={u} value={u}>{p?.display_name || p?.email || "DESCONHECIDO"}</option>
+              {uniqueUsers.map((u) => {
+                const p = allProfiles.find((ap) => ap.id === u);
+                return (
+                  <option key={u} value={u}>
+                    {p?.display_name || p?.email || "DESCONHECIDO"}
+                  </option>
+                );
               })}
             </select>
           </div>
@@ -175,7 +233,9 @@ export function TransactionList({
                       </td>
                       <td className="px-4 py-4 text-center font-bold">{r.category}</td>
                       <td className="px-4 py-4 text-muted-foreground text-center">{sub}</td>
-                      <td className="px-4 py-4 text-muted-foreground italic text-xs text-center">{desc}</td>
+                      <td className="px-4 py-4 text-muted-foreground italic text-xs text-center">
+                        {desc}
+                      </td>
                       <td className="px-4 py-4 text-[10px] uppercase tracking-widest text-muted-foreground/80 font-black text-center">
                         {r.nature === "fixed" ? "Fixa" : "Variável"}
                       </td>
@@ -187,7 +247,9 @@ export function TransactionList({
                         {r.type === "income" ? "+" : "−"} {fmtCurrency(Number(r.amount))}
                       </td>
                       <td className="px-4 py-4 text-[10px] uppercase tracking-widest text-muted-foreground/80 font-black text-center">
-                        {allProfiles.find(p => p.id === r.user_id)?.display_name || allProfiles.find(p => p.id === r.user_id)?.email || "AUTOR DESCONHECIDO"}
+                        {allProfiles.find((p) => p.id === r.user_id)?.display_name ||
+                          allProfiles.find((p) => p.id === r.user_id)?.email ||
+                          "AUTOR DESCONHECIDO"}
                       </td>
                       <td className="px-2 py-4">
                         <div className="flex items-center gap-1">
@@ -217,7 +279,7 @@ export function TransactionList({
       </div>
 
       {editingTx && (
-        <TransactionEditDialog 
+        <TransactionEditDialog
           isOpen={!!editingTx}
           transaction={editingTx}
           onClose={() => setEditingTx(null)}

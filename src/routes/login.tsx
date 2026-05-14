@@ -40,7 +40,9 @@ function LoginPage() {
           console.error("Signup Error:", error);
           window.alert("ERRO NO REGISTRO: " + error);
         } else {
-          window.alert("CONTA CRIADA! Verifique se recebeu um e-mail de confirmação ou tente fazer login direto.");
+          window.alert(
+            "CONTA CRIADA! Verifique se recebeu um e-mail de confirmação ou tente fazer login direto.",
+          );
           setMode("signin");
         }
       }

@@ -10,7 +10,11 @@ interface AuthCtx {
   role: Role;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, displayName: string) => Promise<{ error: string | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    displayName: string,
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   fetchRole: (uid: string) => Promise<void>;
 }
@@ -55,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select("role")
         .eq("user_id", uid)
         .maybeSingle();
-      
+
       // Se não tiver role, assumimos que é 'pending' para os novos
       setRole((data?.role as Role) ?? "pending");
     } catch (err) {
@@ -87,7 +91,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, loading, signIn, signUp, signOut, fetchRole }}>
+    <AuthContext.Provider
+      value={{ user, session, role, loading, signIn, signUp, signOut, fetchRole }}
+    >
       {children}
     </AuthContext.Provider>
   );

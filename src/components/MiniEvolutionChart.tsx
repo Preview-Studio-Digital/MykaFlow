@@ -25,7 +25,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1 text-muted-foreground">
           Dia {label}
         </p>
-        <div className={`flex items-center gap-3 text-sm font-bold ${saldo >= 0 ? 'text-accent' : 'text-destructive'}`}>
+        <div
+          className={`flex items-center gap-3 text-sm font-bold ${saldo >= 0 ? "text-accent" : "text-destructive"}`}
+        >
           <span className="font-mono">{fmtCurrency(saldo)}</span>
         </div>
       </div>
@@ -34,16 +36,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function MiniEvolutionChart({ 
-  data, 
-  year, 
-  month
-}: { 
-  data: Tx[]; 
-  year: number; 
+export function MiniEvolutionChart({
+  data,
+  year,
+  month,
+}: {
+  data: Tx[];
+  year: number;
   month: number;
 }) {
-
   const dailyData = useMemo(() => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const days = Array.from({ length: daysInMonth }, (_, i) => ({
@@ -51,7 +52,7 @@ export function MiniEvolutionChart({
       receitas: 0,
       despesas: 0,
       day: i + 1,
-      date: new Date(year, month, i + 1)
+      date: new Date(year, month, i + 1),
     }));
 
     for (const t of data) {
@@ -66,16 +67,16 @@ export function MiniEvolutionChart({
     }
 
     let runningSaldo = 0;
-    const allDays = days.map(d => {
-      runningSaldo += (d.receitas - d.despesas);
+    const allDays = days.map((d) => {
+      runningSaldo += d.receitas - d.despesas;
       return {
         ...d,
-        saldo: runningSaldo
+        saldo: runningSaldo,
       };
     });
 
     // Filtrar finais de semana (0 = Domingo, 6 = Sábado)
-    return allDays.filter(d => {
+    return allDays.filter((d) => {
       const dayOfWeek = d.date.getDay();
       return dayOfWeek !== 0 && dayOfWeek !== 6;
     });
@@ -85,18 +86,18 @@ export function MiniEvolutionChart({
     if (dailyData.length === 0) return { gradientOffset: 1, dataMin: 0, dataMax: 0 };
     const max = Math.max(...dailyData.map((d) => d.saldo));
     const min = Math.min(...dailyData.map((d) => d.saldo));
-    
+
     // All negative
     if (max <= 0) return { gradientOffset: 0, dataMin: min, dataMax: 0 };
     // All positive
     if (min >= 0) return { gradientOffset: 1, dataMin: 0, dataMax: max };
-    
+
     // Mixed: symmetric domain so zero is exactly at 50%
     const absMax = Math.max(Math.abs(max), Math.abs(min));
-    return { 
+    return {
       gradientOffset: 0.5,
       dataMin: -absMax,
-      dataMax: absMax
+      dataMax: absMax,
     };
   }, [dailyData]);
 
@@ -115,10 +116,7 @@ export function MiniEvolutionChart({
       </h3>
       <div className="flex-1 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart 
-            data={dailyData}
-            margin={{ top: 10, right: 40, left: 40, bottom: 0 }}
-          >
+          <AreaChart data={dailyData} margin={{ top: 10, right: 40, left: 40, bottom: 0 }}>
             <defs>
               <linearGradient id="miniSplitFill" x1="0" y1="0" x2="0" y2="1">
                 {gradientOffset >= 1 ? (
@@ -134,8 +132,16 @@ export function MiniEvolutionChart({
                 ) : (
                   <>
                     <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.4} />
-                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.4} />
-                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.4} />
+                    <stop
+                      offset={`${(gradientOffset * 100).toFixed(2)}%`}
+                      stopColor="oklch(0.8 0.16 150)"
+                      stopOpacity={0.4}
+                    />
+                    <stop
+                      offset={`${(gradientOffset * 100).toFixed(2)}%`}
+                      stopColor="oklch(0.7 0.2 30)"
+                      stopOpacity={0.4}
+                    />
                     <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.4} />
                   </>
                 )}
@@ -154,18 +160,30 @@ export function MiniEvolutionChart({
                 ) : (
                   <>
                     <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                    <stop offset={`${(gradientOffset * 100).toFixed(2)}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                    <stop
+                      offset={`${(gradientOffset * 100).toFixed(2)}%`}
+                      stopColor="oklch(0.8 0.16 150)"
+                      stopOpacity={1}
+                    />
+                    <stop
+                      offset={`${(gradientOffset * 100).toFixed(2)}%`}
+                      stopColor="oklch(0.7 0.2 30)"
+                      stopOpacity={1}
+                    />
                     <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
                   </>
                 )}
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="oklch(0.78 0.16 220 / 0.1)" strokeDasharray="3 3" vertical={false} />
-            <XAxis 
-              dataKey="day" 
-              stroke="oklch(0.7 0.04 235)" 
-              fontSize={10} 
+            <CartesianGrid
+              stroke="oklch(0.78 0.16 220 / 0.1)"
+              strokeDasharray="3 3"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="day"
+              stroke="oklch(0.7 0.04 235)"
+              fontSize={10}
               axisLine={false}
               tickLine={false}
             />
@@ -210,7 +228,13 @@ export function MiniEvolutionChart({
               tooltipType="none"
               animationDuration={0}
             />
-            <ReferenceLine yAxisId="left" y={0} stroke="white" strokeWidth={1} strokeOpacity={0.5} />
+            <ReferenceLine
+              yAxisId="left"
+              y={0}
+              stroke="white"
+              strokeWidth={1}
+              strokeOpacity={0.5}
+            />
           </AreaChart>
         </ResponsiveContainer>
       </div>

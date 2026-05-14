@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Outlet, Link, createRootRouteWithContext, useRouter, HeadContent, Scripts } from "@tanstack/react-router";
+import {
+  Outlet,
+  Link,
+  createRootRouteWithContext,
+  useRouter,
+  HeadContent,
+  Scripts,
+} from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
 
@@ -32,7 +39,9 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">This page didn't load</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          This page didn't load
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
@@ -67,12 +76,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "MykaFlow: sistema de controle de receitas e despesas." },
       { name: "author", content: "MykaFlow" },
       { property: "og:title", content: "MykaFlow — Controle Financeiro Empresarial" },
-      { property: "og:description", content: "MykaFlow: sistema de controle de receitas e despesas." },
+      {
+        property: "og:description",
+        content: "MykaFlow: sistema de controle de receitas e despesas.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "MykaFlow — Controle Financeiro Empresarial" },
-      { name: "twitter:description", content: "MykaFlow: sistema de controle de receitas e despesas." },
+      {
+        name: "twitter:description",
+        content: "MykaFlow: sistema de controle de receitas e despesas.",
+      },
       {
         property: "og:image",
         content:

@@ -14,13 +14,7 @@ export const EXPENSE_CATEGORIES = [
   "Outros",
 ];
 
-export const INCOME_CATEGORIES = [
-  "Vendas",
-  "Serviços",
-  "Investimentos",
-  "Comissões",
-  "Outros",
-];
+export const INCOME_CATEGORIES = ["Vendas", "Serviços", "Investimentos", "Comissões", "Outros"];
 
 export const MONTHS_PT = [
   "Janeiro",

@@ -1,9 +1,8 @@
+import { createClient } from "@supabase/supabase-js";
+import * as dotenv from "dotenv";
+import { resolve } from "path";
 
-import { createClient } from '@supabase/supabase-js';
-import * as dotenv from 'dotenv';
-import { resolve } from 'path';
-
-dotenv.config({ path: resolve(process.cwd(), '.env') });
+dotenv.config({ path: resolve(process.cwd(), ".env") });
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -17,7 +16,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function createUser() {
   console.log("Iniciando criação de usuário via script...");
-  
+
   const email = "michely@mykacompressores.com.br";
   const password = "MykaFlow2026";
   const name = "MICHELY";
@@ -26,7 +25,7 @@ async function createUser() {
     email,
     password,
     email_confirm: true,
-    user_metadata: { display_name: name }
+    user_metadata: { display_name: name },
   });
 
   if (error) {
@@ -37,10 +36,10 @@ async function createUser() {
   console.log("Usuário criado no Auth com ID:", created.user.id);
 
   // Criar perfil e cargo manualmente
-  const { error: profileErr } = await supabase.from('profiles').upsert({
+  const { error: profileErr } = await supabase.from("profiles").upsert({
     id: created.user.id,
     display_name: name,
-    email: email
+    email: email,
   });
 
   if (profileErr) {
@@ -49,9 +48,9 @@ async function createUser() {
     console.log("Perfil criado com sucesso!");
   }
 
-  const { error: roleErr } = await supabase.from('user_roles').upsert({
+  const { error: roleErr } = await supabase.from("user_roles").upsert({
     user_id: created.user.id,
-    role: 'user'
+    role: "user",
   });
 
   if (roleErr) {

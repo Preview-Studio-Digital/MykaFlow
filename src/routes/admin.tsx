@@ -5,7 +5,20 @@ import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminPanel } from "@/components/AdminPanel";
 import { listUsers, adminUpdateRole, adminDeleteUser } from "@/lib/admin.functions";
-import { ShieldCheck, ChevronLeft, Users, Plus, Trash2, Edit2, FolderTree, Save, X, TrendingUp, TrendingDown, User as UserIcon } from "lucide-react";
+import {
+  ShieldCheck,
+  ChevronLeft,
+  Users,
+  Plus,
+  Trash2,
+  Edit2,
+  FolderTree,
+  Save,
+  X,
+  TrendingUp,
+  TrendingDown,
+  User as UserIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({
@@ -23,7 +36,7 @@ interface Category {
 function AdminPage() {
   const { user, role, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<"users" | "categories">("users");
-  
+
   const [profiles, setProfiles] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
 
@@ -32,14 +45,14 @@ function AdminPage() {
     try {
       const { data: profs, error: pErr } = await supabase.from("profiles").select("*");
       if (pErr) throw pErr;
-      
+
       const { data: roles, error: rErr } = await supabase.from("user_roles").select("*");
-      
-      const merged = (profs || []).map(p => ({
+
+      const merged = (profs || []).map((p) => ({
         id: p.id,
         email: p.email,
         name: p.display_name || "Sem nome",
-        role: roles?.find(r => r.user_id === p.id)?.role || "user"
+        role: roles?.find((r) => r.user_id === p.id)?.role || "user",
       }));
 
       setProfiles(merged);
@@ -60,17 +73,29 @@ function AdminPage() {
     }
   }, [user, activeTab]);
 
-  if (authLoading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground uppercase tracking-widest text-xs text-center">Carregando Central ADM...</div>;
+  if (authLoading)
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground uppercase tracking-widest text-xs text-center">
+        Carregando Central ADM...
+      </div>
+    );
 
   if (!user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-4 text-center">
         <ShieldCheck className="h-16 w-16 text-muted-foreground opacity-20" />
         <div className="space-y-2">
-          <h1 className="text-2xl font-black tracking-widest text-gradient uppercase">Acesso Restrito</h1>
-          <p className="max-w-xs text-sm text-muted-foreground">Você precisa estar logado como administrador para acessar esta área.</p>
+          <h1 className="text-2xl font-black tracking-widest text-gradient uppercase">
+            Acesso Restrito
+          </h1>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            Você precisa estar logado como administrador para acessar esta área.
+          </p>
         </div>
-        <Link to="/login" className="btn-futuristic rounded-xl px-8 py-3 text-xs font-bold uppercase tracking-widest">
+        <Link
+          to="/login"
+          className="btn-futuristic rounded-xl px-8 py-3 text-xs font-bold uppercase tracking-widest"
+        >
           Ir para Login
         </Link>
       </div>
@@ -84,10 +109,17 @@ function AdminPage() {
           <ShieldCheck className="h-12 w-12 text-red-500" />
         </div>
         <div className="space-y-2">
-          <h1 className="text-2xl font-black tracking-widest text-red-500 uppercase">ACESSO NEGADO</h1>
-          <p className="max-w-xs text-sm text-muted-foreground">Seu usuário ({user.email}) não tem permissões de administrador.</p>
+          <h1 className="text-2xl font-black tracking-widest text-red-500 uppercase">
+            ACESSO NEGADO
+          </h1>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            Seu usuário ({user.email}) não tem permissões de administrador.
+          </p>
         </div>
-        <Link to="/" className="btn-ghost-neon rounded-xl px-8 py-3 text-xs font-bold uppercase tracking-widest">
+        <Link
+          to="/"
+          className="btn-ghost-neon rounded-xl px-8 py-3 text-xs font-bold uppercase tracking-widest"
+        >
           Voltar ao Dashboard
         </Link>
       </div>
@@ -99,12 +131,19 @@ function AdminPage() {
       <div className="mx-auto max-w-6xl">
         <header className="mb-10 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
           <div className="flex items-center gap-4">
-            <Link to="/" className="group flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 transition-all hover:bg-primary/20 hover:border-primary/30">
+            <Link
+              to="/"
+              className="group flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 transition-all hover:bg-primary/20 hover:border-primary/30"
+            >
               <ChevronLeft className="h-6 w-6 text-muted-foreground transition-colors group-hover:text-white" />
             </Link>
             <div>
-              <h1 className="text-4xl font-black tracking-widest text-gradient uppercase leading-none mb-1">Central ADM</h1>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground font-black opacity-60">Gestão de Equipe e Configurações</p>
+              <h1 className="text-4xl font-black tracking-widest text-gradient uppercase leading-none mb-1">
+                Central ADM
+              </h1>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground font-black opacity-60">
+                Gestão de Equipe e Configurações
+              </p>
             </div>
           </div>
 
@@ -112,7 +151,9 @@ function AdminPage() {
             <button
               onClick={() => setActiveTab("users")}
               className={`flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
-                activeTab === "users" ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                activeTab === "users"
+                  ? "bg-primary text-white shadow-lg shadow-primary/20"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
               }`}
             >
               <Users className="h-4 w-4" /> Equipe
@@ -120,7 +161,9 @@ function AdminPage() {
             <button
               onClick={() => setActiveTab("categories")}
               className={`flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
-                activeTab === "categories" ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                activeTab === "categories"
+                  ? "bg-primary text-white shadow-lg shadow-primary/20"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
               }`}
             >
               <FolderTree className="h-4 w-4" /> Categorias
@@ -143,7 +186,15 @@ function AdminPage() {
   );
 }
 
-function UserList({ profiles, loading, onRefresh }: { profiles: any[], loading: boolean, onRefresh: () => void }) {
+function UserList({
+  profiles,
+  loading,
+  onRefresh,
+}: {
+  profiles: any[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
   const delUser = useServerFn(adminDeleteUser);
   const { user: currentUser } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
@@ -151,9 +202,11 @@ function UserList({ profiles, loading, onRefresh }: { profiles: any[], loading: 
   async function toggleRole(targetUserId: string, currentRole: string) {
     setBusy(targetUserId);
     try {
-      const newRole = currentRole === 'admin' ? 'user' : 'admin';
+      const newRole = currentRole === "admin" ? "user" : "admin";
       await supabase.from("user_roles").delete().eq("user_id", targetUserId);
-      const { error } = await supabase.from("user_roles").insert({ user_id: targetUserId, role: newRole });
+      const { error } = await supabase
+        .from("user_roles")
+        .insert({ user_id: targetUserId, role: newRole });
       if (error) throw error;
       toast.success(`Cargo alterado para ${newRole.toUpperCase()}`);
       onRefresh();
@@ -169,7 +222,10 @@ function UserList({ profiles, loading, onRefresh }: { profiles: any[], loading: 
     if (!newName || newName === currentName) return;
     setBusy(targetUserId);
     try {
-      const { error } = await supabase.from("profiles").update({ display_name: newName.trim().toUpperCase() }).eq("id", targetUserId);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ display_name: newName.trim().toUpperCase() })
+        .eq("id", targetUserId);
       if (error) throw error;
       toast.success("Nome atualizado!");
       onRefresh();
@@ -180,7 +236,12 @@ function UserList({ profiles, loading, onRefresh }: { profiles: any[], loading: 
     }
   }
 
-  if (loading) return <div className="p-10 text-center opacity-50 uppercase tracking-widest text-[10px]">Carregando equipe...</div>;
+  if (loading)
+    return (
+      <div className="p-10 text-center opacity-50 uppercase tracking-widest text-[10px]">
+        Carregando equipe...
+      </div>
+    );
 
   return (
     <div className="glass rounded-2xl p-6">
@@ -194,32 +255,51 @@ function UserList({ profiles, loading, onRefresh }: { profiles: any[], loading: 
       </div>
 
       <div className="space-y-3">
-        {profiles.map(p => (
-          <div key={p.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all group">
+        {profiles.map((p) => (
+          <div
+            key={p.id}
+            className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all group"
+          >
             <div className="flex items-center gap-4">
-              <div className={`p-3 rounded-xl transition-all ${p.role === 'admin' ? 'bg-accent/20 text-accent glow-sm' : 'bg-white/5 text-muted-foreground'}`}>
-                {p.role === 'admin' ? <ShieldCheck className="h-5 w-5" /> : <UserIcon className="h-5 w-5" />}
+              <div
+                className={`p-3 rounded-xl transition-all ${p.role === "admin" ? "bg-accent/20 text-accent glow-sm" : "bg-white/5 text-muted-foreground"}`}
+              >
+                {p.role === "admin" ? (
+                  <ShieldCheck className="h-5 w-5" />
+                ) : (
+                  <UserIcon className="h-5 w-5" />
+                )}
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="font-bold text-sm uppercase tracking-widest">{p.name}</p>
-                  {p.id === currentUser?.id && <span className="text-[8px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-md font-black">VOCÊ</span>}
+                  {p.id === currentUser?.id && (
+                    <span className="text-[8px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-md font-black">
+                      VOCÊ
+                    </span>
+                  )}
                 </div>
-                <p className="text-[10px] text-muted-foreground font-mono opacity-60 mt-0.5">{p.email}</p>
+                <p className="text-[10px] text-muted-foreground font-mono opacity-60 mt-0.5">
+                  {p.email}
+                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               {p.id !== currentUser?.id && (
                 <>
-                  <button onClick={() => handleEditName(p.id, p.name)} className="p-2 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-lg transition-all" title="Editar Nome">
+                  <button
+                    onClick={() => handleEditName(p.id, p.name)}
+                    className="p-2 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-lg transition-all"
+                    title="Editar Nome"
+                  >
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button 
-                    onClick={() => toggleRole(p.id, p.role)} 
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${p.role === 'admin' ? 'border-accent/40 text-accent bg-accent/5' : 'border-white/10 text-muted-foreground hover:border-white/40'}`}
+                  <button
+                    onClick={() => toggleRole(p.id, p.role)}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${p.role === "admin" ? "border-accent/40 text-accent bg-accent/5" : "border-white/10 text-muted-foreground hover:border-white/40"}`}
                   >
-                    {busy === p.id ? '...' : p.role === 'admin' ? 'Rebaixar' : 'Tornar ADM'}
+                    {busy === p.id ? "..." : p.role === "admin" ? "Rebaixar" : "Tornar ADM"}
                   </button>
                 </>
               )}
@@ -259,7 +339,9 @@ function CategoryManager() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   async function handleAdd() {
     if (!newName.trim() || !user) return;
@@ -268,7 +350,10 @@ function CategoryManager() {
       type: newType,
       user_id: user.id,
     });
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Categoria adicionada");
     setNewName("");
     load();
@@ -277,7 +362,10 @@ function CategoryManager() {
   async function handleDelete(id: string) {
     if (!confirm("Excluir categoria? Subcategorias vinculadas também serão removidas.")) return;
     const { error } = await supabase.from("financial_categories").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Excluída");
     load();
   }
@@ -291,7 +379,10 @@ function CategoryManager() {
       category_id: categoryId,
       user_id: user.id,
     });
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Subcategoria adicionada");
     load();
   }
@@ -299,12 +390,15 @@ function CategoryManager() {
   async function handleDeleteSub(id: string) {
     if (!confirm("Excluir subcategoria?")) return;
     const { error } = await supabase.from("financial_subcategories").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Subcategoria excluída");
     load();
   }
 
-  const filtered = categories.filter(c => filterType === "all" || c.type === filterType);
+  const filtered = categories.filter((c) => filterType === "all" || c.type === filterType);
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -315,20 +409,31 @@ function CategoryManager() {
         <div className="space-y-4">
           <input
             value={newName}
-            onChange={e => setNewName(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === "Enter" && handleAdd()}
+            onChange={(e) => setNewName(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             placeholder="NOME DA CATEGORIA"
             className="input-futuristic w-full rounded-xl px-4 py-3 text-sm uppercase font-bold"
           />
           <div className="flex gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
-            <button onClick={() => setNewType("expense")} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === 'expense' ? 'bg-red-500/20 text-red-400' : 'text-muted-foreground'}`}>
+            <button
+              onClick={() => setNewType("expense")}
+              className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === "expense" ? "bg-red-500/20 text-red-400" : "text-muted-foreground"}`}
+            >
               <TrendingDown className="h-3 w-3 inline mr-1" /> Despesa
             </button>
-            <button onClick={() => setNewType("income")} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === 'income' ? 'bg-green-500/20 text-green-400' : 'text-muted-foreground'}`}>
+            <button
+              onClick={() => setNewType("income")}
+              className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === "income" ? "bg-green-500/20 text-green-400" : "text-muted-foreground"}`}
+            >
               <TrendingUp className="h-3 w-3 inline mr-1" /> Receita
             </button>
           </div>
-          <button onClick={handleAdd} className="btn-futuristic w-full rounded-xl py-3 text-xs font-black uppercase tracking-widest">Adicionar</button>
+          <button
+            onClick={handleAdd}
+            className="btn-futuristic w-full rounded-xl py-3 text-xs font-black uppercase tracking-widest"
+          >
+            Adicionar
+          </button>
         </div>
 
         <div className="mt-6 pt-6 border-t border-white/5 text-[10px] uppercase tracking-widest text-muted-foreground font-black opacity-60">
@@ -342,11 +447,11 @@ function CategoryManager() {
             <FolderTree className="h-5 w-5 text-accent" /> Listagem
           </h3>
           <div className="flex gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
-            {(["all", "expense", "income"] as const).map(f => (
+            {(["all", "expense", "income"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilterType(f)}
-                className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded transition-all ${filterType === f ? 'bg-primary/20 text-white' : 'text-muted-foreground'}`}
+                className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded transition-all ${filterType === f ? "bg-primary/20 text-white" : "text-muted-foreground"}`}
               >
                 {f === "all" ? "Todos" : f === "expense" ? "Desp." : "Rec."}
               </button>
@@ -355,26 +460,37 @@ function CategoryManager() {
         </div>
 
         {loading ? (
-          <div className="p-6 text-center opacity-50 uppercase tracking-widest text-[10px]">Carregando...</div>
+          <div className="p-6 text-center opacity-50 uppercase tracking-widest text-[10px]">
+            Carregando...
+          </div>
         ) : (
           <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
             {filtered.length === 0 && (
-              <div className="p-6 text-center opacity-50 uppercase tracking-widest text-[10px]">Nenhuma categoria</div>
+              <div className="p-6 text-center opacity-50 uppercase tracking-widest text-[10px]">
+                Nenhuma categoria
+              </div>
             )}
-            {filtered.map(c => {
-              const subs = subcategories.filter(s => s.category_id === c.id);
+            {filtered.map((c) => {
+              const subs = subcategories.filter((s) => s.category_id === c.id);
               const isOpen = expandedId === c.id;
               return (
-                <div key={c.id} className="rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all overflow-hidden">
+                <div
+                  key={c.id}
+                  className="rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all overflow-hidden"
+                >
                   <div className="flex items-center justify-between p-3 group">
                     <button
                       onClick={() => setExpandedId(isOpen ? null : c.id)}
                       className="flex items-center gap-3 flex-1 text-left"
                     >
-                      <div className={`w-1 h-6 rounded-full ${c.type === 'income' ? 'bg-green-500' : 'bg-red-500'}`} />
+                      <div
+                        className={`w-1 h-6 rounded-full ${c.type === "income" ? "bg-green-500" : "bg-red-500"}`}
+                      />
                       <span className="text-xs font-bold uppercase tracking-widest">{c.name}</span>
                       {subs.length > 0 && (
-                        <span className="text-[9px] font-black opacity-50 px-1.5 py-0.5 rounded bg-white/5">{subs.length}</span>
+                        <span className="text-[9px] font-black opacity-50 px-1.5 py-0.5 rounded bg-white/5">
+                          {subs.length}
+                        </span>
                       )}
                     </button>
                     <div className="flex items-center gap-1">
@@ -402,11 +518,16 @@ function CategoryManager() {
                           Nenhuma subcategoria. Clique em + para criar.
                         </div>
                       ) : (
-                        subs.map(s => (
-                          <div key={s.id} className="flex items-center justify-between pl-6 pr-2 py-2 rounded-lg hover:bg-white/5 group/sub">
+                        subs.map((s) => (
+                          <div
+                            key={s.id}
+                            className="flex items-center justify-between pl-6 pr-2 py-2 rounded-lg hover:bg-white/5 group/sub"
+                          >
                             <div className="flex items-center gap-2">
                               <div className="w-2 h-px bg-white/20" />
-                              <span className="text-[11px] font-bold uppercase tracking-widest opacity-80">{s.name}</span>
+                              <span className="text-[11px] font-bold uppercase tracking-widest opacity-80">
+                                {s.name}
+                              </span>
                             </div>
                             <button
                               onClick={() => handleDeleteSub(s.id)}

@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from './types';
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "./types";
 
 // No Lovable Cloud, estas variáveis são injetadas automaticamente.
 // Usamos import.meta.env para garantir compatibilidade com o Vite.

@@ -22,8 +22,17 @@ interface Tx {
 const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) => {
   if (active && payload && payload.length) {
     if (isMonthly) {
-      const saldo = payload.find((p: any) => p.dataKey === "saldo")?.value ?? (payload[0]?.value || 0);
-      const daysOfWeek = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+      const saldo =
+        payload.find((p: any) => p.dataKey === "saldo")?.value ?? (payload[0]?.value || 0);
+      const daysOfWeek = [
+        "Domingo",
+        "Segunda-feira",
+        "Terça-feira",
+        "Quarta-feira",
+        "Quinta-feira",
+        "Sexta-feira",
+        "Sábado",
+      ];
       const d = new Date(year, month, parseInt(label));
       const dayName = !isNaN(d.getTime()) ? daysOfWeek[d.getDay()] : "";
 
@@ -32,7 +41,9 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
           <p className="text-xs font-bold uppercase tracking-[0.2em] mb-1 text-muted-foreground">
             Dia {label} • {dayName}
           </p>
-          <div className={`flex items-center justify-between gap-6 text-sm font-bold ${saldo >= 0 ? 'text-accent' : 'text-destructive'}`}>
+          <div
+            className={`flex items-center justify-between gap-6 text-sm font-bold ${saldo >= 0 ? "text-accent" : "text-destructive"}`}
+          >
             <span>Saldo Acumulado</span>
             <span className="font-mono">{fmtCurrency(saldo)}</span>
           </div>
@@ -40,8 +51,8 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
       );
     } else {
       // Modo Anual (Receitas e Despesas)
-      const receitas = payload.find((p: any) => p.dataKey === 'receitas')?.value || 0;
-      const despesas = payload.find((p: any) => p.dataKey === 'despesas')?.value || 0;
+      const receitas = payload.find((p: any) => p.dataKey === "receitas")?.value || 0;
+      const despesas = payload.find((p: any) => p.dataKey === "despesas")?.value || 0;
       const saldo = receitas - despesas;
 
       return (
@@ -62,7 +73,9 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
               </span>
               <span className="font-mono font-bold text-destructive">{fmtCurrency(despesas)}</span>
             </div>
-            <div className={`flex items-center justify-between gap-6 text-sm pt-2 mt-2 border-t border-white/10 font-bold ${saldo >= 0 ? 'text-accent' : 'text-destructive'}`}>
+            <div
+              className={`flex items-center justify-between gap-6 text-sm pt-2 mt-2 border-t border-white/10 font-bold ${saldo >= 0 ? "text-accent" : "text-destructive"}`}
+            >
               <span>Saldo Mensal</span>
               <span className="font-mono">{fmtCurrency(saldo)}</span>
             </div>
@@ -74,10 +87,10 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
   return null;
 };
 
-export function EvolutionChart({ 
-  data, 
-  year, 
-  month, 
+export function EvolutionChart({
+  data,
+  year,
+  month,
   onMonthChange,
   forcedViewMode,
   dashboardMode,
@@ -85,9 +98,9 @@ export function EvolutionChart({
   onMonthShift,
   canShiftPrev,
   canShiftNext,
-}: { 
-  data: Tx[]; 
-  year: number; 
+}: {
+  data: Tx[];
+  year: number;
   month: number;
   onMonthChange?: (m: number) => void;
   onMonthShift?: (delta: number) => void;
@@ -99,7 +112,7 @@ export function EvolutionChart({
 }) {
   const [viewMode, setViewMode] = useState<"annual" | "monthly">("annual");
   const [mounted, setMounted] = useState(false);
-  
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -120,11 +133,11 @@ export function EvolutionChart({
 
     // Adiciona o saldo acumulado mês a mês para a curva anual
     let running = 0;
-    return monthly.map(m => {
-      running += (m.receitas - m.despesas);
+    return monthly.map((m) => {
+      running += m.receitas - m.despesas;
       return { ...m, saldo: running };
     });
-  }, [data, year]);
+  }, [data, year, mounted]);
 
   const annualBalance = useMemo(() => {
     return annualData.reduce((acc, curr) => acc + (curr.receitas - curr.despesas), 0);
@@ -133,13 +146,13 @@ export function EvolutionChart({
   // Dados Mensais (por dia) - Cumulativos
   const dailyData = useMemo(() => {
     if (effectiveViewMode === "annual") return [];
-    
+
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const days = Array.from({ length: daysInMonth }, (_, i) => ({
       label: `${i + 1}`,
       receitas: 0,
       despesas: 0,
-      day: i + 1
+      day: i + 1,
     }));
 
     // 1. Soma os valores exatos de cada dia
@@ -155,17 +168,19 @@ export function EvolutionChart({
     }
 
     let runningSaldo = 0;
-    return days.map(d => {
-      runningSaldo += (d.receitas - d.despesas);
+    return days.map((d) => {
+      runningSaldo += d.receitas - d.despesas;
       return {
         ...d,
-        saldo: runningSaldo
+        saldo: runningSaldo,
       };
     });
   }, [data, year, effectiveViewMode, month]);
 
   const currentAnnualBalance = useMemo(() => {
-    return annualData.slice(0, month + 1).reduce((acc, curr) => acc + (curr.receitas - curr.despesas), 0);
+    return annualData
+      .slice(0, month + 1)
+      .reduce((acc, curr) => acc + (curr.receitas - curr.despesas), 0);
   }, [annualData, month]);
 
   // Cálculos para o modo Mensal
@@ -180,9 +195,9 @@ export function EvolutionChart({
     if (dailyData.length === 0) return 0;
     // Limitamos ao dia de hoje apenas se estivermos visualizando o MÊS ATUAL.
     // Para meses passados ou futuros, mostramos o saldo total/final do mês.
-    const limitDay = isCurrentMonth ? currentDay : 999; 
-    
-    const relevantDays = dailyData.filter(d => d.day <= limitDay);
+    const limitDay = isCurrentMonth ? currentDay : 999;
+
+    const relevantDays = dailyData.filter((d) => d.day <= limitDay);
     if (relevantDays.length === 0) return 0;
     return relevantDays[relevantDays.length - 1].saldo;
   }, [dailyData, isCurrentMonth, currentDay]);
@@ -190,23 +205,23 @@ export function EvolutionChart({
   const projecaoMensal = useMemo(() => {
     if (dailyData.length === 0) return 0;
     if (!isCurrentMonth) return dailyData[dailyData.length - 1].saldo;
-    
+
     const daysInMonth = dailyData.length;
     // Evitar divisão por zero e garantir que a projeção faça sentido
     const dayForCalc = Math.max(1, currentDay);
-    
+
     // Se o usuário já lançou o mês inteiro (futuro), a projeção é o próprio saldo final
     const lastBalance = dailyData[dailyData.length - 1].saldo;
     const basicProj = (saldoAteHoje / dayForCalc) * daysInMonth;
-    
+
     // Se o saldo final conhecido (incluindo futuro) for diferente do saldo até hoje,
-    // significa que o usuário já tem lançamentos futuros. 
+    // significa que o usuário já tem lançamentos futuros.
     // Nesse caso, o "Saldo Final" do gráfico é uma projeção mais real do que o cálculo matemático.
     if (Math.abs(lastBalance - saldoAteHoje) > 0.01) {
       return lastBalance;
     }
 
-    return basicProj; 
+    return basicProj;
   }, [dailyData, saldoAteHoje, isCurrentMonth, currentDay]);
 
   const chartData = effectiveViewMode === "annual" ? annualData : dailyData;
@@ -219,17 +234,16 @@ export function EvolutionChart({
     }
 
     const allVals = chartData.flatMap((d: any) => [d.receitas || 0, d.despesas || 0, d.saldo || 0]);
-    
+
     const maxGlobal = Math.max(...allVals, 0) * 1.1;
     const minGlobal = Math.min(...allVals, 0) * 1.1;
     const rangeGlobal = maxGlobal - minGlobal || 1;
 
-    return { 
+    return {
       gradientOffset: maxGlobal / rangeGlobal,
-      globalDomain: [minGlobal, maxGlobal]
+      globalDomain: [minGlobal, maxGlobal],
     };
   }, [chartData]);
-
 
   const navigateMonth = (step: number) => {
     const next = (month + step + 12) % 12;
@@ -237,26 +251,30 @@ export function EvolutionChart({
   };
 
   if (!mounted) {
-    return <div className="h-[420px] w-full bg-white/5 animate-pulse rounded-2xl border-2 border-white/5" />;
+    return (
+      <div className="h-[420px] w-full bg-white/5 animate-pulse rounded-2xl border-2 border-white/5" />
+    );
   }
 
   return (
-    <div className={`rounded-2xl p-6 transition-all duration-500 border-2 ${ 
-      currentSaldo < 0 
-        ? "bg-red-500/10 border-red-500/30 shadow-[inset_0_0_50px_rgba(239,68,68,0.1)]" 
-        : "bg-cyan-500/10 border-cyan-500/30 shadow-[inset_0_0_50px_rgba(34,211,238,0.1)]"
-    } backdrop-blur-md p-4`}>
+    <div
+      className={`rounded-2xl p-6 transition-all duration-500 border-2 ${
+        currentSaldo < 0
+          ? "bg-red-500/10 border-red-500/30 shadow-[inset_0_0_50px_rgba(239,68,68,0.1)]"
+          : "bg-cyan-500/10 border-cyan-500/30 shadow-[inset_0_0_50px_rgba(34,211,238,0.1)]"
+      } backdrop-blur-md p-4`}
+    >
       <div className="relative flex items-center justify-between mb-4">
         <div className="flex flex-col gap-1 pl-[34px]">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
-              <Activity className="h-6 w-6" /> 
+              <Activity className="h-6 w-6" />
               {effectiveViewMode === "annual" ? "Evolução Anual" : "Saldo Mensal"}
             </h3>
           </div>
-          
+
           {effectiveViewMode === "monthly" && !forcedViewMode && (
-            <button 
+            <button
               onClick={() => setViewMode("annual")}
               className="flex items-center gap-1 text-[10px] uppercase font-black tracking-widest text-accent hover:text-white transition-all w-fit"
             >
@@ -269,44 +287,44 @@ export function EvolutionChart({
         {onDashboardModeChange && dashboardMode && (
           <div className="flex flex-col items-center gap-3 absolute left-1/2 -translate-x-1/2">
             <div className="flex items-center gap-3">
-              <button 
+              <button
                 disabled={!canShiftPrev}
-                onClick={() => onMonthShift?.(dashboardMode === 'annual' ? -12 : -1)}
-                className={`text-muted-foreground transition-all flex items-center gap-2 group ${!canShiftPrev ? 'opacity-20 cursor-not-allowed' : 'hover:text-white hover:scale-110'}`}
+                onClick={() => onMonthShift?.(dashboardMode === "annual" ? -12 : -1)}
+                className={`text-muted-foreground transition-all flex items-center gap-2 group ${!canShiftPrev ? "opacity-20 cursor-not-allowed" : "hover:text-white hover:scale-110"}`}
               >
                 <ChevronLeft className="h-4 w-4" />
                 <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase hidden sm:inline">
-                  {dashboardMode === 'annual' ? year - 1 : MONTHS_PT[(month + 11) % 12]}
+                  {dashboardMode === "annual" ? year - 1 : MONTHS_PT[(month + 11) % 12]}
                 </span>
               </button>
               <span className="text-xl font-black tracking-[0.2em] uppercase text-muted-foreground opacity-90 min-w-[150px] text-center">
-                {dashboardMode === 'annual' ? year : MONTHS_PT[month]}
+                {dashboardMode === "annual" ? year : MONTHS_PT[month]}
               </span>
-              <button 
+              <button
                 disabled={!canShiftNext}
-                onClick={() => onMonthShift?.(dashboardMode === 'annual' ? 12 : 1)}
-                className={`text-muted-foreground transition-all flex items-center gap-2 group ${!canShiftNext ? 'opacity-20 cursor-not-allowed' : 'hover:text-white hover:scale-110'}`}
+                onClick={() => onMonthShift?.(dashboardMode === "annual" ? 12 : 1)}
+                className={`text-muted-foreground transition-all flex items-center gap-2 group ${!canShiftNext ? "opacity-20 cursor-not-allowed" : "hover:text-white hover:scale-110"}`}
               >
                 <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase hidden sm:inline">
-                  {dashboardMode === 'annual' ? year + 1 : MONTHS_PT[(month + 1) % 12]}
+                  {dashboardMode === "annual" ? year + 1 : MONTHS_PT[(month + 1) % 12]}
                 </span>
                 <ChevronLeft className="h-4 w-4 rotate-180" />
               </button>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <button
-                onClick={() => onDashboardModeChange('monthly')}
+                onClick={() => onDashboardModeChange("monthly")}
                 className={`btn-ghost-neon rounded-lg px-4 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  dashboardMode === 'monthly' ? 'glow brightness-125' : 'opacity-50'
+                  dashboardMode === "monthly" ? "glow brightness-125" : "opacity-50"
                 }`}
               >
                 Mensal
               </button>
               <button
-                onClick={() => onDashboardModeChange('annual')}
+                onClick={() => onDashboardModeChange("annual")}
                 className={`btn-ghost-neon rounded-lg px-4 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  dashboardMode === 'annual' ? 'glow brightness-125' : 'opacity-50'
+                  dashboardMode === "annual" ? "glow brightness-125" : "opacity-50"
                 }`}
               >
                 Anual
@@ -322,7 +340,9 @@ export function EvolutionChart({
                 <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
                   Balanço até {MONTHS_PT[month]}
                 </span>
-                <span className={`text-2xl font-black font-mono tracking-tighter ${currentAnnualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                <span
+                  className={`text-2xl font-black font-mono tracking-tighter ${currentAnnualBalance >= 0 ? "text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"}`}
+                >
                   {fmtCurrency(currentAnnualBalance)}
                 </span>
               </div>
@@ -331,7 +351,9 @@ export function EvolutionChart({
                 <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
                   Projeção Anual
                 </span>
-                <span className={`text-2xl font-black font-mono tracking-tighter ${annualBalance >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                <span
+                  className={`text-2xl font-black font-mono tracking-tighter ${annualBalance >= 0 ? "text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"}`}
+                >
                   {fmtCurrency(annualBalance)}
                 </span>
               </div>
@@ -343,17 +365,25 @@ export function EvolutionChart({
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
                     Saldo até {currentDay} de {MONTHS_PT[month]}
                   </span>
-                  <span className={`text-2xl font-black font-mono tracking-tighter ${saldoAteHoje >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                  <span
+                    className={`text-2xl font-black font-mono tracking-tighter ${saldoAteHoje >= 0 ? "text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"}`}
+                  >
                     {fmtCurrency(saldoAteHoje)}
                   </span>
                 </div>
               )}
 
-              <div className={`flex flex-col items-end ${isCurrentMonth ? 'border-l border-white/10 pl-8' : ''}`}>
+              <div
+                className={`flex flex-col items-end ${isCurrentMonth ? "border-l border-white/10 pl-8" : ""}`}
+              >
                 <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
-                  {isCurrentMonth || isFutureMonth ? "Projeção Mensal" : `Saldo Final ${MONTHS_PT[month]}`}
+                  {isCurrentMonth || isFutureMonth
+                    ? "Projeção Mensal"
+                    : `Saldo Final ${MONTHS_PT[month]}`}
                 </span>
-                <span className={`text-2xl font-black font-mono tracking-tighter ${(isCurrentMonth || isFutureMonth ? projecaoMensal : saldoAteHoje) >= 0 ? 'text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}>
+                <span
+                  className={`text-2xl font-black font-mono tracking-tighter ${(isCurrentMonth || isFutureMonth ? projecaoMensal : saldoAteHoje) >= 0 ? "text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"}`}
+                >
                   {fmtCurrency(isCurrentMonth || isFutureMonth ? projecaoMensal : saldoAteHoje)}
                 </span>
               </div>
@@ -364,10 +394,7 @@ export function EvolutionChart({
 
       <div className="h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart 
-            data={chartData} 
-            margin={{ top: 20, right: 60, left: 0, bottom: 0 }}
-          >
+          <AreaChart data={chartData} margin={{ top: 20, right: 60, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.6} />
@@ -377,11 +404,15 @@ export function EvolutionChart({
                 <stop offset="0%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.6} />
                 <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0} />
               </linearGradient>
-              
+
               {/* Gradiente para preencher APENAS acima de zero (Verde) */}
               <linearGradient id="fillPositive" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
-                <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
+                <stop
+                  offset={`${gradientOffset * 100}%`}
+                  stopColor="oklch(0.8 0.16 150)"
+                  stopOpacity={0.5}
+                />
                 <stop offset={`${gradientOffset * 100}%`} stopColor="transparent" stopOpacity={0} />
                 <stop offset="100%" stopColor="transparent" stopOpacity={0} />
               </linearGradient>
@@ -390,27 +421,39 @@ export function EvolutionChart({
               <linearGradient id="fillNegative" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="transparent" stopOpacity={0} />
                 <stop offset={`${gradientOffset * 100}%`} stopColor="transparent" stopOpacity={0} />
-                <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
+                <stop
+                  offset={`${gradientOffset * 100}%`}
+                  stopColor="oklch(0.7 0.2 30)"
+                  stopOpacity={0.5}
+                />
                 <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
               </linearGradient>
 
               <linearGradient id="splitColorStroke" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.8 0.16 150)" stopOpacity={1} />
-                <stop offset={`${gradientOffset * 100}%`} stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
+                <stop
+                  offset={`${gradientOffset * 100}%`}
+                  stopColor="oklch(0.8 0.16 150)"
+                  stopOpacity={1}
+                />
+                <stop
+                  offset={`${gradientOffset * 100}%`}
+                  stopColor="oklch(0.7 0.2 30)"
+                  stopOpacity={1}
+                />
                 <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={1} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke="oklch(0.78 0.16 220 / 0.1)" strokeDasharray="3 3" />
-            <XAxis 
-              dataKey={effectiveViewMode === "annual" ? "month" : "label"} 
-              stroke="oklch(0.7 0.04 235)" 
-              fontSize={11} 
+            <XAxis
+              dataKey={effectiveViewMode === "annual" ? "month" : "label"}
+              stroke="oklch(0.7 0.04 235)"
+              fontSize={11}
               fontWeight="bold"
               axisLine={false}
               tickLine={false}
               padding={{ left: 0, right: 0 }}
-              tickFormatter={(val) => effectiveViewMode === "annual" ? val.slice(0, 3) : val}
+              tickFormatter={(val) => (effectiveViewMode === "annual" ? val.slice(0, 3) : val)}
             />
             <YAxis
               yAxisId="left"
@@ -433,53 +476,57 @@ export function EvolutionChart({
               tickLine={false}
               tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
             />
-            <Tooltip 
-              cursor={false} 
-              content={<CustomTooltip isMonthly={effectiveViewMode === "monthly"} year={year} month={month} />} 
+            <Tooltip
+              cursor={false}
+              content={
+                <CustomTooltip
+                  isMonthly={effectiveViewMode === "monthly"}
+                  year={year}
+                  month={month}
+                />
+              }
             />
             {effectiveViewMode === "annual" && (
-              <Legend 
-                wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14, paddingTop: '20px' }} 
+              <Legend
+                wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14, paddingTop: "20px" }}
                 formatter={(value) => (
-                  <span className="text-white/90 font-bold tracking-wider">
-                    {value}
-                  </span>
+                  <span className="text-white/90 font-bold tracking-wider">{value}</span>
                 )}
               />
             )}
-            
+
             {effectiveViewMode === "annual" && (
-              <ReferenceLine 
+              <ReferenceLine
                 yAxisId="left"
-                x={MONTHS_PT[month]} 
-                stroke="#22d3ee" 
+                x={MONTHS_PT[month]}
+                stroke="#22d3ee"
                 strokeWidth={3}
-                strokeOpacity={0.8} 
-                strokeDasharray="4 4" 
-                label={{ 
-                  value: MONTHS_PT[month].slice(0, 3).toUpperCase(), 
-                  position: "top", 
-                  fill: "#22d3ee", 
-                  fontSize: 11, 
-                  fontWeight: "bold"
+                strokeOpacity={0.8}
+                strokeDasharray="4 4"
+                label={{
+                  value: MONTHS_PT[month].slice(0, 3).toUpperCase(),
+                  position: "top",
+                  fill: "#22d3ee",
+                  fontSize: 11,
+                  fontWeight: "bold",
                 }}
               />
             )}
 
             {effectiveViewMode === "monthly" && isCurrentMonth && (
-              <ReferenceLine 
+              <ReferenceLine
                 yAxisId="left"
-                x={String(currentDay)} 
-                stroke="#22d3ee" 
+                x={String(currentDay)}
+                stroke="#22d3ee"
                 strokeWidth={3}
-                strokeOpacity={0.8} 
-                strokeDasharray="4 4" 
-                label={{ 
-                  value: "HOJE", 
-                  position: "top", 
-                  fill: "#22d3ee", 
-                  fontSize: 11, 
-                  fontWeight: "bold"
+                strokeOpacity={0.8}
+                strokeDasharray="4 4"
+                label={{
+                  value: "HOJE",
+                  position: "top",
+                  fill: "#22d3ee",
+                  fontSize: 11,
+                  fontWeight: "bold",
                 }}
               />
             )}
@@ -545,14 +592,13 @@ export function EvolutionChart({
               hide={false}
             />
 
-
             {effectiveViewMode === "monthly" && (
-              <ReferenceLine 
+              <ReferenceLine
                 yAxisId="left"
-                y={0} 
-                stroke="white" 
-                strokeWidth={1.5} 
-                strokeOpacity={0.8} 
+                y={0}
+                stroke="white"
+                strokeWidth={1.5}
+                strokeOpacity={0.8}
                 strokeDasharray="4 4"
               />
             )}

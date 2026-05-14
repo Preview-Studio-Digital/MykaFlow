@@ -110,7 +110,13 @@ export function EvolutionChart({
       if (t.type === "income") m.receitas += Number(t.amount);
       else m.despesas += Number(t.amount);
     }
-    return monthly;
+
+    // Adiciona o saldo acumulado mês a mês para a curva anual
+    let running = 0;
+    return monthly.map(m => {
+      running += (m.receitas - m.despesas);
+      return { ...m, saldo: running };
+    });
   }, [data, year]);
 
   const annualBalance = useMemo(() => {
@@ -522,7 +528,7 @@ export function EvolutionChart({
               fill="none"
               name="Saldo Acumulado"
               animationDuration={1000}
-              hide={effectiveViewMode === "annual"}
+              hide={false}
             />
 
 

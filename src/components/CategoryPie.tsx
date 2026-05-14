@@ -75,13 +75,22 @@ export function CategoryPie({
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  // Reset active index when category changes to prevent crash with stale index
-  useMemo(() => {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     setActiveIndex(null);
   }, [selectedCategory]);
+
   const COLORS = type === "income" ? INCOME_COLORS : EXPENSE_COLORS;
   const total = data.reduce((a, b) => a + b.value, 0);
+
+  if (!mounted) {
+    return <div className="glass rounded-2xl h-full min-h-[260px] animate-pulse bg-white/5" />;
+  }
 
   const drillDownData = useMemo(() => {
     if (!selectedCategory) return [];

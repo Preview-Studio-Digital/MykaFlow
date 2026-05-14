@@ -24,16 +24,32 @@ function LoginPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    if (mode === "signin") {
-      const { error } = await signIn(email, password);
-      if (error) toast.error(error);
-      else toast.success("Acesso concedido");
-    } else {
-      const { error } = await signUp(email, password, name);
-      if (error) toast.error(error);
-      else toast.success("Conta criada — você é o ADM!");
+    console.log("Login: Tentando...", { mode, email });
+    try {
+      if (mode === "signin") {
+        const { error } = await signIn(email, password);
+        if (error) {
+          console.error("Login Error:", error);
+          window.alert("ERRO NO LOGIN: " + error);
+        } else {
+          toast.success("Acesso concedido");
+        }
+      } else {
+        const { error } = await signUp(email, password, name);
+        if (error) {
+          console.error("Signup Error:", error);
+          window.alert("ERRO NO REGISTRO: " + error);
+        } else {
+          window.alert("CONTA CRIADA! Verifique se recebeu um e-mail de confirmação ou tente fazer login direto.");
+          setMode("signin");
+        }
+      }
+    } catch (err: any) {
+      console.error("Fatal Error:", err);
+      window.alert("ERRO FATAL: " + err.message);
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return (
@@ -95,10 +111,14 @@ function LoginPage() {
           </button>
         </form>
 
-        {/* Opção de criar ADM removida conforme solicitação */}
-
         <div className="mt-8 text-center">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground opacity-50">
+          <button
+            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+            className="text-[10px] uppercase font-black tracking-widest text-accent hover:text-white transition-all"
+          >
+            {mode === "signin" ? "Não tem uma conta? Registre o ADM" : "Já tem conta? Faça Login"}
+          </button>
+          <p className="mt-4 text-xs uppercase tracking-[0.2em] text-muted-foreground opacity-50">
             Acesso exclusivo para funcionários autorizados
           </p>
         </div>

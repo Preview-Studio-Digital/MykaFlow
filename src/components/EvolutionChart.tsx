@@ -98,10 +98,17 @@ export function EvolutionChart({
   canShiftNext?: boolean;
 }) {
   const [viewMode, setViewMode] = useState<"annual" | "monthly">("annual");
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const effectiveViewMode = forcedViewMode ?? viewMode;
 
   // Dados Anuais (por mês)
   const annualData = useMemo(() => {
+    if (!mounted) return [];
     const monthly = MONTHS_PT.map((m, i) => ({ month: m, receitas: 0, despesas: 0, idx: i }));
     for (const t of data) {
       const d = new Date(t.occurred_on + "T00:00:00");
@@ -206,26 +213,20 @@ export function EvolutionChart({
   const currentMonthData = annualData[month] || { receitas: 0, despesas: 0 };
   const currentSaldo = (currentMonthData.receitas || 0) - (currentMonthData.despesas || 0);
 
-  const { gradientOffset, dataMin, dataMax } = useMemo(() => {
-    const vals = chartData.map((d: any) => d.saldo).filter((v: any) => v !== undefined);
-    if (vals.length === 0) return { gradientOffset: 1, dataMin: 0, dataMax: 0 };
+  const { gradientOffset, globalDomain } = useMemo(() => {
+    if (!chartData || chartData.length === 0) {
+      return { gradientOffset: 0, globalDomain: [0, 100] };
+    }
+
+    const allVals = chartData.flatMap((d: any) => [d.receitas || 0, d.despesas || 0, d.saldo || 0]);
     
-    const max = Math.max(...vals);
-    const min = Math.min(...vals);
-    
-    // Se for tudo positivo
-    if (min >= 0) return { gradientOffset: 1, dataMin: 0, dataMax: max * 1.1 };
-    // Se for tudo negativo
-    if (max <= 0) return { gradientOffset: 0, dataMin: min * 1.1, dataMax: 0 };
-    
-    const range = max - min;
-    
-    // Para o gradiente da linha de contorno bater com o zero
-    // o domínio total é [min, max]. O zero está em max / range do topo.
+    const maxGlobal = Math.max(...allVals, 0) * 1.1;
+    const minGlobal = Math.min(...allVals, 0) * 1.1;
+    const rangeGlobal = maxGlobal - minGlobal || 1;
+
     return { 
-      gradientOffset: max / range,
-      dataMin: min,
-      dataMax: max
+      gradientOffset: maxGlobal / rangeGlobal,
+      globalDomain: [minGlobal, maxGlobal]
     };
   }, [chartData]);
 
@@ -234,6 +235,10 @@ export function EvolutionChart({
     const next = (month + step + 12) % 12;
     onMonthChange?.(next);
   };
+
+  if (!mounted) {
+    return <div className="h-[420px] w-full bg-white/5 animate-pulse rounded-2xl border-2 border-white/5" />;
+  }
 
   return (
     <div className={`rounded-2xl p-6 transition-all duration-500 border-2 ${ 
@@ -310,7 +315,7 @@ export function EvolutionChart({
           </div>
         )}
 
-        <div className="flex items-center gap-8 pr-[58px]">
+        <div className="flex items-center gap-8 pr-[60px]">
           {effectiveViewMode === "annual" ? (
             <>
               <div className="flex flex-col items-end">
@@ -361,7 +366,7 @@ export function EvolutionChart({
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart 
             data={chartData} 
-            margin={{ top: 20, right: 0, left: 0, bottom: 0 }}
+            margin={{ top: 20, right: 60, left: 0, bottom: 0 }}
           >
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
@@ -410,7 +415,7 @@ export function EvolutionChart({
             <YAxis
               yAxisId="left"
               width={58}
-              domain={effectiveViewMode === "monthly" ? [dataMin, dataMax] : ['auto', 'auto']}
+              domain={globalDomain}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
               axisLine={false}
@@ -421,7 +426,7 @@ export function EvolutionChart({
               yAxisId="right"
               orientation="right"
               width={58}
-              domain={effectiveViewMode === "monthly" ? [dataMin, dataMax] : ['auto', 'auto']}
+              domain={globalDomain}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
               axisLine={false}
@@ -432,7 +437,16 @@ export function EvolutionChart({
               cursor={false} 
               content={<CustomTooltip isMonthly={effectiveViewMode === "monthly"} year={year} month={month} />} 
             />
-            {effectiveViewMode === "annual" && <Legend wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14 }} />}
+            {effectiveViewMode === "annual" && (
+              <Legend 
+                wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14, paddingTop: '20px' }} 
+                formatter={(value) => (
+                  <span className="text-white/90 font-bold tracking-wider">
+                    {value}
+                  </span>
+                )}
+              />
+            )}
             
             {effectiveViewMode === "annual" && (
               <ReferenceLine 
@@ -520,10 +534,10 @@ export function EvolutionChart({
 
             {/* Linha de Contorno Principal */}
             <Area
-              yAxisId="left"
+              yAxisId="right"
               type="monotone"
               dataKey="saldo"
-              stroke="url(#splitColorStroke)"
+              stroke={effectiveViewMode === "annual" ? "white" : "url(#splitColorStroke)"}
               strokeWidth={3}
               fill="none"
               name="Saldo Acumulado"

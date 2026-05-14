@@ -326,7 +326,7 @@ export function TransactionForm({ onCreated, defaultMonth, defaultYear, onMonthS
               label="Categoria"
               placeholder="SELECIONE..."
               value={selectedParentId}
-              onChange={(val) => { setSelectedParentId(val); setSubCategory(""); }}
+              onChange={(val) => { setSelectedParentId(val); setSelectedSubId(""); }}
               options={currentParents}
             />
           </div>

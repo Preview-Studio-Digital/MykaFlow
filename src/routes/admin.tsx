@@ -231,33 +231,80 @@ function UserList({ profiles, loading, onRefresh }: { profiles: any[], loading: 
   );
 }
 
+interface SubCategory {
+  id: string;
+  name: string;
+  category_id: string;
+  user_id?: string | null;
+}
+
 function CategoryManager() {
+  const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<"income" | "expense">("expense");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase.from("financial_categories").select("*").order("name");
-    if (!error && data) setCategories(data as Category[]);
+    const [cats, subs] = await Promise.all([
+      supabase.from("financial_categories").select("*").order("name"),
+      supabase.from("financial_subcategories").select("*").order("name"),
+    ]);
+    if (!cats.error && cats.data) setCategories(cats.data as Category[]);
+    if (!subs.error && subs.data) setSubcategories(subs.data as SubCategory[]);
     setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
 
   async function handleAdd() {
-    if (!newName) return;
-    const { error } = await supabase.from("financial_categories").insert({ name: newName.trim().toUpperCase(), type: newType });
-    if (!error) { toast.success("Categoria adicionada"); setNewName(""); load(); }
+    if (!newName.trim() || !user) return;
+    const { error } = await supabase.from("financial_categories").insert({
+      name: newName.trim().toUpperCase(),
+      type: newType,
+      user_id: user.id,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Categoria adicionada");
+    setNewName("");
+    load();
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Excluir categoria?")) return;
+    if (!confirm("Excluir categoria? Subcategorias vinculadas também serão removidas.")) return;
     const { error } = await supabase.from("financial_categories").delete().eq("id", id);
-    if (!error) { toast.success("Excluída"); load(); }
+    if (error) { toast.error(error.message); return; }
+    toast.success("Excluída");
+    load();
   }
+
+  async function handleAddSub(categoryId: string) {
+    if (!user) return;
+    const name = prompt("Nome da nova subcategoria:");
+    if (!name?.trim()) return;
+    const { error } = await supabase.from("financial_subcategories").insert({
+      name: name.trim().toUpperCase(),
+      category_id: categoryId,
+      user_id: user.id,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Subcategoria adicionada");
+    load();
+  }
+
+  async function handleDeleteSub(id: string) {
+    if (!confirm("Excluir subcategoria?")) return;
+    const { error } = await supabase.from("financial_subcategories").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Subcategoria excluída");
+    load();
+  }
+
+  const filtered = categories.filter(c => filterType === "all" || c.type === filterType);
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -266,32 +313,118 @@ function CategoryManager() {
           <Plus className="h-5 w-5 text-accent" /> Nova Categoria
         </h3>
         <div className="space-y-4">
-          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="NOME DA CATEGORIA" className="input-futuristic w-full rounded-xl px-4 py-3 text-sm" />
+          <input
+            value={newName}
+            onChange={e => setNewName(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === "Enter" && handleAdd()}
+            placeholder="NOME DA CATEGORIA"
+            className="input-futuristic w-full rounded-xl px-4 py-3 text-sm uppercase font-bold"
+          />
           <div className="flex gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
-            <button onClick={() => setNewType("expense")} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === 'expense' ? 'bg-red-500/20 text-red-400' : 'text-muted-foreground'}`}>Despesa</button>
-            <button onClick={() => setNewType("income")} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === 'income' ? 'bg-green-500/20 text-green-400' : 'text-muted-foreground'}`}>Receita</button>
+            <button onClick={() => setNewType("expense")} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === 'expense' ? 'bg-red-500/20 text-red-400' : 'text-muted-foreground'}`}>
+              <TrendingDown className="h-3 w-3 inline mr-1" /> Despesa
+            </button>
+            <button onClick={() => setNewType("income")} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === 'income' ? 'bg-green-500/20 text-green-400' : 'text-muted-foreground'}`}>
+              <TrendingUp className="h-3 w-3 inline mr-1" /> Receita
+            </button>
           </div>
           <button onClick={handleAdd} className="btn-futuristic w-full rounded-xl py-3 text-xs font-black uppercase tracking-widest">Adicionar</button>
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-white/5 text-[10px] uppercase tracking-widest text-muted-foreground font-black opacity-60">
+          Para criar subcategorias, expanda uma categoria na listagem ao lado.
         </div>
       </div>
 
       <div className="glass rounded-2xl p-6">
-        <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase mb-6">
-          <FolderTree className="h-5 w-5 text-accent" /> Listagem
-        </h3>
-        <div className="space-y-2">
-          {categories.map(c => (
-            <div key={c.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 group hover:border-white/10 transition-all">
-              <div className="flex items-center gap-3">
-                <div className={`w-1 h-6 rounded-full ${c.type === 'income' ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-xs font-bold uppercase tracking-widest">{c.name}</span>
-              </div>
-              <button onClick={() => handleDelete(c.id)} className="p-2 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
-                <Trash2 className="h-4 w-4" />
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase">
+            <FolderTree className="h-5 w-5 text-accent" /> Listagem
+          </h3>
+          <div className="flex gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
+            {(["all", "expense", "income"] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFilterType(f)}
+                className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded transition-all ${filterType === f ? 'bg-primary/20 text-white' : 'text-muted-foreground'}`}
+              >
+                {f === "all" ? "Todos" : f === "expense" ? "Desp." : "Rec."}
               </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+
+        {loading ? (
+          <div className="p-6 text-center opacity-50 uppercase tracking-widest text-[10px]">Carregando...</div>
+        ) : (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+            {filtered.length === 0 && (
+              <div className="p-6 text-center opacity-50 uppercase tracking-widest text-[10px]">Nenhuma categoria</div>
+            )}
+            {filtered.map(c => {
+              const subs = subcategories.filter(s => s.category_id === c.id);
+              const isOpen = expandedId === c.id;
+              return (
+                <div key={c.id} className="rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all overflow-hidden">
+                  <div className="flex items-center justify-between p-3 group">
+                    <button
+                      onClick={() => setExpandedId(isOpen ? null : c.id)}
+                      className="flex items-center gap-3 flex-1 text-left"
+                    >
+                      <div className={`w-1 h-6 rounded-full ${c.type === 'income' ? 'bg-green-500' : 'bg-red-500'}`} />
+                      <span className="text-xs font-bold uppercase tracking-widest">{c.name}</span>
+                      {subs.length > 0 && (
+                        <span className="text-[9px] font-black opacity-50 px-1.5 py-0.5 rounded bg-white/5">{subs.length}</span>
+                      )}
+                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleAddSub(c.id)}
+                        className="p-2 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-lg transition-all"
+                        title="Nova subcategoria"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(c.id)}
+                        className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                        title="Excluir categoria"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {isOpen && (
+                    <div className="border-t border-white/5 bg-black/20 p-3 space-y-1">
+                      {subs.length === 0 ? (
+                        <div className="text-[10px] uppercase tracking-widest opacity-40 text-center py-2">
+                          Nenhuma subcategoria. Clique em + para criar.
+                        </div>
+                      ) : (
+                        subs.map(s => (
+                          <div key={s.id} className="flex items-center justify-between pl-6 pr-2 py-2 rounded-lg hover:bg-white/5 group/sub">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-px bg-white/20" />
+                              <span className="text-[11px] font-bold uppercase tracking-widest opacity-80">{s.name}</span>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteSub(s.id)}
+                              className="p-1.5 text-muted-foreground hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
+                              title="Excluir subcategoria"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

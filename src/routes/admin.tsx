@@ -241,7 +241,7 @@ function CategoryManager() {
   async function load() {
     setLoading(true);
     const { data, error } = await supabase.from("financial_categories").select("*").order("name");
-    if (!error && data) setCategories(data);
+    if (!error && data) setCategories(data as Category[]);
     setLoading(false);
   }
 

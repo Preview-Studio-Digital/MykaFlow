@@ -58,6 +58,26 @@ export function TransactionForm({
       setDate(getInitialDate(defaultMonth, defaultYear));
     }
   }, [defaultMonth, defaultYear]);
+  // Enforce nature rules: Antecipação de Notas (Variável) and Locação (Fixa)
+  useEffect(() => {
+    if (!selectedParentId) return;
+    const cat = dbCategories.find((c) => c.id === selectedParentId);
+    if (cat) {
+      const name = cat.name.toUpperCase();
+      if (
+        name === "ANTECIPAÇÃO DE NOTAS" ||
+        name === "VENDAS" ||
+        name === "MANUTENÇÃO" ||
+        name === "FORNECEDORES" ||
+        name === "PRESTADORES" ||
+        (name === "EMPRÉSTIMO" && type === "income")
+      ) {
+        setNature("variable");
+      } else if (name === "LOCAÇÃO" || name === "EQUIPE" || name === "AGNALDO" || name === "INFRAESTRUTURA" || name === "FROTA") {
+        setNature("fixed");
+      }
+    }
+  }, [selectedParentId, dbCategories]);
 
   // Componente de Select Customizado para permitir estilização do hover (fill color)
   const CustomSelect = ({
@@ -411,6 +431,24 @@ export function TransactionForm({
             { id: "variable", name: "VARIÁVEL (EVENTUAL)" },
             { id: "fixed", name: "FIXO (RECORRENTE)" },
           ]}
+          disabled={(() => {
+            const cat = dbCategories.find(c => c.id === selectedParentId);
+            if (!cat) return false;
+            const name = cat.name.toUpperCase();
+            return (
+              name === "ANTECIPAÇÃO DE NOTAS" ||
+              name === "LOCAÇÃO" ||
+              name === "VENDAS" ||
+              name === "EQUIPE" ||
+              name === "MANUTENÇÃO" ||
+              name === "AGNALDO" ||
+              name === "INFRAESTRUTURA" ||
+              name === "FROTA" ||
+              name === "FORNECEDORES" ||
+              name === "PRESTADORES" ||
+              (name === "EMPRÉSTIMO" && type === "income")
+            );
+          })()}
         />
         <div className="space-y-2">
           <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">

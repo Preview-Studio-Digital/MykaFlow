@@ -80,6 +80,7 @@ export function CategoryPie({
   }, [selectedCategory]);
 
   const COLORS = type === "income" ? INCOME_COLORS : EXPENSE_COLORS;
+  const isIncome = type === "income";
   const total = data.reduce((a, b) => a + b.value, 0);
 
   const drillDownData = useMemo(() => {
@@ -238,7 +239,7 @@ export function CategoryPie({
           >
             {currentData.map((entry, index) => {
               const isSpecial =
-                !selectedCategory && entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+                !selectedCategory && type === "income" && entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
               const percentageValue = currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
               let pulseClass = "";
               if (isSpecial) {
@@ -294,7 +295,7 @@ export function CategoryPie({
               {(() => {
                 const entry = currentData[activeIndex];
                 if (!entry) return null;
-                const isSpecial = entry.name && entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+                const isSpecial = type === "income" && entry.name && entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
                 const percentageValue = currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
 
                 let color = COLORS[activeIndex % COLORS.length];
@@ -381,7 +382,7 @@ export function CategoryPie({
                   style={{ cursor: selectedCategory ? "default" : "pointer", outline: "none" }}
                 >
                   {currentData.map((entry, i) => {
-                    const isSpecial = entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+                    const isSpecial = type === "income" && entry.name.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
                     const percentageValue =
                       currentTotal > 0 ? (entry.value / currentTotal) * 100 : 0;
                     let pulseClass = "";

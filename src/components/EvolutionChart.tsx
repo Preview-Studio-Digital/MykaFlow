@@ -44,7 +44,7 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
           <div
             className={`flex items-center justify-between gap-6 text-sm font-bold ${saldo >= 0 ? "text-accent" : "text-destructive"}`}
           >
-            <span>Saldo Acumulado</span>
+            <span>Saldo do Período</span>
             <span className="font-mono">{fmtCurrency(saldo)}</span>
           </div>
         </div>
@@ -76,7 +76,7 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
             <div
               className={`flex items-center justify-between gap-6 text-sm pt-2 mt-2 border-t border-white/10 font-bold ${saldo >= 0 ? "text-accent" : "text-destructive"}`}
             >
-              <span>Saldo Mensal</span>
+              <span>Resultado do Mês</span>
               <span className="font-mono">{fmtCurrency(saldo)}</span>
             </div>
           </div>
@@ -119,20 +119,14 @@ export function EvolutionChart({
 
   const effectiveViewMode = forcedViewMode ?? viewMode;
 
-  // Dados Anuais (por mês)
+  // Dados Anuais (por mês) - Agora mostrando o RESULTADO DO MÊS, não acumulado
   const annualData = useMemo(() => {
     if (!mounted) return [];
     const monthly = MONTHS_PT.map((m, i) => ({ month: m, receitas: 0, despesas: 0, idx: i }));
     
-    let initialBalance = 0;
     for (const t of data) {
       const d = new Date(t.occurred_on + "T00:00:00");
       const amount = Number(t.amount) || 0;
-      
-      if (d.getFullYear() < year) {
-        initialBalance += t.type === "income" ? amount : -amount;
-        continue;
-      }
       
       if (d.getFullYear() === year) {
         const m = monthly[d.getMonth()];
@@ -143,10 +137,9 @@ export function EvolutionChart({
       }
     }
 
-    let running = initialBalance;
     return monthly.map((m) => {
-      running += m.receitas - m.despesas;
-      return { ...m, saldo: running };
+      // Saldo aqui é o RESULTADO ISOLADO do mês
+      return { ...m, saldo: m.receitas - m.despesas };
     });
   }, [data, year, mounted]);
 
@@ -171,13 +164,9 @@ export function EvolutionChart({
 
     for (const t of data) {
       const d = new Date(t.occurred_on + "T00:00:00");
-      const tTime = d.getTime();
-      const amount = Number(t.amount) || 0;
-
-      if (tTime < startOfMonth) {
-        initialBalance += t.type === "income" ? amount : -amount;
-      } else if (d.getFullYear() === year && d.getMonth() === month) {
+      if (d.getFullYear() === year && d.getMonth() === month) {
         const dayIdx = d.getDate() - 1;
+        const amount = Number(t.amount) || 0;
         if (days[dayIdx]) {
           if (t.type === "income") days[dayIdx].receitas += amount;
           else days[dayIdx].despesas += amount;
@@ -185,7 +174,7 @@ export function EvolutionChart({
       }
     }
 
-    let runningSaldo = initialBalance;
+    let runningSaldo = 0; // Começa do zero no dia 1º
     return days.map((d) => {
       runningSaldo += d.receitas - d.despesas;
       return {
@@ -222,25 +211,9 @@ export function EvolutionChart({
 
   const projecaoMensal = useMemo(() => {
     if (dailyData.length === 0) return 0;
-    if (!isCurrentMonth) return dailyData[dailyData.length - 1].saldo;
-
-    const daysInMonth = dailyData.length;
-    // Evitar divisão por zero e garantir que a projeção faça sentido
-    const dayForCalc = Math.max(1, currentDay);
-
-    // Se o usuário já lançou o mês inteiro (futuro), a projeção é o próprio saldo final
-    const lastBalance = dailyData[dailyData.length - 1].saldo;
-    const basicProj = (saldoAteHoje / dayForCalc) * daysInMonth;
-
-    // Se o saldo final conhecido (incluindo futuro) for diferente do saldo até hoje,
-    // significa que o usuário já tem lançamentos futuros.
-    // Nesse caso, o "Saldo Final" do gráfico é uma projeção mais real do que o cálculo matemático.
-    if (Math.abs(lastBalance - saldoAteHoje) > 0.01) {
-      return lastBalance;
-    }
-
-    return basicProj;
-  }, [dailyData, saldoAteHoje, isCurrentMonth, currentDay]);
+    // O saldo do último dia do array dailyData já representa o saldo final do mês (Realizado + Futuro)
+    return dailyData[dailyData.length - 1].saldo;
+  }, [dailyData]);
 
   const chartData = effectiveViewMode === "annual" ? annualData : dailyData;
   const currentMonthData = annualData[month] || { receitas: 0, despesas: 0 };
@@ -611,7 +584,7 @@ export function EvolutionChart({
               stroke={effectiveViewMode === "annual" ? "white" : "url(#splitColorStroke)"}
               strokeWidth={3}
               fill="none"
-              name="Saldo Acumulado"
+              name="Saldo do Período"
               animationDuration={1000}
               hide={false}
             />

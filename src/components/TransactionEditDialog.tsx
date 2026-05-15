@@ -132,6 +132,25 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
       upperParent.includes("ADIANTAMENTOS") || upperSub.includes("ADIANTAMENTOS");
     const isManutencao = upperParent.includes("MANUTENÇÃO") || upperSub.includes("MANUTENÇÃO");
 
+    if (
+      upperParent === "ANTECIPAÇÃO DE NOTAS" ||
+      upperParent === "VENDAS" ||
+      upperParent === "MANUTENÇÃO" ||
+      upperParent === "FORNECEDORES" ||
+      upperParent === "PRESTADORES" ||
+      (upperParent === "EMPRÉSTIMO" && type === "income")
+    ) {
+      setNature("variable");
+    } else if (
+      upperParent === "LOCAÇÃO" ||
+      upperParent === "EQUIPE" ||
+      upperParent === "AGNALDO" ||
+      upperParent === "INFRAESTRUTURA" ||
+      upperParent === "FROTA"
+    ) {
+      setNature("fixed");
+    }
+
     if (isAntecipacao && !note.startsWith("NOTA FISCAL Nº: ")) {
       setNote((prev) => (prev ? `NOTA FISCAL Nº: ${prev}` : "NOTA FISCAL Nº: "));
     } else if (isAdiantamento && !note.startsWith("NF - ")) {
@@ -247,8 +266,32 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
                 required
                 value={selectedParentId}
                 onChange={(e) => {
-                  setSelectedParentId(e.target.value);
+                  const val = e.target.value;
+                  setSelectedParentId(val);
                   setSubCategory("");
+                  
+                  const cat = dbCategories.find(c => c.id === val) || fallbackParents.find(c => c.id === val);
+                  if (cat) {
+                    const name = cat.name.toUpperCase();
+                    if (
+                      name === "ANTECIPAÇÃO DE NOTAS" ||
+                      name === "VENDAS" ||
+                      name === "MANUTENÇÃO" ||
+                      name === "FORNECEDORES" ||
+                      name === "PRESTADORES" ||
+                      (name === "EMPRÉSTIMO" && type === "income")
+                    ) {
+                      setNature("variable");
+                    } else if (
+                      name === "LOCAÇÃO" ||
+                      name === "EQUIPE" ||
+                      name === "AGNALDO" ||
+                      name === "INFRAESTRUTURA" ||
+                      name === "FROTA"
+                    ) {
+                      setNature("fixed");
+                    }
+                  }
                 }}
                 className="input-futuristic w-full rounded-xl px-4 py-3.5 text-sm outline-none uppercase font-bold"
               >
@@ -297,6 +340,24 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
                 value={nature}
                 onChange={(e) => setNature(e.target.value as "fixed" | "variable")}
                 className="input-futuristic w-full rounded-xl px-4 py-3.5 text-sm outline-none uppercase font-bold"
+                disabled={(() => {
+                  const parent = dbCategories.find(c => c.id === selectedParentId) || fallbackParents.find(c => c.id === selectedParentId);
+                  if (!parent) return false;
+                  const name = parent.name.toUpperCase();
+                  return (
+                    name === "ANTECIPAÇÃO DE NOTAS" ||
+                    name === "LOCAÇÃO" ||
+                    name === "VENDAS" ||
+                    name === "EQUIPE" ||
+                    name === "MANUTENÇÃO" ||
+                    name === "AGNALDO" ||
+                    name === "INFRAESTRUTURA" ||
+                    name === "FROTA" ||
+                    name === "FORNECEDORES" ||
+                    name === "PRESTADORES" ||
+                    (name === "EMPRÉSTIMO" && type === "income")
+                  );
+                })()}
               >
                 <option value="variable" className="bg-popover uppercase">
                   VARIÁVEL

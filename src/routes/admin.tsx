@@ -18,8 +18,10 @@ import {
   TrendingUp,
   TrendingDown,
   User as UserIcon,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { IntegrationManager } from "@/components/IntegrationManager";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -35,7 +37,7 @@ interface Category {
 
 function AdminPage() {
   const { user, role, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "categories">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "categories" | "integration">("users");
 
   const [profiles, setProfiles] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -168,6 +170,16 @@ function AdminPage() {
             >
               <FolderTree className="h-4 w-4" /> Categorias
             </button>
+            <button
+              onClick={() => setActiveTab("integration")}
+              className={`flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
+                activeTab === "integration"
+                  ? "bg-accent text-white shadow-lg shadow-accent/20"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Link2 className="h-4 w-4" /> Integração
+            </button>
           </nav>
         </header>
 
@@ -177,8 +189,10 @@ function AdminPage() {
               <AdminPanel onSuccess={fetchUsers} />
               <UserList profiles={profiles} loading={usersLoading} onRefresh={fetchUsers} />
             </div>
-          ) : (
+          ) : activeTab === "categories" ? (
             <CategoryManager />
+          ) : (
+            <IntegrationManager />
           )}
         </div>
       </div>

@@ -34,6 +34,8 @@ export function TransactionForm({
 
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
+  const [operationCost, setOperationCost] = useState("");
+  const [dueDate, setDueDate] = useState("");
 
   const getInitialDate = (m?: number, y?: number) => {
     const now = new Date();
@@ -268,6 +270,9 @@ export function TransactionForm({
   const currentParents = dbCategories;
   const currentSubs = dbSubCategories.filter((s) => s.category_id === selectedParentId);
 
+  const selectedCategoryName = dbCategories.find((c) => c.id === selectedParentId)?.name.toUpperCase();
+  const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!user || !selectedParentId) {
@@ -286,27 +291,76 @@ export function TransactionForm({
       toast.error("Insira um valor válido");
       return;
     }
+
+    const costValue = isAntecipacao ? parseFloat(operationCost.replace(/\./g, "").replace(",", ".")) : 0;
+    if (isAntecipacao) {
+      if (isNaN(costValue) || costValue < 0) {
+        toast.error("Insira um custo de operação válido");
+        return;
+      }
+      if (!dueDate) {
+        toast.error("Selecione a data de vencimento");
+        return;
+      }
+    }
+
     setBusy(true);
 
-    const { error } = await supabase.from("transactions").insert({
+    const finalDescription = isAntecipacao 
+      ? (description.toUpperCase().includes("NF") ? description.toUpperCase() : `NF ${description.toUpperCase()}`)
+      : (description.trim().toUpperCase() || sub?.name || null);
+
+    // 1. Registro da Receita Principal
+    const { error: mainError } = await supabase.from("transactions").insert({
       user_id: user.id,
       type,
       nature,
       category: parent?.name || "OUTROS",
       category_id_v2: selectedParentId,
       subcategory_id_v2: selectedSubId || null,
-      description: description.trim().toUpperCase() || sub?.name || null,
+      description: finalDescription,
       amount: value,
       occurred_on: date,
     });
 
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
+    if (mainError) {
+      setBusy(false);
+      toast.error(mainError.message);
       return;
     }
+
+    // 2. Se for antecipação, registra o custo como despesa e o marcador de vencimento
+    if (isAntecipacao) {
+      // Custo da Operação (Despesa na mesma data)
+      if (costValue > 0) {
+        await supabase.from("transactions").insert({
+          user_id: user.id,
+          type: "expense",
+          nature: "variable",
+          category: "CUSTO OPERAÇÃO",
+          description: `CUSTO ANTECIPAÇÃO - ${finalDescription}`,
+          amount: costValue,
+          occurred_on: date,
+        });
+      }
+
+      // Marcador de Vencimento (0 na data de vencimento)
+      await supabase.from("transactions").insert({
+        user_id: user.id,
+        type: "expense", // Pode ser qualquer um, usaremos expense para facilitar o filtro de marcador se necessário
+        nature: "variable",
+        category: "VENCIMENTO ANTECIPAÇÃO",
+        description: `VENCIMENTO: ${finalDescription}`,
+        amount: 0,
+        occurred_on: dueDate,
+      });
+    }
+
+    setBusy(false);
     toast.success("Lançamento registrado!");
     setAmount("");
+    setOperationCost("");
+    setDueDate("");
     setSelectedSubId("");
     setDescription("");
     setSelectedParentId("");
@@ -450,38 +504,52 @@ export function TransactionForm({
             );
           })()}
         />
-        <div className="space-y-2">
-          <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
-            Valor do Lançamento
-          </span>
-          <div className="relative">
-            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">
-              R$
+        {isAntecipacao ? (
+          <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
+            <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
+              Número da Nota Fiscal
             </span>
             <input
-              required
-              inputMode="numeric"
-              value={amount}
-              onChange={(e) => {
-                const val = e.target.value.replace(/\D/g, "");
-                const centered = (Number(val) / 100).toLocaleString("pt-BR", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                });
-                setAmount(centered);
-              }}
-              placeholder="0,00"
-              className="input-futuristic w-full h-14 rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2"
-              style={{ color: type === "expense" ? "oklch(0.7 0.2 30)" : "oklch(0.78 0.16 150)" }}
+              value={description}
+              onChange={(e) => setDescription(e.target.value.toUpperCase())}
+              placeholder="DIGITE O NÚMERO DA NF..."
+              className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2"
             />
           </div>
-        </div>
+        ) : (
+          <div className="space-y-2">
+            <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
+              Valor do Lançamento
+            </span>
+            <div className="relative">
+              <span className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">
+                R$
+              </span>
+              <input
+                required
+                inputMode="numeric"
+                value={amount}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  const centered = (Number(val) / 100).toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  });
+                  setAmount(centered);
+                }}
+                placeholder="0,00"
+                className="input-futuristic w-full h-14 rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2"
+                style={{ color: type === "expense" ? "oklch(0.7 0.2 30)" : "oklch(0.78 0.16 150)" }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div className="space-y-2">
           <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
-            Data da Ocorrência
+            {isAntecipacao ? "Data de Abertura" : "Data da Ocorrência"}
           </span>
           <input
             required
@@ -500,35 +568,105 @@ export function TransactionForm({
             className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none font-bold border-2"
           />
         </div>
-        <div className="space-y-2">
-          <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
-            Descrição
-          </span>
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value.toUpperCase())}
-            placeholder="DIGITE INFORMAÇÕES ADICIONAIS..."
-            className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2"
-          />
-        </div>
+        {isAntecipacao ? (
+          <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
+            <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
+              Data de Vencimento
+            </span>
+            <input
+              required
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none font-bold border-2 border-accent/30"
+            />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
+              Descrição
+            </span>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value.toUpperCase())}
+              placeholder="DIGITE INFORMAÇÕES ADICIONAIS..."
+              className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2"
+            />
+          </div>
+        )}
       </div>
+
+      {/* Já incluído no grid acima */}
+
+      {isAntecipacao && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 animate-in slide-in-from-top-4 duration-500">
+          <div className="space-y-2">
+            <span className="block text-[11px] uppercase tracking-[0.3em] text-accent font-black ml-2">
+              Valor Líquido
+            </span>
+            <div className="relative">
+              <span className="absolute left-5 top-1/2 -translate-y-1/2 text-accent font-bold text-sm">
+                R$
+              </span>
+              <input
+                required
+                inputMode="numeric"
+                value={amount}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  const centered = (Number(val) / 100).toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  });
+                  setAmount(centered);
+                }}
+                placeholder="0,00"
+                className="input-futuristic w-full h-14 rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2 border-accent/50 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+                style={{ color: "oklch(0.78 0.16 150)" }}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <span className="block text-[11px] uppercase tracking-[0.3em] text-red-500 font-black ml-2">
+              Custo da Operação
+            </span>
+            <div className="relative">
+              <span className="absolute left-5 top-1/2 -translate-y-1/2 text-red-500 font-bold text-sm">
+                R$
+              </span>
+              <input
+                required
+                inputMode="numeric"
+                value={operationCost}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  const centered = (Number(val) / 100).toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  });
+                  setOperationCost(centered);
+                }}
+                placeholder="0,00"
+                className="input-futuristic w-full h-14 rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                style={{ color: "rgb(239, 68, 68)" }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <button
         disabled={busy}
         type="submit"
         className={`w-full rounded-2xl py-6 text-sm font-black uppercase tracking-[0.4em] transition-all duration-500 disabled:opacity-50 border-2 mt-4 hover:scale-[1.02] active:scale-[0.98] ${
-          type === "expense"
-            ? "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/40"
-            : "bg-accent/20 border-accent/70 text-accent hover:bg-accent/40"
+          isAntecipacao
+            ? "bg-gradient-to-r from-accent to-red-500 border-white/20 text-white shadow-[0_0_30px_rgba(34,211,238,0.3)]"
+            : type === "expense"
+              ? "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.3)]"
+              : "bg-accent/20 border-accent/70 text-accent hover:bg-accent/40 shadow-[0_0_30px_rgba(34,211,238,0.3)]"
         }`}
-        style={{
-          boxShadow:
-            type === "expense"
-              ? "0 0 30px rgba(239, 68, 68, 0.3)"
-              : "0 0 30px rgba(34, 211, 238, 0.3)",
-        }}
       >
-        {busy ? "Processando..." : `REGISTRAR ${type === "expense" ? "DESPESA" : "RECEITA"}`}
+        {busy ? "Processando..." : (isAntecipacao ? "REGISTRAR RECEITA E DESPESA" : `REGISTRAR ${type === "expense" ? "DESPESA" : "RECEITA"}`)}
       </button>
     </form>
   );

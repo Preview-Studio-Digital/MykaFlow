@@ -8,6 +8,8 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  Line,
+  ComposedChart,
 } from "recharts";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { Activity, ChevronLeft } from "lucide-react";
@@ -17,6 +19,7 @@ interface Tx {
   type: "income" | "expense";
   amount: number;
   occurred_on: string;
+  category?: string;
 }
 
 const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) => {
@@ -137,14 +140,16 @@ export function EvolutionChart({
       }
     }
 
+    let runningSaldo = 0;
     return monthly.map((m) => {
-      // Saldo aqui é o RESULTADO ISOLADO do mês
-      return { ...m, saldo: m.receitas - m.despesas };
+      // Saldo aqui agora é o ACUMULADO para mostrar a evolução
+      runningSaldo += m.receitas - m.despesas;
+      return { ...m, saldo: runningSaldo };
     });
   }, [data, year, mounted]);
 
   const annualBalance = useMemo(() => {
-    return annualData.reduce((acc, curr) => acc + (curr.receitas - curr.despesas), 0);
+    return annualData[11]?.saldo || 0;
   }, [annualData]);
 
   // Dados Mensais (por dia) - Cumulativos
@@ -157,6 +162,7 @@ export function EvolutionChart({
       receitas: 0,
       despesas: 0,
       day: i + 1,
+      isVencimento: false,
     }));
 
     let initialBalance = 0;
@@ -168,8 +174,12 @@ export function EvolutionChart({
         const dayIdx = d.getDate() - 1;
         const amount = Number(t.amount) || 0;
         if (days[dayIdx]) {
-          if (t.type === "income") days[dayIdx].receitas += amount;
-          else days[dayIdx].despesas += amount;
+          if (t.category === "VENCIMENTO ANTECIPAÇÃO") {
+            days[dayIdx].isVencimento = true;
+          } else {
+            if (t.type === "income") days[dayIdx].receitas += amount;
+            else days[dayIdx].despesas += amount;
+          }
         }
       }
     }
@@ -185,9 +195,7 @@ export function EvolutionChart({
   }, [data, year, effectiveViewMode, month, mounted]);
 
   const currentAnnualBalance = useMemo(() => {
-    return annualData
-      .slice(0, month + 1)
-      .reduce((acc, curr) => acc + (curr.receitas - curr.despesas), 0);
+    return annualData[month]?.saldo || 0;
   }, [annualData, month]);
 
   // Cálculos para o modo Mensal
@@ -385,7 +393,7 @@ export function EvolutionChart({
 
       <div className="h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 20, right: 60, left: 0, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 20, right: 60, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.6} />
@@ -473,6 +481,30 @@ export function EvolutionChart({
                 return `R$ ${v.toFixed(0)}`;
               }}
             />
+
+            {effectiveViewMode === "monthly" &&
+              chartData.map((d: any, i: number) => {
+                if (d.isVencimento) {
+                  return (
+                    <ReferenceLine
+                      key={`venc-${i}`}
+                      yAxisId="left"
+                      x={d.label}
+                      stroke="#facc15"
+                      strokeWidth={2}
+                      strokeDasharray="3 3"
+                      label={{
+                        value: "⚠️",
+                        position: "top",
+                        fill: "#facc15",
+                        fontSize: 16,
+                      }}
+                    />
+                  );
+                }
+                return null;
+              })}
+
             <Tooltip
               cursor={false}
               content={
@@ -486,9 +518,13 @@ export function EvolutionChart({
             {effectiveViewMode === "annual" && (
               <Legend
                 wrapperStyle={{ fontFamily: "Rajdhani", fontSize: 14, paddingTop: "20px" }}
-                formatter={(value) => (
-                  <span className="text-white/90 font-bold tracking-wider">{value}</span>
-                )}
+                formatter={(value) => {
+                  const colorClass = 
+                    value === "Receitas" ? "text-accent" : 
+                    value === "Despesas" ? "text-destructive" : 
+                    "text-white/90";
+                  return <span className={`${colorClass} font-bold tracking-wider`}>{value}</span>;
+                }}
               />
             )}
 
@@ -576,17 +612,32 @@ export function EvolutionChart({
               hide={effectiveViewMode === "annual"}
             />
 
-            {/* Linha de Contorno Principal */}
+            {/* Modo Mensal: Saldo Contínuo e Colorido */}
             <Area
               yAxisId="right"
               type="monotone"
               dataKey="saldo"
-              stroke={effectiveViewMode === "annual" ? "white" : "url(#splitColorStroke)"}
+              stroke="url(#splitColorStroke)"
               strokeWidth={3}
               fill="none"
               name="Saldo do Período"
               animationDuration={1000}
-              hide={false}
+              hide={effectiveViewMode === "annual"}
+            />
+
+            {/* Modo Anual: Evolução Branca e Tracejada */}
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="saldo"
+              stroke="white"
+              strokeWidth={2}
+              strokeDasharray="6 6"
+              name="Evolução do Saldo"
+              animationDuration={1000}
+              dot={false}
+              legendType="none"
+              hide={effectiveViewMode === "monthly"}
             />
 
             {effectiveViewMode === "monthly" && (
@@ -599,7 +650,7 @@ export function EvolutionChart({
                 strokeDasharray="4 4"
               />
             )}
-          </AreaChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>

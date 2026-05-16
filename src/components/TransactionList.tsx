@@ -42,6 +42,7 @@ export function TransactionList({
     const day = new Date(r.occurred_on + "T00:00:00").getDate().toString();
     const sub = (r.description || "").split(" - ")[0] || "";
 
+    if (r.category === "VENCIMENTO ANTECIPAÇÃO") return false;
     if (filterDay && day !== filterDay) return false;
     if (filterType && r.type !== filterType) return false;
     if (filterCategory && r.category !== filterCategory) return false;

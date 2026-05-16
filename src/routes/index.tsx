@@ -439,6 +439,7 @@ function Dashboard() {
 function agg(list: TxRow[]) {
   const map = new Map<string, number>();
   for (const r of list) {
+    if (r.category === "VENCIMENTO ANTECIPAÇÃO") continue;
     let catName = (r.category || "Outros").trim().toUpperCase();
     if (catName === "ESTRUTURA EMPRESARIAL") catName = "ESTRUTURA";
     map.set(catName, (map.get(catName) ?? 0) + Number(r.amount));

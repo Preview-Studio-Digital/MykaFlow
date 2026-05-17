@@ -72,10 +72,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "MykaFlow — Controle Financeiro Empresarial" },
+      { title: "MykaFlow" },
       { name: "description", content: "MykaFlow: sistema de controle de receitas e despesas." },
       { name: "author", content: "MykaFlow" },
-      { property: "og:title", content: "MykaFlow — Controle Financeiro Empresarial" },
+      { property: "og:title", content: "MykaFlow" },
       {
         property: "og:description",
         content: "MykaFlow: sistema de controle de receitas e despesas.",
@@ -83,7 +83,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "MykaFlow — Controle Financeiro Empresarial" },
+      { name: "twitter:title", content: "MykaFlow" },
       {
         name: "twitter:description",
         content: "MykaFlow: sistema de controle de receitas e despesas.",
@@ -98,6 +98,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/816e970f-80ec-4455-8ab2-2d003c0edc92",
       },
+      { property: "og:description", content: "MykaFlow: sistema de controle de receitas e despesas." },
+      { name: "twitter:description", content: "MykaFlow: sistema de controle de receitas e despesas." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/6b7af316-8207-4821-8657-fd5ad5ea2449" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/6b7af316-8207-4821-8657-fd5ad5ea2449" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },

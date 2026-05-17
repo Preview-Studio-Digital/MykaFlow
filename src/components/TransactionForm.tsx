@@ -399,7 +399,7 @@ export function TransactionForm({
           >
             <ChevronLeft className="h-5 w-5" />
             {defaultMonth !== undefined && (
-              <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase">
+              <span className="text-lg font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase">
                 {MONTHS_PT[(defaultMonth + 11) % 12]}
               </span>
             )}
@@ -419,7 +419,7 @@ export function TransactionForm({
             className="text-muted-foreground hover:text-white transition-all hover:scale-125 flex items-center gap-2 group"
           >
             {defaultMonth !== undefined && (
-              <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase">
+              <span className="text-lg font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase">
                 {MONTHS_PT[(defaultMonth + 1) % 12]}
               </span>
             )}

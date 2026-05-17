@@ -320,7 +320,7 @@ export function CategoryPie({
                   currentTotal > 0 ? ((entry.value / currentTotal) * 100).toFixed(1) : "0.0";
                 return (
                   <div
-                    className="glass rounded-xl p-2.5 border shadow-2xl min-w-[140px]"
+                    className="glass rounded-xl px-2.5 py-2 border shadow-2xl min-w-[145px]"
                     style={{
                       borderColor: `${color}44`,
                       backgroundColor: "oklch(0.15 0.05 255 / 0.9)",
@@ -328,33 +328,35 @@ export function CategoryPie({
                     }}
                   >
                     <p
-                      className="text-[10px] uppercase tracking-[0.2em] mb-1 font-black opacity-80"
+                      className="text-[9px] uppercase tracking-[0.2em] mb-0.5 font-black opacity-80"
                       style={{ color: color }}
                     >
                       {entry.name}
                     </p>
-                    <div className="flex flex-col gap-0.5">
-                      <p className="text-xl font-bold leading-tight" style={{ color: color }}>
+                    <div className="flex flex-col gap-0">
+                      <p className="text-lg font-bold leading-tight" style={{ color: color }}>
                         {fmtCurrency(entry.value)}
                       </p>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <p
-                          className="text-sm font-black tracking-widest px-1.5 py-0.5 rounded bg-white/10"
-                          style={{ color: color }}
-                        >
-                          {percentageStr}%
-                        </p>
-                        <span className="text-[10px] uppercase opacity-50 font-bold">do total</span>
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <div className="flex items-center gap-1">
+                          <p
+                            className="text-[10px] font-black tracking-wider px-1 py-0.5 rounded bg-white/10"
+                            style={{ color: color }}
+                          >
+                            {percentageStr}%
+                          </p>
+                          <span className="text-[8px] uppercase opacity-50 font-bold">total</span>
+                        </div>
+                        {isSpecial && (
+                          <span
+                            className="text-[8px] font-black tracking-wider uppercase animate-pulse shrink-0"
+                            style={{ color: color }}
+                          >
+                            {classification}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    {isSpecial && (
-                      <p
-                        className={`text-[9px] font-black tracking-widest mt-2 pt-1.5 border-t border-white/10 uppercase animate-pulse`}
-                        style={{ color: color }}
-                      >
-                        {classification}
-                      </p>
-                    )}
                   </div>
                 );
               })()}

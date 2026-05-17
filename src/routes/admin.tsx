@@ -457,7 +457,7 @@ function CategoryManager() {
                 onClick={() => setFilterType(f)}
                 className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded transition-all ${filterType === f ? "bg-primary/20 text-white" : "text-muted-foreground"}`}
               >
-                {f === "all" ? "Todos" : f === "expense" ? "Desp." : "Rec."}
+                {f === "all" ? "Todos" : f === "expense" ? "Despesas" : "Receitas"}
               </button>
             ))}
           </div>
@@ -477,20 +477,20 @@ function CategoryManager() {
                 onClick={() => setNewType("expense")}
                 className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === "expense" ? "bg-red-500/20 text-red-400" : "text-muted-foreground"}`}
               >
-                <TrendingDown className="h-3 w-3 inline mr-1" /> Desp.
+                <TrendingDown className="h-3 w-3 inline mr-1" /> Despesas
               </button>
               <button
                 onClick={() => setNewType("income")}
                 className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === "income" ? "bg-green-500/20 text-green-400" : "text-muted-foreground"}`}
               >
-                <TrendingUp className="h-3 w-3 inline mr-1" /> Rec.
+                <TrendingUp className="h-3 w-3 inline mr-1" /> Receitas
               </button>
             </div>
             <button
               onClick={handleAdd}
               className="btn-futuristic rounded-xl px-6 py-3 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
             >
-              <Plus className="h-4 w-4" /> Add
+              <Plus className="h-4 w-4" /> Adicionar
             </button>
           </div>
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-black opacity-60">

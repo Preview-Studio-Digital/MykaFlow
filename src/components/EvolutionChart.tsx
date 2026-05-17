@@ -54,12 +54,10 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
           </div>
           {vencimentoTexts.length > 0 && (
             <div className="mt-3 text-yellow-400 text-[11px] font-bold bg-yellow-400/10 p-2 rounded-lg border border-yellow-400/20 flex flex-col gap-1.5 max-w-[250px]">
-              {vencimentoTexts.map((txt: string, i: number) => (
-                <span key={i} className="flex items-start gap-1.5 leading-tight">
-                  <span className="shrink-0">⚠️</span>
-                  <span>{txt}</span>
-                </span>
-              ))}
+              <span className="flex items-start gap-1.5 leading-tight">
+                <span className="shrink-0">⚠️</span>
+                <span>{vencimentoTexts.join(" | ")}</span>
+              </span>
             </div>
           )}
         </div>
@@ -508,7 +506,7 @@ export function EvolutionChart({
                       strokeWidth={2}
                       strokeDasharray="3 3"
                       label={(props: any) => {
-                        const texts = d.vencimentoTexts?.join('\n') || '';
+                        const texts = d.vencimentoTexts?.join(' | ') || '';
                         return (
                           <text
                             x={props.viewBox.x}

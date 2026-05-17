@@ -47,10 +47,10 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
             Dia {label} • {dayName}
           </p>
           <div
-            className={`flex items-center justify-between gap-6 text-sm font-bold ${saldo >= 0 ? "text-accent" : "text-destructive"}`}
+            className="flex items-center justify-between gap-6 text-sm font-bold"
           >
-            <span>Saldo do Período</span>
-            <span className="font-mono">{fmtCurrency(saldo)}</span>
+            <span className="text-white">Saldo</span>
+            <span className="font-mono text-white">{fmtCurrency(saldo)}</span>
           </div>
           {vencimentoTexts.length > 0 && (
             <div className="mt-3 text-yellow-400 text-[11px] font-bold bg-yellow-400/10 p-2 rounded-lg border border-yellow-400/20 flex flex-col gap-1.5 max-w-[250px]">
@@ -87,10 +87,10 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
               <span className="font-mono font-bold text-destructive">{fmtCurrency(despesas)}</span>
             </div>
             <div
-              className={`flex items-center justify-between gap-6 text-sm pt-2 mt-2 border-t border-white/10 font-bold ${saldo >= 0 ? "text-accent" : "text-destructive"}`}
+              className="flex items-center justify-between gap-6 text-sm pt-2 mt-2 border-t border-white/10 font-bold"
             >
-              <span>Resultado do Mês</span>
-              <span className="font-mono">{fmtCurrency(saldo)}</span>
+              <span className="text-white">Saldo</span>
+              <span className="font-mono text-white">{fmtCurrency(saldo)}</span>
             </div>
           </div>
         </div>
@@ -405,7 +405,7 @@ export function EvolutionChart({
 
       <div className="h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 20, right: 60, left: 0, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.6} />
@@ -506,7 +506,6 @@ export function EvolutionChart({
                       strokeWidth={2}
                       strokeDasharray="3 3"
                       label={(props: any) => {
-                        const texts = d.vencimentoTexts?.join(' | ') || '';
                         return (
                           <text
                             x={props.viewBox.x}
@@ -514,9 +513,7 @@ export function EvolutionChart({
                             fill="#facc15"
                             fontSize={16}
                             textAnchor="middle"
-                            style={{ cursor: "help" }}
                           >
-                            <title>{texts}</title>
                             ⚠️
                           </text>
                         );
@@ -642,7 +639,7 @@ export function EvolutionChart({
               stroke="url(#splitColorStroke)"
               strokeWidth={3}
               fill="none"
-              name="Saldo do Período"
+              name="Saldo"
               animationDuration={1000}
               hide={effectiveViewMode === "annual"}
             />
@@ -655,7 +652,7 @@ export function EvolutionChart({
               stroke="white"
               strokeWidth={2}
               strokeDasharray="6 6"
-              name="Evolução do Saldo"
+              name="Saldo"
               animationDuration={1000}
               dot={false}
               legendType="none"

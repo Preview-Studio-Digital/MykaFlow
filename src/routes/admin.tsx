@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminPanel } from "@/components/AdminPanel";
-import { listUsers, adminUpdateRole, adminDeleteUser } from "@/lib/admin.functions";
+import { listUsers, adminUpdateRole, adminDeleteUser, adminUpdateName } from "@/lib/admin.functions";
 import {
   ShieldCheck,
   ChevronLeft,
@@ -185,10 +185,7 @@ function AdminPage() {
 
         <div className="float-up">
           {activeTab === "users" ? (
-            <div className="space-y-6">
-              <AdminPanel onSuccess={fetchUsers} />
-              <UserList profiles={profiles} loading={usersLoading} onRefresh={fetchUsers} />
-            </div>
+            <UserList profiles={profiles} loading={usersLoading} onRefresh={fetchUsers} />
           ) : activeTab === "categories" ? (
             <CategoryManager />
           ) : (
@@ -210,22 +207,22 @@ function UserList({
   onRefresh: () => void;
 }) {
   const delUser = useServerFn(adminDeleteUser);
+  const updateRole = useServerFn(adminUpdateRole);
+  const updateName = useServerFn(adminUpdateName);
   const { user: currentUser } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   async function toggleRole(targetUserId: string, currentRole: string) {
     setBusy(targetUserId);
     try {
       const newRole = currentRole === "admin" ? "user" : "admin";
-      await supabase.from("user_roles").delete().eq("user_id", targetUserId);
-      const { error } = await supabase
-        .from("user_roles")
-        .insert({ user_id: targetUserId, role: newRole });
-      if (error) throw error;
+      await updateRole({ targetUserId, role: newRole });
       toast.success(`Cargo alterado para ${newRole.toUpperCase()}`);
       onRefresh();
     } catch (err: any) {
-      toast.error(`Erro: ${err.message}`);
+      const msg = err instanceof Response ? await err.text() : err.message || "Erro desconhecido";
+      toast.error(`Erro: ${msg}`);
     } finally {
       setBusy(null);
     }
@@ -236,15 +233,27 @@ function UserList({
     if (!newName || newName === currentName) return;
     setBusy(targetUserId);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ display_name: newName.trim().toUpperCase() })
-        .eq("id", targetUserId);
-      if (error) throw error;
+      await updateName({ targetUserId, name: newName.trim() });
       toast.success("Nome atualizado!");
       onRefresh();
     } catch (err: any) {
-      toast.error(`Erro: ${err.message}`);
+      const msg = err instanceof Response ? await err.text() : err.message || "Erro desconhecido";
+      toast.error(`Erro: ${msg}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleDeleteUser(targetUserId: string, userName: string) {
+    if (!confirm(`Tem certeza que deseja EXCLUIR DEFINITIVAMENTE o usuário ${userName.toUpperCase()}?`)) return;
+    setBusy(targetUserId);
+    try {
+      await delUser({ targetUserId });
+      toast.success(`Usuário ${userName.toUpperCase()} excluído com sucesso.`);
+      onRefresh();
+    } catch (err: any) {
+      const msg = err instanceof Response ? await err.text() : err.message || "Erro desconhecido";
+      toast.error(`Erro ao excluir: ${msg}`);
     } finally {
       setBusy(null);
     }
@@ -259,14 +268,28 @@ function UserList({
 
   return (
     <div className="glass rounded-2xl p-6">
-      <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 border-b border-white/5 pb-4">
         <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase">
           <Users className="h-5 w-5 text-accent" /> Equipe Registrada
         </h3>
-        <span className="text-[10px] uppercase tracking-widest opacity-50 font-black">
-          {profiles.length} Membros
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="text-[10px] uppercase tracking-widest opacity-50 font-black">
+            {profiles.length} Membros
+          </span>
+          <button
+            onClick={() => setShowAdminPanel(!showAdminPanel)}
+            className="btn-futuristic py-2 px-4 text-[10px] rounded-lg"
+          >
+            {showAdminPanel ? "FECHAR" : "CRIAR ACESSO"}
+          </button>
+        </div>
       </div>
+
+      {showAdminPanel && (
+        <div className="mb-6 animate-in slide-in-from-top-4">
+          <AdminPanel onSuccess={() => { setShowAdminPanel(false); onRefresh(); }} />
+        </div>
+      )}
 
       <div className="space-y-3">
         {profiles.map((p) => (
@@ -314,6 +337,13 @@ function UserList({
                     className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${p.role === "admin" ? "border-accent/40 text-accent bg-accent/5" : "border-white/10 text-muted-foreground hover:border-white/40"}`}
                   >
                     {busy === p.id ? "..." : p.role === "admin" ? "Rebaixar" : "Tornar ADM"}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteUser(p.id, p.name)}
+                    className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all ml-1"
+                    title="Excluir Usuário"
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </>
               )}

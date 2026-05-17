@@ -36,6 +36,7 @@ export function TransactionForm({
   const [description, setDescription] = useState("");
   const [operationCost, setOperationCost] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const getInitialDate = (m?: number, y?: number) => {
     const now = new Date();
@@ -72,10 +73,11 @@ export function TransactionForm({
         name === "MANUTENÇÃO" ||
         name === "FORNECEDORES" ||
         name === "PRESTADORES" ||
+        name === "APORTE" ||
         (name === "EMPRÉSTIMO" && type === "income")
       ) {
         setNature("variable");
-      } else if (name === "LOCAÇÃO" || name === "EQUIPE" || name === "AGNALDO" || name === "INFRAESTRUTURA" || name === "FROTA") {
+      } else if (name === "LOCAÇÃO" || name === "EQUIPE" || name === "AGNALDO" || name === "INFRAESTRUTURA" || name === "FROTA" || (name === "EMPRÉSTIMO" && type === "expense")) {
         setNature("fixed");
       }
     }
@@ -83,14 +85,23 @@ export function TransactionForm({
 
   const selectedCategoryName = dbCategories.find((c) => c.id === selectedParentId)?.name.toUpperCase();
   const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
+  const isPeriodic = (type === "income" && selectedCategoryName === "LOCAÇÃO") || (type === "expense" && selectedCategoryName === "EMPRÉSTIMO");
 
-  // Variáveis para layout condicional
-  const inputHeight = isAntecipacao ? "h-11" : "h-14";
-  const spaceY = isAntecipacao ? "space-y-1" : "space-y-2";
-  const gridGap = isAntecipacao ? "gap-3" : "gap-6";
-  const formPadding = isAntecipacao ? "p-5" : "p-8";
-  const formGap = isAntecipacao ? "gap-2" : "gap-4";
-  const btnPadding = isAntecipacao ? "py-3 mt-2" : "py-6 mt-4";
+  useEffect(() => {
+    if (isPeriodic && date && !endDate) {
+      const d = new Date(date + "T00:00:00");
+      d.setDate(d.getDate() + 30);
+      setEndDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+  }, [isPeriodic, date]);
+
+  // Variáveis para layout
+  const inputHeight = "h-11";
+  const spaceY = "space-y-1";
+  const gridGap = "gap-3";
+  const formPadding = "p-5";
+  const formGap = "gap-2";
+  const btnPadding = "py-3 mt-2";
 
   // Componente de Select Customizado para permitir estilização do hover (fill color)
   const CustomSelect = ({
@@ -302,6 +313,10 @@ export function TransactionForm({
 
     const costValue = isAntecipacao ? parseFloat(operationCost.replace(/\./g, "").replace(",", ".")) : 0;
     if (isAntecipacao) {
+      if (!description.trim()) {
+        toast.error("Insira o número da nota fiscal");
+        return;
+      }
       if (isNaN(costValue) || costValue < 0) {
         toast.error("Insira um custo de operação válido");
         return;
@@ -318,23 +333,54 @@ export function TransactionForm({
       ? (description.toUpperCase().includes("NF") ? description.toUpperCase() : `NF ${description.toUpperCase()}`)
       : (description.trim().toUpperCase() || sub?.name || null);
 
-    // 1. Registro da Receita Principal
-    const { error: mainError } = await supabase.from("transactions").insert({
-      user_id: user.id,
-      type,
-      nature,
-      category: parent?.name || "OUTROS",
-      category_id_v2: selectedParentId,
-      subcategory_id_v2: selectedSubId || null,
-      description: finalDescription,
-      amount: value,
-      occurred_on: date,
-    });
+    if (isPeriodic && endDate) {
+      const start = new Date(date + "T00:00:00");
+      const end = new Date(endDate + "T00:00:00");
+      
+      const transactions = [];
+      let current = new Date(start);
+      while (current <= end) {
+        transactions.push({
+          user_id: user.id,
+          type,
+          nature,
+          category: parent?.name || "OUTROS",
+          category_id_v2: selectedParentId,
+          subcategory_id_v2: selectedSubId || null,
+          description: finalDescription,
+          amount: value,
+          occurred_on: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`
+        });
+        current.setMonth(current.getMonth() + 1);
+      }
+      
+      if (transactions.length > 0) {
+        const { error: mainError } = await supabase.from("transactions").insert(transactions);
+        if (mainError) {
+          setBusy(false);
+          toast.error(mainError.message);
+          return;
+        }
+      }
+    } else {
+      // 1. Registro da Receita Principal
+      const { error: mainError } = await supabase.from("transactions").insert({
+        user_id: user.id,
+        type,
+        nature,
+        category: parent?.name || "OUTROS",
+        category_id_v2: selectedParentId,
+        subcategory_id_v2: selectedSubId || null,
+        description: finalDescription,
+        amount: value,
+        occurred_on: date,
+      });
 
-    if (mainError) {
-      setBusy(false);
-      toast.error(mainError.message);
-      return;
+      if (mainError) {
+        setBusy(false);
+        toast.error(mainError.message);
+        return;
+      }
     }
 
     // 2. Se for antecipação, registra o custo como despesa e o marcador de vencimento
@@ -365,10 +411,11 @@ export function TransactionForm({
     }
 
     setBusy(false);
-    toast.success("Lançamento registrado!");
+    toast.success(isPeriodic ? "Lançamentos registrados!" : "Lançamento registrado!");
     setAmount("");
     setOperationCost("");
     setDueDate("");
+    setEndDate("");
     setSelectedSubId("");
     setDescription("");
     setSelectedParentId("");
@@ -508,7 +555,8 @@ export function TransactionForm({
               name === "FROTA" ||
               name === "FORNECEDORES" ||
               name === "PRESTADORES" ||
-              (name === "EMPRÉSTIMO" && type === "income")
+              name === "APORTE" ||
+              name === "EMPRÉSTIMO"
             );
           })()}
         />
@@ -518,6 +566,7 @@ export function TransactionForm({
               Número da Nota Fiscal
             </span>
             <input
+              required
               value={description}
               onChange={(e) => setDescription(e.target.value.toUpperCase())}
               placeholder="DIGITE O NÚMERO DA NF..."
@@ -557,24 +606,53 @@ export function TransactionForm({
       <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridGap}`}>
         <div className={spaceY}>
           <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
-            {isAntecipacao ? "Data de Abertura" : "Data da Ocorrência"}
+            {isAntecipacao ? "Data de Abertura" : isPeriodic ? "Período de Ocorrência" : "Data da Ocorrência"}
           </span>
-          <input
-            required
-            type="date"
-            value={date}
-            onChange={(e) => {
-              const newDate = e.target.value;
-              setDate(newDate);
-              if (newDate && onMonthYearChange) {
-                const d = new Date(newDate + "T00:00:00");
-                if (!isNaN(d.getTime())) {
-                  onMonthYearChange(d.getMonth(), d.getFullYear());
+          {isPeriodic ? (
+            <div className="flex items-center gap-2">
+              <input
+                required
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDate(newDate);
+                  if (newDate && onMonthYearChange) {
+                    const d = new Date(newDate + "T00:00:00");
+                    if (!isNaN(d.getTime())) {
+                      onMonthYearChange(d.getMonth(), d.getFullYear());
+                    }
+                  }
+                }}
+                className={`input-futuristic w-full ${inputHeight} rounded-2xl px-3 text-[11px] sm:text-sm outline-none font-bold border-2`}
+              />
+              <span className="text-muted-foreground text-[9px] uppercase font-black">Até</span>
+              <input
+                required
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className={`input-futuristic w-full ${inputHeight} rounded-2xl px-3 text-[11px] sm:text-sm outline-none font-bold border-2`}
+              />
+            </div>
+          ) : (
+            <input
+              required
+              type="date"
+              value={date}
+              onChange={(e) => {
+                const newDate = e.target.value;
+                setDate(newDate);
+                if (newDate && onMonthYearChange) {
+                  const d = new Date(newDate + "T00:00:00");
+                  if (!isNaN(d.getTime())) {
+                    onMonthYearChange(d.getMonth(), d.getFullYear());
+                  }
                 }
-              }
-            }}
-            className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none font-bold border-2`}
-          />
+              }}
+              className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none font-bold border-2`}
+            />
+          )}
         </div>
         {isAntecipacao ? (
           <div className={`${spaceY} animate-in slide-in-from-right-4 duration-500`}>
@@ -664,7 +742,10 @@ export function TransactionForm({
       )}
 
       <button
-        disabled={busy}
+        disabled={
+          busy ||
+          (isAntecipacao && (!amount || !operationCost || !description.trim() || !date || !dueDate))
+        }
         type="submit"
         className={`w-full rounded-2xl text-sm font-black uppercase tracking-[0.4em] transition-all duration-500 disabled:opacity-50 border-2 hover:scale-[1.02] active:scale-[0.98] ${btnPadding} ${
           isAntecipacao

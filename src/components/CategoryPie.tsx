@@ -161,7 +161,7 @@ export function CategoryPie({
         <div
           className={`flex flex-col pointer-events-auto ${alignTitle === "right" ? "items-start" : "items-end"}`}
         >
-          <div className="group/comp flex flex-col items-inherit">
+          <div className={`group/comp flex flex-col mb-2 ${alignTitle === "right" ? "items-start" : "items-end"}`}>
             <div
               className="text-2xl font-black font-mono tracking-tighter cursor-help"
               style={{

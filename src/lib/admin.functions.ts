@@ -177,8 +177,24 @@ export const adminUpdateRole = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { error } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: data.targetUserId, role: data.role });
+      .upsert({ user_id: data.targetUserId, role: data.role }, { onConflict: "user_id" });
 
     if (error) throw new Response(error.message, { status: 400 });
     return { success: true };
   });
+
+export const adminUpdateName = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: any) =>
+    z.object({ targetUserId: z.string(), name: z.string().trim().min(1).max(100) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({ display_name: data.name.toUpperCase() })
+      .eq("id", data.targetUserId);
+
+    if (error) throw new Response(error.message, { status: 400 });
+    return { success: true };
+  });
+

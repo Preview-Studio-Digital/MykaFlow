@@ -138,6 +138,39 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 import { AuthProvider } from "@/lib/auth-context";
 import { Toaster } from "@/components/ui/sonner";
+import { useEffect, useRef } from "react";
+
+function ScrollDirectionListener() {
+  const lastScrollY = useRef(0);
+  const timeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      
+      if (currentScrollY > lastScrollY.current) {
+        document.documentElement.setAttribute('data-scroll-dir', 'down');
+      } else if (currentScrollY < lastScrollY.current) {
+        document.documentElement.setAttribute('data-scroll-dir', 'up');
+      }
+      lastScrollY.current = currentScrollY;
+
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        document.documentElement.setAttribute('data-scroll-dir', 'static');
+      }, 200);
+    };
+
+    document.documentElement.setAttribute('data-scroll-dir', 'static');
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  return null;
+}
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
@@ -145,6 +178,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <ScrollDirectionListener />
         <Outlet />
         <Toaster theme="dark" position="top-right" />
       </AuthProvider>

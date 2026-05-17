@@ -445,51 +445,11 @@ function CategoryManager() {
   const filtered = categories.filter((c) => filterType === "all" || c.type === filterType);
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div className="glass rounded-2xl p-6 h-fit">
-        <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase mb-6">
-          <Plus className="h-5 w-5 text-accent" /> Nova Categoria
+    <div className="glass rounded-2xl p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase">
+          <FolderTree className="h-5 w-5 text-accent" /> Categorias
         </h3>
-        <div className="space-y-4">
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="NOME DA CATEGORIA"
-            className="input-futuristic w-full rounded-xl px-4 py-3 text-sm uppercase font-bold"
-          />
-          <div className="flex gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
-            <button
-              onClick={() => setNewType("expense")}
-              className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === "expense" ? "bg-red-500/20 text-red-400" : "text-muted-foreground"}`}
-            >
-              <TrendingDown className="h-3 w-3 inline mr-1" /> Despesa
-            </button>
-            <button
-              onClick={() => setNewType("income")}
-              className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === "income" ? "bg-green-500/20 text-green-400" : "text-muted-foreground"}`}
-            >
-              <TrendingUp className="h-3 w-3 inline mr-1" /> Receita
-            </button>
-          </div>
-          <button
-            onClick={handleAdd}
-            className="btn-futuristic w-full rounded-xl py-3 text-xs font-black uppercase tracking-widest"
-          >
-            Adicionar
-          </button>
-        </div>
-
-        <div className="mt-6 pt-6 border-t border-white/5 text-[10px] uppercase tracking-widest text-muted-foreground font-black opacity-60">
-          Para criar subcategorias, expanda uma categoria na listagem ao lado.
-        </div>
-      </div>
-
-      <div className="glass rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase">
-            <FolderTree className="h-5 w-5 text-accent" /> Listagem
-          </h3>
           <div className="flex gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
             {(["all", "expense", "income"] as const).map((f) => (
               <button
@@ -501,6 +461,41 @@ function CategoryManager() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mb-6 p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              placeholder="NOVA CATEGORIA"
+              className="input-futuristic flex-1 rounded-xl px-4 py-3 text-sm uppercase font-bold"
+            />
+            <div className="flex gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
+              <button
+                onClick={() => setNewType("expense")}
+                className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === "expense" ? "bg-red-500/20 text-red-400" : "text-muted-foreground"}`}
+              >
+                <TrendingDown className="h-3 w-3 inline mr-1" /> Desp.
+              </button>
+              <button
+                onClick={() => setNewType("income")}
+                className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${newType === "income" ? "bg-green-500/20 text-green-400" : "text-muted-foreground"}`}
+              >
+                <TrendingUp className="h-3 w-3 inline mr-1" /> Rec.
+              </button>
+            </div>
+            <button
+              onClick={handleAdd}
+              className="btn-futuristic rounded-xl px-6 py-3 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
+            >
+              <Plus className="h-4 w-4" /> Add
+            </button>
+          </div>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-black opacity-60">
+            Para criar subcategorias, expanda uma categoria abaixo.
+          </p>
         </div>
 
         {loading ? (
@@ -591,6 +586,5 @@ function CategoryManager() {
           </div>
         )}
       </div>
-    </div>
   );
 }

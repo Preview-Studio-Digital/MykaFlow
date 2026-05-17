@@ -73,12 +73,19 @@ function IntegrationPage() {
     if (externalData.length === 0) return;
     setSyncing(true);
     
+    const { data: auth } = await localSupabase.auth.getUser();
+    const uid = auth.user?.id;
+    if (!uid) {
+      setSyncing(false);
+      toast.error("Faça login para sincronizar");
+      return;
+    }
+
     let successCount = 0;
     
     for (const item of externalData) {
-      // Mapeamento básico: De Factoring para MykaFlow
-      // Nota: Ajustar campos conforme a estrutura real do outro banco
       const { error } = await localSupabase.from("transactions").insert({
+        user_id: uid,
         type: "income",
         nature: "variable",
         category: "ANTECIPAÇÃO DE NOTAS",

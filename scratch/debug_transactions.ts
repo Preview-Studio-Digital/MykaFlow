@@ -1,4 +1,4 @@
-import { supabase } from "./src/integrations/supabase/client";
+import { supabase } from "../src/integrations/supabase/client";
 
 async function checkLastTransactions() {
   const { data, error } = await supabase

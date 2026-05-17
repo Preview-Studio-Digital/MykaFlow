@@ -217,7 +217,7 @@ function UserList({
     setBusy(targetUserId);
     try {
       const newRole = currentRole === "admin" ? "user" : "admin";
-      await updateRole({ targetUserId, role: newRole });
+      await updateRole({ data: { targetUserId, role: newRole } });
       toast.success(`Cargo alterado para ${newRole.toUpperCase()}`);
       onRefresh();
     } catch (err: any) {
@@ -233,7 +233,7 @@ function UserList({
     if (!newName || newName === currentName) return;
     setBusy(targetUserId);
     try {
-      await updateName({ targetUserId, name: newName.trim() });
+      await updateName({ data: { targetUserId, name: newName.trim() } });
       toast.success("Nome atualizado!");
       onRefresh();
     } catch (err: any) {
@@ -248,7 +248,7 @@ function UserList({
     if (!confirm(`Tem certeza que deseja EXCLUIR DEFINITIVAMENTE o usuário ${userName.toUpperCase()}?`)) return;
     setBusy(targetUserId);
     try {
-      await delUser({ targetUserId });
+      await delUser({ data: { targetUserId } });
       toast.success(`Usuário ${userName.toUpperCase()} excluído com sucesso.`);
       onRefresh();
     } catch (err: any) {

@@ -504,7 +504,7 @@ function Dashboard() {
           <div className="glass rounded-2xl p-4 border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.05)] bg-amber-500/5">
             <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-400 mb-3 flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-              Alertas de Variação ({monthAlerts.length})
+              Alertas de Variação em {MONTHS_PT[month]} ({monthAlerts.length})
             </h4>
             <div className="flex flex-col gap-2">
               {monthAlerts.map((al) => {

@@ -80,7 +80,6 @@ export function TransactionForm({
       }
     }
   }, [selectedParentId, dbCategories]);
-  }, [selectedParentId, dbCategories]);
 
   const selectedCategoryName = dbCategories.find((c) => c.id === selectedParentId)?.name.toUpperCase();
   const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
@@ -280,8 +279,6 @@ export function TransactionForm({
   };
 
   const currentParents = dbCategories;
-  const currentSubs = dbSubCategories.filter((s) => s.category_id === selectedParentId);
-
   const currentSubs = dbSubCategories.filter((s) => s.category_id === selectedParentId);
 
   async function submit(e: React.FormEvent) {

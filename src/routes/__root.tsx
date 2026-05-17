@@ -73,7 +73,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "MykaFlow" },
-      { name: "description", content: "MykaFlow: sistema de controle de receitas e despesas." },
+      { name: "description", content: "Sistema de controle de receitas e despesas." },
       { name: "author", content: "MykaFlow" },
       { property: "og:title", content: "MykaFlow" },
       {
@@ -98,10 +98,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/816e970f-80ec-4455-8ab2-2d003c0edc92",
       },
-      { property: "og:description", content: "MykaFlow: sistema de controle de receitas e despesas." },
-      { name: "twitter:description", content: "MykaFlow: sistema de controle de receitas e despesas." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/6b7af316-8207-4821-8657-fd5ad5ea2449" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/6b7af316-8207-4821-8657-fd5ad5ea2449" },
+      { property: "og:description", content: "Sistema de controle de receitas e despesas." },
+      { name: "twitter:description", content: "Sistema de controle de receitas e despesas." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/f4fa2b99-bffc-43dd-a01e-8d5e7c2baf4c" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/f4fa2b99-bffc-43dd-a01e-8d5e7c2baf4c" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },

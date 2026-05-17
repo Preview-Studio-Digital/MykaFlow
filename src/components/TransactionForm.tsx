@@ -85,7 +85,9 @@ export function TransactionForm({
 
   const selectedCategoryName = dbCategories.find((c) => c.id === selectedParentId)?.name.toUpperCase();
   const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
-  const isPeriodic = type === "income" && selectedCategoryName === "LOCAÇÃO";
+  const isPeriodic =
+    (type === "income" && selectedCategoryName === "LOCAÇÃO") ||
+    (type === "expense" && selectedCategoryName === "EMPRÉSTIMO");
 
   useEffect(() => {
     if (isPeriodic && date && !endDate) {

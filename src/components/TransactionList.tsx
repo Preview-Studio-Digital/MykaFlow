@@ -285,42 +285,30 @@ export function TransactionList({
                   const parts = (r.description || "").split(" - ");
                   const sub = parts[0] || "—";
                   const desc = parts.slice(1).join(" - ") || "—";
+                  const colorClass = r.type === "income" ? "text-accent" : "text-destructive";
+                  const cellClass = `px-4 py-4 text-center text-sm font-sans font-semibold ${colorClass}`;
 
                   return (
                     <tr
                       key={r.id}
                       className="border-b border-border/30 transition-colors hover:bg-primary/5"
                     >
-                      <td className="px-4 py-4 font-mono text-xs text-center">
+                      <td className={cellClass}>
                         {new Date(r.occurred_on + "T00:00:00").toLocaleDateString("pt-BR")}
                       </td>
-                      <td className="px-4 py-4 text-center">
-                        <span
-                          className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-widest font-bold ${
-                            r.type === "income"
-                              ? "bg-accent/20 text-accent"
-                              : "bg-destructive/20 text-destructive"
-                          }`}
-                        >
-                          {r.type === "income" ? "Receita" : "Despesa"}
-                        </span>
+                      <td className={cellClass}>
+                        {r.type === "income" ? "Receita" : "Despesa"}
                       </td>
-                      <td className="px-4 py-4 text-center font-bold">{r.category}</td>
-                      <td className="px-4 py-4 text-muted-foreground text-center">{sub}</td>
-                      <td className="px-4 py-4 text-muted-foreground italic text-xs text-center">
-                        {desc}
-                      </td>
-                      <td className="px-4 py-4 text-[10px] uppercase tracking-widest text-muted-foreground/80 font-black text-center">
+                      <td className={cellClass}>{r.category}</td>
+                      <td className={cellClass}>{sub}</td>
+                      <td className={cellClass}>{desc}</td>
+                      <td className={cellClass}>
                         {r.nature === "fixed" ? "Fixa" : "Variável"}
                       </td>
-                      <td
-                        className={`px-4 py-4 text-center font-mono font-black text-base ${
-                          r.type === "income" ? "text-accent" : "text-destructive"
-                        }`}
-                      >
+                      <td className={cellClass}>
                         {r.type === "income" ? "+" : "−"} {fmtCurrency(Number(r.amount))}
                       </td>
-                      <td className="px-4 py-4 text-[10px] uppercase tracking-widest text-muted-foreground/80 font-black text-center">
+                      <td className={cellClass}>
                         {allProfiles.find((p) => p.id === r.user_id)?.display_name ||
                           allProfiles.find((p) => p.id === r.user_id)?.email ||
                           "AUTOR DESCONHECIDO"}

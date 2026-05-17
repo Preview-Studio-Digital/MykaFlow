@@ -27,6 +27,7 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
     if (isMonthly) {
       const saldo =
         payload.find((p: any) => p.dataKey === "saldo")?.value ?? (payload[0]?.value || 0);
+      const vencimentoTexts = payload[0]?.payload?.vencimentoTexts || [];
       const daysOfWeek = [
         "Domingo",
         "Segunda-feira",
@@ -40,7 +41,7 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
       const dayName = !isNaN(d.getTime()) ? daysOfWeek[d.getDay()] : "";
 
       return (
-        <div className="glass p-4 rounded-xl border border-white/10 backdrop-blur-md shadow-2xl">
+        <div className="glass p-4 rounded-xl border border-white/10 backdrop-blur-md shadow-2xl z-[9999]">
           <p className="text-xs font-bold uppercase tracking-[0.2em] mb-1 text-muted-foreground">
             Dia {label} • {dayName}
           </p>
@@ -50,6 +51,16 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
             <span>Saldo do Período</span>
             <span className="font-mono">{fmtCurrency(saldo)}</span>
           </div>
+          {vencimentoTexts.length > 0 && (
+            <div className="mt-3 text-yellow-400 text-[11px] font-bold bg-yellow-400/10 p-2 rounded-lg border border-yellow-400/20 flex flex-col gap-1.5 max-w-[250px]">
+              {vencimentoTexts.map((txt: string, i: number) => (
+                <span key={i} className="flex items-start gap-1.5 leading-tight">
+                  <span className="shrink-0">⚠️</span>
+                  <span>{txt}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       );
     } else {
@@ -163,6 +174,7 @@ export function EvolutionChart({
       despesas: 0,
       day: i + 1,
       isVencimento: false,
+      vencimentoTexts: [] as string[],
     }));
 
     let initialBalance = 0;
@@ -176,6 +188,7 @@ export function EvolutionChart({
         if (days[dayIdx]) {
           if (t.category === "VENCIMENTO ANTECIPAÇÃO") {
             days[dayIdx].isVencimento = true;
+            if (t.description) days[dayIdx].vencimentoTexts.push(t.description);
           } else {
             if (t.type === "income") days[dayIdx].receitas += amount;
             else days[dayIdx].despesas += amount;
@@ -493,11 +506,21 @@ export function EvolutionChart({
                       stroke="#facc15"
                       strokeWidth={2}
                       strokeDasharray="3 3"
-                      label={{
-                        value: "⚠️",
-                        position: "top",
-                        fill: "#facc15",
-                        fontSize: 16,
+                      label={(props: any) => {
+                        const texts = d.vencimentoTexts?.join('\n') || '';
+                        return (
+                          <text
+                            x={props.viewBox.x}
+                            y={props.viewBox.y - 10}
+                            fill="#facc15"
+                            fontSize={16}
+                            textAnchor="middle"
+                            style={{ cursor: "help" }}
+                          >
+                            <title>{texts}</title>
+                            ⚠️
+                          </text>
+                        );
                       }}
                     />
                   );

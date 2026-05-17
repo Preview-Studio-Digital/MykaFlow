@@ -80,6 +80,18 @@ export function TransactionForm({
       }
     }
   }, [selectedParentId, dbCategories]);
+  }, [selectedParentId, dbCategories]);
+
+  const selectedCategoryName = dbCategories.find((c) => c.id === selectedParentId)?.name.toUpperCase();
+  const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
+
+  // Variáveis para layout condicional
+  const inputHeight = isAntecipacao ? "h-11" : "h-14";
+  const spaceY = isAntecipacao ? "space-y-1" : "space-y-2";
+  const gridGap = isAntecipacao ? "gap-3" : "gap-6";
+  const formPadding = isAntecipacao ? "p-5" : "p-8";
+  const formGap = isAntecipacao ? "gap-2" : "gap-4";
+  const btnPadding = isAntecipacao ? "py-3 mt-2" : "py-6 mt-4";
 
   // Componente de Select Customizado para permitir estilização do hover (fill color)
   const CustomSelect = ({
@@ -104,7 +116,7 @@ export function TransactionForm({
     const selectedName = options.find((o) => o.id === value)?.name || placeholder;
 
     return (
-      <div className="space-y-2 relative">
+      <div className={`${spaceY} relative`}>
         <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
           {label}
         </span>
@@ -113,7 +125,7 @@ export function TransactionForm({
             type="button"
             disabled={disabled}
             onClick={() => setIsOpen(!isOpen)}
-            className={`input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none uppercase font-bold border-2 flex items-center justify-between transition-all ${disabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer hover:border-accent/40"}`}
+            className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none uppercase font-bold border-2 flex items-center justify-between transition-all ${disabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer hover:border-accent/40"}`}
             style={{ color: value ? "white" : "rgba(255,255,255,0.4)" }}
           >
             <span className="truncate">{selectedName}</span>
@@ -270,8 +282,7 @@ export function TransactionForm({
   const currentParents = dbCategories;
   const currentSubs = dbSubCategories.filter((s) => s.category_id === selectedParentId);
 
-  const selectedCategoryName = dbCategories.find((c) => c.id === selectedParentId)?.name.toUpperCase();
-  const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
+  const currentSubs = dbSubCategories.filter((s) => s.category_id === selectedParentId);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -350,7 +361,7 @@ export function TransactionForm({
         type: "expense", // Pode ser qualquer um, usaremos expense para facilitar o filtro de marcador se necessário
         nature: "variable",
         category: "VENCIMENTO ANTECIPAÇÃO",
-        description: `VENCIMENTO: ${finalDescription}`,
+        description: `VENCIMENTO: ${finalDescription} | Valor: R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         amount: 0,
         occurred_on: dueDate,
       });
@@ -373,11 +384,11 @@ export function TransactionForm({
   return (
     <form
       onSubmit={submit}
-      className={`rounded-3xl p-8 flex flex-col transition-all duration-500 border-2 shadow-2xl ${fontStyle} ${
+      className={`rounded-3xl ${formPadding} flex flex-col transition-all duration-500 border-2 shadow-2xl ${fontStyle} ${
         type === "expense"
           ? "bg-red-500/10 border-red-500/40 shadow-[inset_0_0_80px_rgba(239,68,68,0.1)]"
           : "bg-cyan-500/10 border-cyan-500/40 shadow-[inset_0_0_80px_rgba(34,211,238,0.1)]"
-      } backdrop-blur-xl gap-4`}
+      } backdrop-blur-xl ${formGap}`}
     >
       <div className="text-center mb-1">
         <h2
@@ -428,7 +439,7 @@ export function TransactionForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridGap}`}>
         <div className="flex gap-3 items-end">
           <div className="flex-1">
             <CustomSelect
@@ -445,7 +456,7 @@ export function TransactionForm({
           <button
             type="button"
             onClick={() => handleQuickAdd()}
-            className="flex items-center justify-center w-14 h-14 rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:bg-accent/10 transition-all text-accent group mb-0"
+            className={`flex items-center justify-center w-14 ${inputHeight} rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:bg-accent/10 transition-all text-accent group mb-0`}
             title="Nova Categoria"
           >
             <Plus className="h-6 w-6 group-hover:scale-125 transition-transform" />
@@ -466,7 +477,7 @@ export function TransactionForm({
             <button
               type="button"
               onClick={() => handleQuickAdd(selectedParentId)}
-              className="flex items-center justify-center w-14 h-14 rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:bg-accent/10 transition-all text-accent group mb-0"
+              className={`flex items-center justify-center w-14 ${inputHeight} rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:bg-accent/10 transition-all text-accent group mb-0`}
               title="Nova Subcategoria"
             >
               <Plus className="h-6 w-6 group-hover:scale-125 transition-transform" />
@@ -475,7 +486,7 @@ export function TransactionForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridGap}`}>
         <CustomSelect
           label="Fluxo de Caixa"
           placeholder="SELECIONE O TIPO..."
@@ -505,7 +516,7 @@ export function TransactionForm({
           })()}
         />
         {isAntecipacao ? (
-          <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
+          <div className={`${spaceY} animate-in slide-in-from-right-4 duration-500`}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
               Número da Nota Fiscal
             </span>
@@ -513,11 +524,11 @@ export function TransactionForm({
               value={description}
               onChange={(e) => setDescription(e.target.value.toUpperCase())}
               placeholder="DIGITE O NÚMERO DA NF..."
-              className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2"
+              className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2`}
             />
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className={spaceY}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
               Valor do Lançamento
             </span>
@@ -538,7 +549,7 @@ export function TransactionForm({
                   setAmount(centered);
                 }}
                 placeholder="0,00"
-                className="input-futuristic w-full h-14 rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2"
+                className={`input-futuristic w-full ${inputHeight} rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2`}
                 style={{ color: type === "expense" ? "oklch(0.7 0.2 30)" : "oklch(0.78 0.16 150)" }}
               />
             </div>
@@ -546,8 +557,8 @@ export function TransactionForm({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div className="space-y-2">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridGap}`}>
+        <div className={spaceY}>
           <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
             {isAntecipacao ? "Data de Abertura" : "Data da Ocorrência"}
           </span>
@@ -565,11 +576,11 @@ export function TransactionForm({
                 }
               }
             }}
-            className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none font-bold border-2"
+            className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none font-bold border-2`}
           />
         </div>
         {isAntecipacao ? (
-          <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
+          <div className={`${spaceY} animate-in slide-in-from-right-4 duration-500`}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
               Data de Vencimento
             </span>
@@ -578,11 +589,11 @@ export function TransactionForm({
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none font-bold border-2 border-accent/30"
+              className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none font-bold border-2 border-accent/30`}
             />
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className={spaceY}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
               Descrição
             </span>
@@ -590,7 +601,7 @@ export function TransactionForm({
               value={description}
               onChange={(e) => setDescription(e.target.value.toUpperCase())}
               placeholder="DIGITE INFORMAÇÕES ADICIONAIS..."
-              className="input-futuristic w-full h-14 rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2"
+              className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2`}
             />
           </div>
         )}
@@ -599,8 +610,8 @@ export function TransactionForm({
       {/* Já incluído no grid acima */}
 
       {isAntecipacao && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 animate-in slide-in-from-top-4 duration-500">
-          <div className="space-y-2">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridGap} animate-in slide-in-from-top-4 duration-500`}>
+          <div className={spaceY}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-accent font-black ml-2">
               Valor Líquido
             </span>
@@ -621,12 +632,12 @@ export function TransactionForm({
                   setAmount(centered);
                 }}
                 placeholder="0,00"
-                className="input-futuristic w-full h-14 rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2 border-accent/50 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+                className={`input-futuristic w-full ${inputHeight} rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2 border-accent/50 shadow-[0_0_15px_rgba(34,211,238,0.2)]`}
                 style={{ color: "oklch(0.78 0.16 150)" }}
               />
             </div>
           </div>
-          <div className="space-y-2">
+          <div className={spaceY}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-red-500 font-black ml-2">
               Custo da Operação
             </span>
@@ -647,7 +658,7 @@ export function TransactionForm({
                   setOperationCost(centered);
                 }}
                 placeholder="0,00"
-                className="input-futuristic w-full h-14 rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                className={`input-futuristic w-full ${inputHeight} rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]`}
                 style={{ color: "rgb(239, 68, 68)" }}
               />
             </div>
@@ -658,7 +669,7 @@ export function TransactionForm({
       <button
         disabled={busy}
         type="submit"
-        className={`w-full rounded-2xl py-6 text-sm font-black uppercase tracking-[0.4em] transition-all duration-500 disabled:opacity-50 border-2 mt-4 hover:scale-[1.02] active:scale-[0.98] ${
+        className={`w-full rounded-2xl text-sm font-black uppercase tracking-[0.4em] transition-all duration-500 disabled:opacity-50 border-2 hover:scale-[1.02] active:scale-[0.98] ${btnPadding} ${
           isAntecipacao
             ? "bg-gradient-to-r from-accent to-red-500 border-white/20 text-white shadow-[0_0_30px_rgba(34,211,238,0.3)]"
             : type === "expense"

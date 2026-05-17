@@ -586,6 +586,5 @@ function CategoryManager() {
           </div>
         )}
       </div>
-    </div>
   );
 }

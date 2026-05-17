@@ -20,6 +20,7 @@ interface Tx {
   amount: number;
   occurred_on: string;
   category?: string;
+  description?: string;
 }
 
 const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) => {

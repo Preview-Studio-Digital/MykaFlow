@@ -28,6 +28,88 @@ function Dashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [dashboardMode, setDashboardMode] = useState<"monthly" | "annual">("monthly");
 
+  const dismissAlert = (alertId: string) => {
+    const dismissed = JSON.parse(localStorage.getItem("mykaflow_dismissed_alerts") || "[]");
+    if (!dismissed.includes(alertId)) {
+      dismissed.push(alertId);
+      localStorage.setItem("mykaflow_dismissed_alerts", JSON.stringify(dismissed));
+      setRefreshKey((prev) => prev + 1);
+    }
+  };
+
+  const monthAlerts = useMemo(() => {
+    if (rows.length === 0) return [];
+
+    // 1. Agrupar transações do mês corrente por categoria e tipo
+    const currentGroups: { [key: string]: { category: string; type: string; amount: number; date: string; description?: string } } = {};
+    rows.forEach((r) => {
+      if (!r.occurred_on) return;
+      const d = new Date(r.occurred_on + "T00:00:00");
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const key = `${r.type}-${r.category.toUpperCase()}`;
+        if (!currentGroups[key]) {
+          currentGroups[key] = {
+            category: r.category,
+            type: r.type,
+            amount: 0,
+            date: r.occurred_on,
+            description: r.description || undefined
+          };
+        }
+        currentGroups[key].amount += Number(r.amount);
+      }
+    });
+
+    // 2. Agrupar transações do mês anterior por categoria e tipo
+    const prevMonthDate = new Date(year, month - 1, 1);
+    const prevYear = prevMonthDate.getFullYear();
+    const prevMonth = prevMonthDate.getMonth();
+
+    const prevGroups: { [key: string]: number } = {};
+    rows.forEach((r) => {
+      if (!r.occurred_on) return;
+      const d = new Date(r.occurred_on + "T00:00:00");
+      if (d.getFullYear() === prevYear && d.getMonth() === prevMonth) {
+        const key = `${r.type}-${r.category.toUpperCase()}`;
+        if (!prevGroups[key]) {
+          prevGroups[key] = 0;
+        }
+        prevGroups[key] += Number(r.amount);
+      }
+    });
+
+    // 3. Comparar grupos e gerar alertas de variação
+    const generated: any[] = [];
+    const dismissed = JSON.parse(localStorage.getItem("mykaflow_dismissed_alerts") || "[]");
+
+    Object.keys(currentGroups).forEach((key) => {
+      const current = currentGroups[key];
+      const prevVal = prevGroups[key] || 0;
+
+      if (prevVal > 0) {
+        const percentDiff = ((current.amount - prevVal) / prevVal) * 100;
+        if (Math.abs(percentDiff) > 10) {
+          const alertId = `alert-${current.type}-${current.category.toUpperCase()}-${year}-${month}`;
+          
+          if (!dismissed.includes(alertId)) {
+            generated.push({
+              id: alertId,
+              category: current.category,
+              type: current.type,
+              date: current.date,
+              oldAmount: prevVal,
+              newAmount: current.amount,
+              percentChange: percentDiff,
+              description: current.description
+            });
+          }
+        }
+      }
+    });
+
+    return generated;
+  }, [rows, year, month, refreshKey]);
+
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
   }, [loading, user, navigate]);
@@ -415,6 +497,76 @@ function Dashboard() {
         />
       </section>
 
+
+
+      {monthAlerts.length > 0 && (
+        <section className="mb-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="glass rounded-2xl p-4 border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.05)] bg-amber-500/5">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-400 mb-3 flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+              Alertas de Variação ({monthAlerts.length})
+            </h4>
+            <div className="flex flex-col gap-2">
+              {monthAlerts.map((al) => {
+                const formattedOld = Number(al.oldAmount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                const formattedNew = Number(al.newAmount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                const isExpense = al.type === "expense" ||
+                  ["EQUIPE", "AGNALDO", "INFRAESTRUTURA", "FROTA", "EMPRÉSTIMO"].includes(al.category?.toUpperCase());
+                const isIncrease = al.percentChange > 0;
+                
+                // Os textos principais seguem a categoria (verde para receita, vermelho para despesa)
+                const colorClass = isExpense ? "text-rose-400" : "text-emerald-400";
+                
+                // O percentual segue a lógica financeira:
+                // - Aumento de despesa = Ruim (vermelho)
+                // - Queda de despesa = Bom (verde)
+                // - Aumento de receita = Bom (verde)
+                // - Queda de receita = Ruim (vermelho)
+                let percentColorClass = colorClass;
+                if (!isExpense && !isIncrease) {
+                  percentColorClass = "text-rose-400"; // Queda de receita: percentual vermelho
+                } else if (isExpense && !isIncrease) {
+                  percentColorClass = "text-emerald-400"; // Queda de despesa: percentual verde
+                } else if (isExpense && isIncrease) {
+                  percentColorClass = "text-rose-400"; // Aumento de despesa: percentual vermelho
+                }
+
+                const typeText = isExpense ? "despesa" : "receita";
+                return (
+                  <div key={al.id} className="flex items-center justify-between py-2.5 px-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all text-sm font-sans font-semibold">
+                    <div className="flex items-center gap-2 text-muted-foreground truncate">
+                      <span className={`${colorClass} font-bold uppercase`}>{al.category}</span>
+                      {al.description && <span className="uppercase text-xs opacity-75">({al.description})</span>}
+                      <span>{typeText} registrou variação em {MONTHS_PT[month]}:</span>
+                      <span className={`font-mono ${colorClass}`}>{formattedOld}</span>
+                      <span>➔</span>
+                      <span className={`font-mono ${colorClass}`}>{formattedNew}</span>
+                    </div>
+                    <div className="flex items-center gap-4 shrink-0">
+                      <span className={`${percentColorClass} font-bold`}>
+                        {isIncrease ? "+" : ""}{Number(al.percentChange).toFixed(1)}%
+                      </span>
+                      {role === "admin" ? (
+                        <button
+                          onClick={() => dismissAlert(al.id)}
+                          className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1 rounded-lg transition-all"
+                        >
+                          Dispensar
+                        </button>
+                      ) : (
+                        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30 bg-white/[0.01] border border-white/5 px-2.5 py-1 rounded-lg">
+                          Apenas ADM
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section>
         <TransactionList
           key={`list-${refreshKey}-${year}-${month}-${dashboardMode}`}
@@ -442,6 +594,7 @@ function agg(list: TxRow[]) {
     if (r.category === "VENCIMENTO ANTECIPAÇÃO") continue;
     let catName = (r.category || "Outros").trim().toUpperCase();
     if (catName === "ESTRUTURA EMPRESARIAL") catName = "ESTRUTURA";
+    if (catName === "CUSTO OPERAÇÃO") catName = "ANTECIPAÇÃO DE NOTAS";
     map.set(catName, (map.get(catName) ?? 0) + Number(r.amount));
   }
   return Array.from(map.entries()).map(([name, value]) => ({ name, value }));

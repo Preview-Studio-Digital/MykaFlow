@@ -101,7 +101,7 @@ export function TransactionList({
   const uniqueDays = Array.from(
     new Set(rows.map((r) => new Date(r.occurred_on + "T00:00:00").getDate().toString())),
   ).sort((a, b) => Number(a) - Number(b));
-  const uniqueCats = Array.from(new Set(rows.map((r) => r.category))).sort();
+  const uniqueCats = Array.from(new Set(rows.map((r) => r.category === "CUSTO OPERAÇÃO" ? "ANTECIPAÇÃO DE NOTAS" : r.category))).sort();
   const uniqueSubs = Array.from(
     new Set(rows.map((r) => (r.description || "").split(" - ")[0] || "")),
   )
@@ -282,7 +282,13 @@ export function TransactionList({
               </thead>
               <tbody>
                 {sortedRows.map((r) => {
-                  const parts = (r.description || "").split(" - ");
+                  const hasValidar = r.description && r.description.includes("VALIDAR VALOR");
+                  const rawDescCleaned = (r.description || "")
+                    .replace(" | VALIDAR VALOR", "")
+                    .replace("VALIDAR VALOR", "")
+                    .trim();
+
+                  const parts = rawDescCleaned.split(" - ");
                   const sub = parts[0] || "—";
                   const desc = parts.slice(1).join(" - ") || "—";
                   const colorClass = r.type === "income" ? "text-accent" : "text-destructive";
@@ -299,9 +305,18 @@ export function TransactionList({
                       <td className={cellClass}>
                         {r.type === "income" ? "Receita" : "Despesa"}
                       </td>
-                      <td className={cellClass}>{r.category}</td>
+                      <td className={cellClass}>{r.category === "CUSTO OPERAÇÃO" ? "ANTECIPAÇÃO DE NOTAS" : r.category}</td>
                       <td className={cellClass}>{sub}</td>
-                      <td className={cellClass}>{desc}</td>
+                      <td className={cellClass}>
+                        <div className="flex flex-col items-center justify-center gap-1.5">
+                          <span>{desc}</span>
+                          {hasValidar && (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_8px_rgba(245,158,11,0.2)] animate-pulse">
+                              Validar Valor
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className={cellClass}>
                         {r.nature === "fixed" ? "Fixa" : "Variável"}
                       </td>

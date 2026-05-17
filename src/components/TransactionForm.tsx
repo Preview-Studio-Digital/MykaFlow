@@ -85,7 +85,7 @@ export function TransactionForm({
 
   const selectedCategoryName = dbCategories.find((c) => c.id === selectedParentId)?.name.toUpperCase();
   const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
-  const isPeriodic = (type === "income" && selectedCategoryName === "LOCAÇÃO") || (type === "expense" && selectedCategoryName === "EMPRÉSTIMO");
+  const isPeriodic = type === "income" && selectedCategoryName === "LOCAÇÃO";
 
   useEffect(() => {
     if (isPeriodic && date && !endDate) {
@@ -318,7 +318,7 @@ export function TransactionForm({
         return;
       }
       if (isNaN(costValue) || costValue < 0) {
-        toast.error("Insira um custo de operação válido");
+        toast.error("Insira um valor de antecipação de notas válido");
         return;
       }
       if (!dueDate) {
@@ -333,12 +333,55 @@ export function TransactionForm({
       ? (description.toUpperCase().includes("NF") ? description.toUpperCase() : `NF ${description.toUpperCase()}`)
       : (description.trim().toUpperCase() || sub?.name || null);
 
+    // Verificação de duplicados
+    try {
+      let query = supabase
+        .from("transactions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("type", type)
+        .eq("nature", nature)
+        .eq("category_id_v2", selectedParentId)
+        .eq("amount", value)
+        .eq("occurred_on", date);
+
+      if (selectedSubId) {
+        query = query.eq("subcategory_id_v2", selectedSubId);
+      } else {
+        query = query.is("subcategory_id_v2", null);
+      }
+
+      if (finalDescription) {
+        query = query.eq("description", finalDescription);
+      } else {
+        query = query.is("description", null);
+      }
+
+      const { data: dupData, error: dupError } = await query;
+      if (dupError) throw dupError;
+
+      if (dupData && dupData.length > 0) {
+        const msg = isPeriodic
+          ? "Atenção: Já existe um lançamento recorrente registrado que inicia com exatamente esses mesmos dados (Data, Valor, Categoria e Descrição). Tem certeza que deseja criar essa recorrência duplicada?"
+          : "Atenção: Já existe um lançamento registrado com exatamente os mesmos dados (Data, Valor, Categoria e Descrição). Tem certeza que deseja salvar este lançamento duplicado?";
+        if (!window.confirm(msg)) {
+          setBusy(false);
+          return;
+        }
+      }
+    } catch (err: any) {
+      console.warn("Erro ao checar duplicatas:", err.message || err);
+    }
+
+
+
     if (isPeriodic && endDate) {
       const start = new Date(date + "T00:00:00");
       const end = new Date(endDate + "T00:00:00");
       
       const transactions = [];
       let current = new Date(start);
+      let isFirst = true;
       while (current <= end) {
         transactions.push({
           user_id: user.id,
@@ -347,11 +390,12 @@ export function TransactionForm({
           category: parent?.name || "OUTROS",
           category_id_v2: selectedParentId,
           subcategory_id_v2: selectedSubId || null,
-          description: finalDescription,
+          description: isFirst ? finalDescription : (finalDescription ? `${finalDescription} | VALIDAR VALOR` : "VALIDAR VALOR"),
           amount: value,
           occurred_on: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`
         });
         current.setMonth(current.getMonth() + 1);
+        isFirst = false;
       }
       
       if (transactions.length > 0) {
@@ -391,7 +435,7 @@ export function TransactionForm({
           user_id: user.id,
           type: "expense",
           nature: "variable",
-          category: "CUSTO OPERAÇÃO",
+          category: "ANTECIPAÇÃO DE NOTAS",
           description: `CUSTO ANTECIPAÇÃO - ${finalDescription}`,
           amount: costValue,
           occurred_on: date,
@@ -714,7 +758,7 @@ export function TransactionForm({
           </div>
           <div className={spaceY}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-red-500 font-black ml-2">
-              Custo da Operação
+              Antecipação de Notas
             </span>
             <div className="relative">
               <span className="absolute left-5 top-1/2 -translate-y-1/2 text-red-500 font-bold text-sm">

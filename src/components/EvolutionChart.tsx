@@ -241,20 +241,52 @@ export function EvolutionChart({
 
   const { gradientOffset, globalDomain } = useMemo(() => {
     if (!chartData || chartData.length === 0) {
-      return { gradientOffset: 0, globalDomain: [0, 100] };
+      return { gradientOffset: 0.5, globalDomain: [-100, 100] };
     }
 
-    const allVals = chartData.flatMap((d: any) => [d.receitas || 0, d.despesas || 0, d.saldo || 0]);
+    if (effectiveViewMode === "annual") {
+      // Modo Anual: Desenha Receitas, Despesas e Saldo (Cumulativo)
+      const allVals = chartData.flatMap((d: any) => [d.receitas || 0, d.despesas || 0, d.saldo || 0]);
+      const maxGlobal = Math.max(...allVals, 0) * 1.1;
+      const minGlobal = Math.min(...allVals, 0) * 1.1;
+      const rangeGlobal = maxGlobal - minGlobal || 1;
 
-    const maxGlobal = Math.max(...allVals, 0) * 1.1;
-    const minGlobal = Math.min(...allVals, 0) * 1.1;
-    const rangeGlobal = maxGlobal - minGlobal || 1;
+      return {
+        gradientOffset: maxGlobal / rangeGlobal,
+        globalDomain: [minGlobal, maxGlobal],
+      };
+    } else {
+      // Modo Mensal: Desenha APENAS o Saldo acumulado
+      const saldos = chartData.map((d: any) => Number(d.saldo) || 0);
+      const max = Math.max(...saldos);
+      const min = Math.min(...saldos);
 
-    return {
-      gradientOffset: maxGlobal / rangeGlobal,
-      globalDomain: [minGlobal, maxGlobal],
-    };
-  }, [chartData]);
+      // Tudo Negativo: 100% Vermelho, offset do gradiente é 0
+      if (max <= 0) {
+        return {
+          gradientOffset: 0,
+          globalDomain: [min * 1.1 || -100, 100],
+        };
+      }
+      // Tudo Positivo: 100% Verde, offset do gradiente é 1
+      if (min >= 0) {
+        return {
+          gradientOffset: 1,
+          globalDomain: [-100, max * 1.1 || 100],
+        };
+      }
+
+      // Misto: cruza o zero
+      const maxVal = max * 1.1;
+      const minVal = min * 1.1;
+      const range = maxVal - minVal || 1;
+
+      return {
+        gradientOffset: maxVal / range,
+        globalDomain: [minVal, maxVal],
+      };
+    }
+  }, [chartData, effectiveViewMode]);
 
   const navigateMonth = (step: number) => {
     const next = (month + step + 12) % 12;
@@ -416,28 +448,20 @@ export function EvolutionChart({
                 <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0} />
               </linearGradient>
 
-              {/* Gradiente para preencher APENAS acima de zero (Verde) */}
-              <linearGradient id="fillPositive" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.5} />
+              {/* Gradiente para preencher saldo positivo (verde) e negativo (vermelho) */}
+              <linearGradient id="splitColorFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.4} />
                 <stop
                   offset={`${gradientOffset * 100}%`}
                   stopColor="oklch(0.8 0.16 150)"
-                  stopOpacity={0.5}
+                  stopOpacity={0.4}
                 />
-                <stop offset={`${gradientOffset * 100}%`} stopColor="transparent" stopOpacity={0} />
-                <stop offset="100%" stopColor="transparent" stopOpacity={0} />
-              </linearGradient>
-
-              {/* Gradiente para preencher APENAS abaixo de zero (Vermelho) */}
-              <linearGradient id="fillNegative" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="transparent" stopOpacity={0} />
-                <stop offset={`${gradientOffset * 100}%`} stopColor="transparent" stopOpacity={0} />
                 <stop
                   offset={`${gradientOffset * 100}%`}
                   stopColor="oklch(0.7 0.2 30)"
-                  stopOpacity={0.5}
+                  stopOpacity={0.4}
                 />
-                <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.5} />
+                <stop offset="100%" stopColor="oklch(0.7 0.2 30)" stopOpacity={0.4} />
               </linearGradient>
 
               <linearGradient id="splitColorStroke" x1="0" y1="0" x2="0" y2="1">
@@ -611,20 +635,8 @@ export function EvolutionChart({
               type="monotone"
               dataKey="saldo"
               stroke="none"
-              fill="url(#fillPositive)"
-              baseValue="dataMin"
-              legendType="none"
-              tooltipType="none"
-              animationDuration={1000}
-              hide={effectiveViewMode === "annual"}
-            />
-            <Area
-              yAxisId="left"
-              type="monotone"
-              dataKey="saldo"
-              stroke="none"
-              fill="url(#fillNegative)"
-              baseValue="dataMax"
+              fill="url(#splitColorFill)"
+              baseValue={0}
               legendType="none"
               tooltipType="none"
               animationDuration={1000}

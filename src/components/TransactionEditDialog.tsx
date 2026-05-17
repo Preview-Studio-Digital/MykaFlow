@@ -191,6 +191,8 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
       return;
     }
 
+
+
     setBusy(true);
 
     const { error } = await supabase

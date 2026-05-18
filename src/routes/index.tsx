@@ -931,73 +931,84 @@ function Dashboard() {
         />
       </section>
 
-      {monthAlerts.length > 0 && (
-        <section className="mb-3 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="glass rounded-2xl p-4 border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.05)] bg-amber-500/5">
-            <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-400 mb-3 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-              Alertas de Variação em {MONTHS_PT[month]} ({monthAlerts.length})
-            </h4>
-            <div className="flex flex-col gap-2">
-              {monthAlerts.map((al) => {
-                const formattedOld = Number(al.oldAmount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-                const formattedNew = Number(al.newAmount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-                const isExpense = al.type === "expense" ||
-                  ["EQUIPE", "AGNALDO", "INFRAESTRUTURA", "FROTA", "EMPRÉSTIMO"].includes(al.category?.toUpperCase());
-                const isIncrease = al.percentChange > 0;
-                
-                // Os textos principais seguem a categoria (verde para receita, vermelho para despesa)
-                const colorClass = isExpense ? "text-rose-400" : "text-emerald-400";
-                
-                // O percentual segue a lógica financeira:
-                // - Aumento de despesa = Ruim (vermelho)
-                // - Queda de despesa = Bom (verde)
-                // - Aumento de receita = Bom (verde)
-                // - Queda de receita = Ruim (vermelho)
-                let percentColorClass = colorClass;
-                if (!isExpense && !isIncrease) {
-                  percentColorClass = "text-rose-400"; // Queda de receita: percentual vermelho
-                } else if (isExpense && !isIncrease) {
-                  percentColorClass = "text-emerald-400"; // Queda de despesa: percentual verde
-                } else if (isExpense && isIncrease) {
-                  percentColorClass = "text-rose-400"; // Aumento de despesa: percentual vermelho
-                }
+      {monthAlerts.length > 0 && (() => {
+        const positives = monthAlerts.filter((a) => a.isPositive);
+        const negatives = monthAlerts.filter((a) => !a.isPositive);
 
-                const typeText = isExpense ? "despesa" : "receita";
-                return (
-                  <div key={al.id} className="flex items-center justify-between py-2.5 px-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all text-sm font-sans font-semibold">
-                    <div className="flex items-center gap-2 text-muted-foreground truncate">
-                      <span className={`${colorClass} font-bold uppercase`}>{al.category}</span>
-                      {al.description && <span className="uppercase text-xs opacity-75">({al.description})</span>}
-                      <span>{typeText} registrou variação em {MONTHS_PT[month]}:</span>
-                      <span className={`font-mono ${colorClass}`}>{formattedOld}</span>
-                      <span>➔</span>
-                      <span className={`font-mono ${colorClass}`}>{formattedNew}</span>
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <span className={`${percentColorClass} font-bold`}>
-                        {isIncrease ? "+" : ""}{Number(al.percentChange).toFixed(1)}%
-                      </span>
-                      {role === "admin" ? (
-                        <button
-                          onClick={() => dismissAlert(al.id)}
-                          className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1 rounded-lg transition-all"
-                        >
-                          Dispensar
-                        </button>
-                      ) : (
-                        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30 bg-white/[0.01] border border-white/5 px-2.5 py-1 rounded-lg">
-                          Apenas ADM
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+        const renderAlert = (al: any) => {
+          const formattedOld = Number(al.oldAmount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          const formattedNew = Number(al.newAmount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          const isExpense = al.type === "expense";
+          const isIncrease = al.percentChange > 0;
+          const tone = al.isPositive ? "text-emerald-400" : "text-rose-400";
+          const typeText = isExpense ? "despesa" : "receita";
+          return (
+            <div key={al.id} className="flex flex-col gap-1.5 py-2.5 px-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all text-sm font-sans font-semibold">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-muted-foreground truncate min-w-0">
+                  <span className={`${tone} font-bold uppercase truncate`}>{al.category}</span>
+                  {al.description && <span className="uppercase text-xs opacity-75 truncate">({al.description})</span>}
+                  <span className="truncate">{typeText}:</span>
+                  <span className={`font-mono ${tone}`}>{formattedOld}</span>
+                  <span>➔</span>
+                  <span className={`font-mono ${tone}`}>{formattedNew}</span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className={`${tone} font-bold`}>
+                    {isIncrease ? "+" : ""}{Number(al.percentChange).toFixed(1)}%
+                  </span>
+                  {role === "admin" ? (
+                    <button
+                      onClick={() => dismissAlert(al.id)}
+                      className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1 rounded-lg transition-all"
+                    >
+                      Dispensar
+                    </button>
+                  ) : (
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30 bg-white/[0.01] border border-white/5 px-2.5 py-1 rounded-lg">
+                      Apenas ADM
+                    </span>
+                  )}
+                </div>
+              </div>
+              <p className="text-[11px] font-normal text-muted-foreground/80 leading-snug pl-1">
+                {al.analysis}
+              </p>
             </div>
-          </div>
-        </section>
-      )}
+          );
+        };
+
+        const panel = (
+          title: string,
+          accent: "emerald" | "rose",
+          items: any[],
+        ) => {
+          const isPos = accent === "emerald";
+          return (
+            <div className={`glass rounded-2xl p-4 border ${isPos ? "border-emerald-500/20 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.05)]" : "border-rose-500/20 bg-rose-500/5 shadow-[0_0_15px_rgba(244,63,94,0.05)]"}`}>
+              <h4 className={`text-[10px] font-black uppercase tracking-[0.25em] mb-3 flex items-center gap-2 ${isPos ? "text-emerald-400" : "text-rose-400"}`}>
+                <span className={`h-2 w-2 rounded-full ${isPos ? "bg-emerald-500" : "bg-rose-500"} animate-ping`} />
+                {title} ({items.length})
+              </h4>
+              {items.length > 0 ? (
+                <div className="flex flex-col gap-2">{items.map(renderAlert)}</div>
+              ) : (
+                <p className="text-xs text-muted-foreground/70 italic">Nenhum alerta nesta categoria.</p>
+              )}
+            </div>
+          );
+        };
+
+        return (
+          <section className="mb-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="grid gap-3 md:grid-cols-2">
+              {panel(`Positivos em ${MONTHS_PT[month]}`, "emerald", positives)}
+              {panel(`Negativos em ${MONTHS_PT[month]}`, "rose", negatives)}
+            </div>
+          </section>
+        );
+      })()}
+
 
       <section>
         <TransactionList

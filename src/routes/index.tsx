@@ -140,7 +140,23 @@ function Dashboard() {
       .reduce((sum, r) => sum + Number(r.amount), 0);
   }, [rows]);
 
-  const faturamentoBateuCusto = currentMonthFaturamento >= averageMonthlyExpense;
+  const proratedExpenseTarget = useMemo(() => {
+    const today = new Date();
+    const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+    if (!isCurrentMonth || businessDays <= 0) return averageMonthlyExpense;
+    let elapsed = 0;
+    const d = new Date(year, month, 1);
+    const todayDate = today.getDate();
+    while (d.getMonth() === month && d.getDate() <= todayDate) {
+      const day = d.getDay();
+      if (day !== 0 && day !== 6) elapsed++;
+      d.setDate(d.getDate() + 1);
+    }
+    elapsed = Math.max(1, elapsed);
+    return (averageMonthlyExpense / businessDays) * elapsed;
+  }, [year, month, averageMonthlyExpense, businessDays]);
+
+  const faturamentoBateuCusto = currentMonthFaturamento >= proratedExpenseTarget;
 
   const hasExpenseData = averageMonthlyExpense > 0;
 

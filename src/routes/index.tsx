@@ -101,6 +101,32 @@ function Dashboard() {
 
   const faturamentoBateuCusto = currentMonthFaturamento >= averageMonthlyExpense;
 
+  const hasExpenseData = averageMonthlyExpense > 0;
+
+  const headerBtnBorderClass = !hasExpenseData
+    ? "border-white/10 hover:border-white/30"
+    : faturamentoBateuCusto
+      ? "border-emerald-500/20 hover:border-emerald-400/40"
+      : "border-rose-500/20 hover:border-rose-400/40";
+
+  const headerBtnGradientClass = !hasExpenseData
+    ? "from-white/5 to-transparent"
+    : faturamentoBateuCusto
+      ? "from-emerald-500/10 to-transparent"
+      : "from-rose-500/10 to-transparent";
+
+  const headerBtnTextHoverClass = !hasExpenseData
+    ? "group-hover:text-white"
+    : faturamentoBateuCusto
+      ? "group-hover:text-emerald-400"
+      : "group-hover:text-rose-400";
+
+  const headerBtnBarClass = !hasExpenseData
+    ? "bg-white"
+    : faturamentoBateuCusto
+      ? "animate-pulse-green bg-emerald-400"
+      : "animate-pulse-red bg-rose-500";
+
   const dismissAlert = (alertId: string) => {
     const dismissed = JSON.parse(localStorage.getItem("mykaflow_dismissed_alerts") || "[]");
     if (!dismissed.includes(alertId)) {
@@ -466,50 +492,30 @@ function Dashboard() {
         <div className="flex flex-wrap items-center gap-3 lg:w-1/3 lg:justify-center lg:flex-nowrap">
           <button
             onClick={() => setExplanationModal("diaria")}
-            className={`glass group relative overflow-hidden rounded-xl border px-4 py-2 hover:scale-105 active:scale-95 transition-all text-right flex items-center gap-3 ${
-              faturamentoBateuCusto 
-                ? "border-emerald-500/20 hover:border-emerald-400/40" 
-                : "border-rose-500/20 hover:border-rose-400/40"
-            }`}
+            className={`glass group relative overflow-hidden rounded-xl border px-4 py-2 hover:scale-105 active:scale-95 transition-all text-right flex items-center gap-3 ${headerBtnBorderClass}`}
             title="Clique para ver o detalhamento do cálculo"
           >
-            <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
-              faturamentoBateuCusto ? "from-emerald-500/10 to-transparent" : "from-rose-500/10 to-transparent"
-            }`} />
+            <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
             <div className="text-right">
-              <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${
-                faturamentoBateuCusto ? "group-hover:text-emerald-400" : "group-hover:text-rose-400"
-              }`}>
+              <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
                 Diária Empresarial
               </p>
               <p className="text-sm font-black font-mono text-white mt-0.5">
                 {fmtCurrency(diariaEmpresarial)}
               </p>
             </div>
-            <div className={`w-1.5 h-8 rounded-full group-hover:scale-y-110 transition-transform ${
-              faturamentoBateuCusto ? "animate-pulse-green bg-emerald-400" : "animate-pulse-red bg-rose-500"
-            }`} />
+            <div className={`w-1.5 h-8 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
           </button>
 
           <button
             onClick={() => setExplanationModal("hora")}
-            className={`glass group relative overflow-hidden rounded-xl border px-4 py-2 hover:scale-105 active:scale-95 transition-all text-left flex items-center gap-3 ${
-              faturamentoBateuCusto 
-                ? "border-emerald-500/20 hover:border-emerald-400/40" 
-                : "border-rose-500/20 hover:border-rose-400/40"
-            }`}
+            className={`glass group relative overflow-hidden rounded-xl border px-4 py-2 hover:scale-105 active:scale-95 transition-all text-left flex items-center gap-3 ${headerBtnBorderClass}`}
             title="Clique para ver o detalhamento do cálculo"
           >
-            <div className={`absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
-              faturamentoBateuCusto ? "from-emerald-500/10 to-transparent" : "from-rose-500/10 to-transparent"
-            }`} />
-            <div className={`w-1.5 h-8 rounded-full group-hover:scale-y-110 transition-transform ${
-              faturamentoBateuCusto ? "animate-pulse-green bg-emerald-400" : "animate-pulse-red bg-rose-500"
-            }`} />
+            <div className={`absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
+            <div className={`w-1.5 h-8 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
             <div>
-              <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${
-                faturamentoBateuCusto ? "group-hover:text-emerald-400" : "group-hover:text-rose-400"
-              }`}>
+              <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
                 Hora Operacional
               </p>
               <p className="text-sm font-black font-mono text-white mt-0.5">

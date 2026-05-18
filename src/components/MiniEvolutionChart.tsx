@@ -82,22 +82,39 @@ export function MiniEvolutionChart({
     });
   }, [data, year, month]);
 
-  const { gradientOffset, dataMin, dataMax } = useMemo(() => {
-    if (dailyData.length === 0) return { gradientOffset: 1, dataMin: 0, dataMax: 0 };
-    const max = Math.max(...dailyData.map((d) => d.saldo));
-    const min = Math.min(...dailyData.map((d) => d.saldo));
+  const { gradientOffset, dataMin, dataMax, yTicks } = useMemo(() => {
+    if (dailyData.length === 0) return { gradientOffset: 1, dataMin: 0, dataMax: 0, yTicks: undefined };
+    const max = Math.max(...dailyData.map((d) => d.saldo), 0);
+    const min = Math.min(...dailyData.map((d) => d.saldo), 0);
 
-    // All negative
-    if (max <= 0) return { gradientOffset: 0, dataMin: min, dataMax: 0 };
-    // All positive
-    if (min >= 0) return { gradientOffset: 1, dataMin: 0, dataMax: max };
+    const absMax = Math.max(Math.abs(min), Math.abs(max)) * 1.1 || 100;
+    const step = absMax / 5;
+    const ticks = [];
+    let offset = 0.5;
+    let dMin = 0;
+    let dMax = absMax;
 
-    // Mixed: symmetric domain so zero is exactly at 50%
-    const absMax = Math.max(Math.abs(max), Math.abs(min));
+    if (min < 0) {
+      for (let i = -5; i <= 5; i++) {
+        ticks.push(step * i);
+      }
+      dMin = -absMax;
+      dMax = absMax;
+      offset = 0.5;
+    } else {
+      for (let i = 0; i <= 5; i++) {
+        ticks.push(step * i);
+      }
+      dMin = 0;
+      dMax = absMax;
+      offset = 1;
+    }
+
     return {
-      gradientOffset: 0.5,
-      dataMin: -absMax,
-      dataMax: absMax,
+      gradientOffset: offset,
+      dataMin: dMin,
+      dataMax: dMax,
+      yTicks: ticks,
     };
   }, [dailyData]);
 
@@ -182,14 +199,17 @@ export function MiniEvolutionChart({
             />
             <XAxis
               dataKey="day"
+              scale="point"
               stroke="oklch(0.7 0.04 235)"
               fontSize={10}
               axisLine={false}
               tickLine={false}
+              padding={{ left: 0, right: 0 }}
             />
             <YAxis
               yAxisId="left"
               domain={[dataMin, dataMax]}
+              ticks={yTicks}
               stroke="oklch(0.7 0.04 235)"
               fontSize={10}
               tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
@@ -201,6 +221,7 @@ export function MiniEvolutionChart({
               yAxisId="right"
               orientation="right"
               domain={[dataMin, dataMax]}
+              ticks={yTicks}
               stroke="oklch(0.7 0.04 235)"
               fontSize={10}
               tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
@@ -235,6 +256,38 @@ export function MiniEvolutionChart({
               strokeWidth={1}
               strokeOpacity={0.5}
             />
+            {dailyData.length > 0 && (
+              <>
+                <ReferenceLine
+                  yAxisId="left"
+                  y={dailyData[0].saldo}
+                  stroke="oklch(0.78 0.16 220 / 0.4)"
+                  strokeDasharray="2 2"
+                  label={{
+                    position: "insideLeft",
+                    offset: 10,
+                    value: `▶ ${Math.abs(dailyData[0].saldo) >= 1000 ? (dailyData[0].saldo / 1000).toFixed(1) + 'k' : dailyData[0].saldo.toFixed(0)}`,
+                    fill: dailyData[0].saldo >= 0 ? "oklch(0.85 0.16 150)" : "oklch(0.7 0.2 30)",
+                    fontSize: 10,
+                    fontWeight: "900",
+                  }}
+                />
+                <ReferenceLine
+                  yAxisId="right"
+                  y={dailyData[dailyData.length - 1].saldo}
+                  stroke="oklch(0.78 0.16 220 / 0.4)"
+                  strokeDasharray="2 2"
+                  label={{
+                    position: "insideRight",
+                    offset: 10,
+                    value: `${Math.abs(dailyData[dailyData.length - 1].saldo) >= 1000 ? (dailyData[dailyData.length - 1].saldo / 1000).toFixed(1) + 'k' : dailyData[dailyData.length - 1].saldo.toFixed(0)} ◀`,
+                    fill: dailyData[dailyData.length - 1].saldo >= 0 ? "oklch(0.85 0.16 150)" : "oklch(0.7 0.2 30)",
+                    fontSize: 10,
+                    fontWeight: "900",
+                  }}
+                />
+              </>
+            )}
           </AreaChart>
         </ResponsiveContainer>
       </div>

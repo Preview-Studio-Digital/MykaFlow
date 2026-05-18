@@ -241,53 +241,50 @@ export function EvolutionChart({
   const currentMonthData = annualData[month] || { receitas: 0, despesas: 0 };
   const currentSaldo = (currentMonthData.receitas || 0) - (currentMonthData.despesas || 0);
 
-  const { gradientOffset, globalDomain } = useMemo(() => {
+  const { gradientOffset, globalDomain, yTicks } = useMemo(() => {
     if (!chartData || chartData.length === 0) {
-      return { gradientOffset: 0.5, globalDomain: [-100, 100] };
+      return { gradientOffset: 0.5, globalDomain: [-100, 100], yTicks: undefined };
     }
+
+    let minVal = 0;
+    let maxVal = 0;
 
     if (effectiveViewMode === "annual") {
-      // Modo Anual: Desenha Receitas, Despesas e Saldo (Cumulativo)
       const allVals = chartData.flatMap((d: any) => [d.receitas || 0, d.despesas || 0, d.saldo || 0]);
-      const maxGlobal = Math.max(...allVals, 0) * 1.1;
-      const minGlobal = Math.min(...allVals, 0) * 1.1;
-      const rangeGlobal = maxGlobal - minGlobal || 1;
-
-      return {
-        gradientOffset: maxGlobal / rangeGlobal,
-        globalDomain: [minGlobal, maxGlobal],
-      };
+      maxVal = Math.max(...allVals, 0);
+      minVal = Math.min(...allVals, 0);
     } else {
-      // Modo Mensal: Desenha APENAS o Saldo acumulado
       const saldos = chartData.map((d: any) => Number(d.saldo) || 0);
-      const max = Math.max(...saldos);
-      const min = Math.min(...saldos);
-
-      // Tudo Negativo: 100% Vermelho, offset do gradiente é 0
-      if (max <= 0) {
-        return {
-          gradientOffset: 0,
-          globalDomain: [min * 1.1 || -100, 100],
-        };
-      }
-      // Tudo Positivo: 100% Verde, offset do gradiente é 1
-      if (min >= 0) {
-        return {
-          gradientOffset: 1,
-          globalDomain: [-100, max * 1.1 || 100],
-        };
-      }
-
-      // Misto: cruza o zero
-      const maxVal = max * 1.1;
-      const minVal = min * 1.1;
-      const range = maxVal - minVal || 1;
-
-      return {
-        gradientOffset: maxVal / range,
-        globalDomain: [minVal, maxVal],
-      };
+      maxVal = Math.max(...saldos, 0);
+      minVal = Math.min(...saldos, 0);
     }
+
+    const absMax = Math.max(Math.abs(minVal), Math.abs(maxVal)) * 1.1 || 100;
+    const step = absMax / 5;
+    const ticks = [];
+    
+    let domain: [number, number];
+    let offset = 0.5;
+
+    if (minVal < 0) {
+      for (let i = -5; i <= 5; i++) {
+        ticks.push(step * i);
+      }
+      domain = [-absMax, absMax];
+      offset = 0.5;
+    } else {
+      for (let i = 0; i <= 5; i++) {
+        ticks.push(step * i);
+      }
+      domain = [0, absMax];
+      offset = 1;
+    }
+
+    return {
+      gradientOffset: offset,
+      globalDomain: domain,
+      yTicks: ticks,
+    };
   }, [chartData, effectiveViewMode]);
 
   const navigateMonth = (step: number) => {
@@ -486,6 +483,7 @@ export function EvolutionChart({
             <CartesianGrid stroke="oklch(0.78 0.16 220 / 0.1)" strokeDasharray="3 3" />
             <XAxis
               dataKey={effectiveViewMode === "annual" ? "month" : "label"}
+              scale="point"
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
               fontWeight="bold"
@@ -498,7 +496,7 @@ export function EvolutionChart({
               yAxisId="left"
               width={58}
               domain={globalDomain}
-              tickCount={8}
+              ticks={yTicks}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
               axisLine={false}
@@ -513,7 +511,7 @@ export function EvolutionChart({
               orientation="right"
               width={58}
               domain={globalDomain}
-              tickCount={8}
+              ticks={yTicks}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
               axisLine={false}
@@ -658,6 +656,7 @@ export function EvolutionChart({
               strokeWidth={3}
               fill="none"
               name="Saldo"
+              legendType="none"
               animationDuration={1000}
               hide={effectiveViewMode === "annual"}
             />
@@ -670,10 +669,9 @@ export function EvolutionChart({
               stroke="white"
               strokeWidth={2}
               strokeDasharray="6 6"
-              name="Saldo"
+              name="Saldo Acumulado"
               animationDuration={1000}
               dot={false}
-              legendType="none"
               hide={effectiveViewMode === "monthly"}
             />
 
@@ -686,6 +684,38 @@ export function EvolutionChart({
                 strokeOpacity={0.8}
                 strokeDasharray="4 4"
               />
+            )}
+            {chartData.length > 0 && (
+              <>
+                <ReferenceLine
+                  yAxisId="left"
+                  y={chartData[0].saldo}
+                  stroke="oklch(0.78 0.16 220 / 0.4)"
+                  strokeDasharray="2 2"
+                  label={{
+                    position: "insideLeft",
+                    offset: 10,
+                    value: `▶ ${Math.abs(chartData[0].saldo) >= 1000 ? (chartData[0].saldo / 1000).toFixed(1) + 'k' : chartData[0].saldo.toFixed(0)}`,
+                    fill: chartData[0].saldo >= 0 ? "oklch(0.85 0.16 150)" : "oklch(0.7 0.2 30)",
+                    fontSize: 11,
+                    fontWeight: "900",
+                  }}
+                />
+                <ReferenceLine
+                  yAxisId="right"
+                  y={chartData[chartData.length - 1].saldo}
+                  stroke="oklch(0.78 0.16 220 / 0.4)"
+                  strokeDasharray="2 2"
+                  label={{
+                    position: "insideRight",
+                    offset: 10,
+                    value: `${Math.abs(chartData[chartData.length - 1].saldo) >= 1000 ? (chartData[chartData.length - 1].saldo / 1000).toFixed(1) + 'k' : chartData[chartData.length - 1].saldo.toFixed(0)} ◀`,
+                    fill: chartData[chartData.length - 1].saldo >= 0 ? "oklch(0.85 0.16 150)" : "oklch(0.7 0.2 30)",
+                    fontSize: 11,
+                    fontWeight: "900",
+                  }}
+                />
+              </>
             )}
           </ComposedChart>
         </ResponsiveContainer>

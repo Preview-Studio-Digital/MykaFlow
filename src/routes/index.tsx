@@ -29,6 +29,7 @@ function Dashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [dashboardMode, setDashboardMode] = useState<"monthly" | "annual">("monthly");
   const [explanationModal, setExplanationModal] = useState<"diaria" | "hora" | null>(null);
+  const [employeesCount, setEmployeesCount] = useState(() => Number(localStorage.getItem("mykaflow_employees_count")) || 5);
 
   const averageMonthlyExpense = useMemo(() => {
     if (rows.length === 0) return 0;
@@ -37,15 +38,37 @@ function Dashboard() {
     );
     if (expenseRows.length === 0) return 0;
 
-    const monthSums = new Map<string, number>();
+    const today = new Date();
+    const currentYYYYMM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+
+    const closedMonthSums = new Map<string, number>();
+    const currentMonthSums = new Map<string, number>();
+
     expenseRows.forEach((r) => {
       if (!r.occurred_on) return;
       const yyyyMm = r.occurred_on.substring(0, 7); // "YYYY-MM"
-      monthSums.set(yyyyMm, (monthSums.get(yyyyMm) ?? 0) + Number(r.amount));
+      
+      // Considera apenas meses rigorosamente passados/fechados
+      if (yyyyMm < currentYYYYMM) {
+        closedMonthSums.set(yyyyMm, (closedMonthSums.get(yyyyMm) ?? 0) + Number(r.amount));
+      } 
+      // Salva o atual apenas como fallback para sistemas sem histórico
+      else if (yyyyMm === currentYYYYMM) {
+        currentMonthSums.set(yyyyMm, (currentMonthSums.get(yyyyMm) ?? 0) + Number(r.amount));
+      }
     });
 
-    const totalExpenses = Array.from(monthSums.values()).reduce((sum, val) => sum + val, 0);
-    const numMonths = monthSums.size;
+    let totalExpenses = 0;
+    let numMonths = 0;
+
+    if (closedMonthSums.size > 0) {
+      totalExpenses = Array.from(closedMonthSums.values()).reduce((sum, val) => sum + val, 0);
+      numMonths = closedMonthSums.size;
+    } else if (currentMonthSums.size > 0) {
+      // Fallback: se não há histórico passado, usa o mês atual para não zerar os indicadores
+      totalExpenses = Array.from(currentMonthSums.values()).reduce((sum, val) => sum + val, 0);
+      numMonths = currentMonthSums.size;
+    }
 
     return numMonths > 0 ? totalExpenses / numMonths : 0;
   }, [rows]);
@@ -59,8 +82,24 @@ function Dashboard() {
   }, [averageMonthlyExpense, businessDays]);
 
   const horaOperacional = useMemo(() => {
-    return averageMonthlyExpense / 560; // 5 * 160 * 0.70 (30% efficiency reduction)
-  }, [averageMonthlyExpense]);
+    return averageMonthlyExpense / (employeesCount * 160 * 0.70); // N * 160 * 0.70 (30% efficiency reduction)
+  }, [averageMonthlyExpense, employeesCount]);
+
+  const currentMonthFaturamento = useMemo(() => {
+    const today = new Date();
+    const currYear = today.getFullYear();
+    const currMonth = today.getMonth();
+    return rows
+      .filter((r) => {
+        if (r.type !== "income") return false;
+        if (!r.occurred_on) return false;
+        const d = new Date(r.occurred_on + "T00:00:00");
+        return d.getFullYear() === currYear && d.getMonth() === currMonth;
+      })
+      .reduce((sum, r) => sum + Number(r.amount), 0);
+  }, [rows]);
+
+  const faturamentoBateuCusto = currentMonthFaturamento >= averageMonthlyExpense;
 
   const dismissAlert = (alertId: string) => {
     const dismissed = JSON.parse(localStorage.getItem("mykaflow_dismissed_alerts") || "[]");
@@ -427,30 +466,50 @@ function Dashboard() {
         <div className="flex flex-wrap items-center gap-3 lg:w-1/3 lg:justify-center lg:flex-nowrap">
           <button
             onClick={() => setExplanationModal("diaria")}
-            className="glass group relative overflow-hidden rounded-xl border border-white/10 px-4 py-2 hover:border-cyan-400/40 hover:scale-105 active:scale-95 transition-all text-right flex items-center gap-3"
+            className={`glass group relative overflow-hidden rounded-xl border px-4 py-2 hover:scale-105 active:scale-95 transition-all text-right flex items-center gap-3 ${
+              faturamentoBateuCusto 
+                ? "border-emerald-500/20 hover:border-emerald-400/40" 
+                : "border-rose-500/20 hover:border-rose-400/40"
+            }`}
             title="Clique para ver o detalhamento do cálculo"
           >
-            <div className="absolute inset-0 bg-gradient-to-l from-cyan-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
+              faturamentoBateuCusto ? "from-emerald-500/10 to-transparent" : "from-rose-500/10 to-transparent"
+            }`} />
             <div className="text-right">
-              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-cyan-400 transition-colors">
+              <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${
+                faturamentoBateuCusto ? "group-hover:text-emerald-400" : "group-hover:text-rose-400"
+              }`}>
                 Diária Empresarial
               </p>
               <p className="text-sm font-black font-mono text-white mt-0.5">
                 {fmtCurrency(diariaEmpresarial)}
               </p>
             </div>
-            <div className="w-1.5 h-8 rounded-full bg-cyan-400 group-hover:scale-y-110 transition-transform" />
+            <div className={`w-1.5 h-8 rounded-full group-hover:scale-y-110 transition-transform ${
+              faturamentoBateuCusto ? "animate-pulse-green bg-emerald-400" : "animate-pulse-red bg-rose-500"
+            }`} />
           </button>
 
           <button
             onClick={() => setExplanationModal("hora")}
-            className="glass group relative overflow-hidden rounded-xl border border-white/10 px-4 py-2 hover:border-sky-400/40 hover:scale-105 active:scale-95 transition-all text-left flex items-center gap-3"
+            className={`glass group relative overflow-hidden rounded-xl border px-4 py-2 hover:scale-105 active:scale-95 transition-all text-left flex items-center gap-3 ${
+              faturamentoBateuCusto 
+                ? "border-emerald-500/20 hover:border-emerald-400/40" 
+                : "border-rose-500/20 hover:border-rose-400/40"
+            }`}
             title="Clique para ver o detalhamento do cálculo"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-sky-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            <div className="w-1.5 h-8 rounded-full bg-sky-400 group-hover:scale-y-110 transition-transform" />
+            <div className={`absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
+              faturamentoBateuCusto ? "from-emerald-500/10 to-transparent" : "from-rose-500/10 to-transparent"
+            }`} />
+            <div className={`w-1.5 h-8 rounded-full group-hover:scale-y-110 transition-transform ${
+              faturamentoBateuCusto ? "animate-pulse-green bg-emerald-400" : "animate-pulse-red bg-rose-500"
+            }`} />
             <div>
-              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-sky-400 transition-colors">
+              <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${
+                faturamentoBateuCusto ? "group-hover:text-emerald-400" : "group-hover:text-rose-400"
+              }`}>
                 Hora Operacional
               </p>
               <p className="text-sm font-black font-mono text-white mt-0.5">
@@ -560,7 +619,7 @@ function Dashboard() {
                         <span className="text-muted-foreground">1. Despesa Média Mensal:</span>
                         <div className="text-right">
                           <span className="font-mono font-bold text-white">{fmtCurrency(averageMonthlyExpense)}</span>
-                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Soma despesas reais / meses ativos</p>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Soma despesas reais / meses fechados</p>
                         </div>
                       </div>
 
@@ -607,13 +666,13 @@ function Dashboard() {
 
                 <div className="space-y-4">
                   <p className="text-muted-foreground text-sm leading-relaxed">
-                    A <strong className="text-white">Hora Operacional</strong> define o custo hora-homem real para manter a empresa funcionando. Ela assume <strong className="text-white">5 funcionários</strong> trabalhando <strong className="text-white">160 horas por mês cada</strong>, com uma <strong className="text-white">redução de 30% na eficiência operacional</strong>.
+                    A <strong className="text-white">Hora Operacional</strong> define o custo hora-homem real para manter a empresa funcionando. Ela assume o número de <strong className="text-white">funcionários indicados</strong> trabalhando <strong className="text-white">160 horas por mês cada</strong>, com uma <strong className="text-white">redução de 30% na eficiência operacional</strong>.
                   </p>
 
                   <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Fórmula Aplicada</p>
                     <p className="text-lg font-bold text-sky-400">
-                      Hora = Despesa Média / 560h Operacionais
+                      Hora = Despesa Média / {Math.round(employeesCount * 160 * 0.7)}h Operacionais
                     </p>
                   </div>
 
@@ -625,23 +684,39 @@ function Dashboard() {
                         <span className="text-muted-foreground">1. Despesa Média Mensal:</span>
                         <div className="text-right">
                           <span className="font-mono font-bold text-white">{fmtCurrency(averageMonthlyExpense)}</span>
-                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Soma despesas reais / meses ativos</p>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Soma despesas reais / meses fechados</p>
                         </div>
                       </div>
 
+                      <div className="flex items-center justify-between text-sm py-1.5 border-b border-white/[0.03]">
+                        <span className="text-muted-foreground">2. Número de Funcionários:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="1000"
+                          value={employeesCount}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 1;
+                            setEmployeesCount(val);
+                            localStorage.setItem("mykaflow_employees_count", String(val));
+                          }}
+                          className="w-16 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-center font-mono font-bold text-white outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 transition-all"
+                        />
+                      </div>
+
                       <div className="flex items-start justify-between text-sm py-1.5 border-b border-white/[0.03]">
-                        <span className="text-muted-foreground">2. Capacidade Operativa Nominal:</span>
+                        <span className="text-muted-foreground">3. Capacidade Operativa Nominal:</span>
                         <div className="text-right">
-                          <span className="font-mono font-bold text-white">800 Horas / mês</span>
-                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">5 funcionários x 160h</p>
+                          <span className="font-mono font-bold text-white">{employeesCount * 160} Horas / mês</span>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">{employeesCount} funcionários x 160h</p>
                         </div>
                       </div>
 
                       <div className="flex items-start justify-between text-sm py-1.5 border-b border-white/[0.03]">
-                        <span className="text-muted-foreground">3. Margem de Eficiência:</span>
+                        <span className="text-muted-foreground">4. Margem de Eficiência:</span>
                         <div className="text-right">
                           <span className="font-mono font-bold text-rose-400">70% (-30% ineficiência)</span>
-                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Capacidade líquida real: 560h</p>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Capacidade líquida real: {Math.round(employeesCount * 160 * 0.7)}h</p>
                         </div>
                       </div>
 

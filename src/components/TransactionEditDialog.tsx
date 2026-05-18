@@ -19,8 +19,13 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
   const [nature, setNature] = useState<"fixed" | "variable">(transaction.nature);
   const [dbCategories, setDbCategories] = useState<any[]>([]);
   const [selectedParentId, setSelectedParentId] = useState("");
-  const [subCategory, setSubCategory] = useState(transaction.description || "");
-  const [note, setNote] = useState("");
+  const parsedDesc = (transaction.description || "").replace(" | VALIDAR VALOR", "").replace("VALIDAR VALOR", "").trim();
+  const descParts = parsedDesc.split(" - ");
+  const initialSub = descParts[0] || "";
+  const initialNote = descParts.slice(1).join(" - ") || "";
+
+  const [subCategory, setSubCategory] = useState(initialSub);
+  const [note, setNote] = useState(initialNote);
   const [amount, setAmount] = useState(
     Number(transaction.amount).toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
@@ -29,6 +34,12 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
   );
   const [date, setDate] = useState(transaction.occurred_on);
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Limpa o erro ao alterar qualquer entrada relevante do diálogo de edição
+  useEffect(() => {
+    setFormError(null);
+  }, [subCategory, note, amount, date, type, nature, selectedParentId]);
 
   const fallbackParents = [
     { id: "f1", name: "ESTRUTURA", type: "expense" },
@@ -49,6 +60,13 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
       "IPTU - COMÉRCIO",
     ],
   };
+
+  const currentParentName = (
+    dbCategories.find((c) => c.id === selectedParentId) ||
+    fallbackParents.find((c) => c.id === selectedParentId)
+  )?.name || transaction.category || "";
+
+  const isManutencaoOrLocacaoIncome = type === "income" && (currentParentName.toUpperCase() === "MANUTENÇÃO" || currentParentName.toUpperCase() === "LOCAÇÃO");
 
   useEffect(() => {
     async function fetchCats() {
@@ -151,8 +169,8 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
       setNature("fixed");
     }
 
-    if (isAntecipacao && !note.startsWith("NOTA FISCAL Nº: ")) {
-      setNote((prev) => (prev ? `NOTA FISCAL Nº: ${prev}` : "NOTA FISCAL Nº: "));
+    if (isAntecipacao && !note.startsWith("NF ")) {
+      setNote((prev) => (prev ? `NF ${prev.replace(/^NOTA FISCAL Nº:\s*/, "")}` : "NF "));
     } else if (isAdiantamento && !note.startsWith("NF - ")) {
       setNote((prev) => (prev ? `NF - ${prev}` : "NF - "));
     } else if (isManutencao && !note.startsWith("CLIENTE - ")) {
@@ -162,8 +180,12 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
 
   async function handleUpdate(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
     const value = parseFloat(amount.replace(/\./g, "").replace(",", "."));
-    if (isNaN(value)) return toast.error("Valor inválido");
+    if (isNaN(value)) {
+      setFormError("Valor inválido");
+      return;
+    }
 
     const parent =
       dbCategories.find((c) => c.id === selectedParentId) ||
@@ -176,18 +198,29 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
     const isAdiantamento = uParent.includes("ADIANTAMENTOS") || uSub.includes("ADIANTAMENTOS");
     const isManutencao = uParent.includes("MANUTENÇÃO") || uSub.includes("MANUTENÇÃO");
 
-    if (isAntecipacao && (!note || note.trim() === "NOTA FISCAL Nº:")) {
-      toast.error("Para ANTECIPAÇÃO, insira o número da NOTA FISCAL.");
+    if (parentName.toUpperCase() !== "SALDO INICIAL") {
+      if (!subCategory || !subCategory.trim()) {
+        setFormError("Preencha a subcategoria.");
+        return;
+      }
+      if (!note || !note.trim()) {
+        setFormError(isManutencaoOrLocacaoIncome ? "Insira o número da nota fiscal." : "Preencha os detalhes (descrição) do lançamento.");
+        return;
+      }
+    }
+
+    if (isAntecipacao && (!note || note.trim() === "NF")) {
+      setFormError("Para ANTECIPAÇÃO, insira o número da NOTA FISCAL.");
       return;
     }
 
     if (isAdiantamento && (!note || note.trim() === "NF -")) {
-      toast.error("Para ADIANTAMENTOS, insira o número da NF.");
+      setFormError("Para ADIANTAMENTOS, insira o número da NF.");
       return;
     }
 
     if (isManutencao && (!note || note.trim() === "CLIENTE -")) {
-      toast.error("Para MANUTENÇÃO, insira o nome do CLIENTE.");
+      setFormError("Para MANUTENÇÃO, insira o nome do CLIENTE.");
       return;
     }
 
@@ -405,16 +438,22 @@ export function TransactionEditDialog({ transaction, isOpen, onClose, onUpdated 
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[10px] uppercase tracking-widest text-muted-foreground font-black ml-1">
-                Descrição
+                {isManutencaoOrLocacaoIncome ? "Número da Nota Fiscal" : "Descrição"}
               </span>
               <input
                 value={note}
                 onChange={(e) => setNote(e.target.value.toUpperCase())}
-                placeholder="DETALHES..."
+                placeholder={isManutencaoOrLocacaoIncome ? "DIGITE O NÚMERO DA NF..." : "DETALHES..."}
                 className="input-futuristic w-full rounded-xl px-4 py-3.5 text-sm outline-none uppercase font-bold"
               />
             </label>
           </div>
+
+          {formError && (
+            <div className="p-3.5 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] sm:text-xs rounded-xl font-black uppercase tracking-wider text-center animate-in fade-in slide-in-from-top-2 duration-300">
+              ⚠️ {formError}
+            </div>
+          )}
 
           <div className="flex gap-4 pt-6">
             <button

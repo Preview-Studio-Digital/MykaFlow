@@ -59,6 +59,12 @@ export function TransactionForm({
 
   const [date, setDate] = useState(() => getInitialDate(defaultMonth, defaultYear));
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Limpa o erro ao alterar qualquer entrada relevante
+  useEffect(() => {
+    setFormError(null);
+  }, [selectedParentId, selectedSubId, description, amount, nature, date, dueDate, operationCost]);
 
   // Sincronizar data ao navegar pelos meses
   useEffect(() => {
@@ -98,6 +104,7 @@ export function TransactionForm({
      selectedSubCategoryName === "DEPRECIACAO");
 
   const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
+  const isManutencaoOrLocacaoIncome = type === "income" && (selectedCategoryName === "MANUTENÇÃO" || selectedCategoryName === "LOCAÇÃO");
   const isPeriodic =
     (type === "income" && selectedCategoryName === "LOCAÇÃO") ||
     (type === "expense" && selectedCategoryName === "EMPRÉSTIMO");
@@ -109,6 +116,14 @@ export function TransactionForm({
       setEndDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
     }
   }, [isPeriodic, date]);
+
+  useEffect(() => {
+    if (isAntecipacao && date && !dueDate) {
+      const d = new Date(date + "T00:00:00");
+      d.setDate(d.getDate() + 30);
+      setDueDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+  }, [isAntecipacao, date]);
 
   // Efeito para cálculo automático da Depreciação Frota
   useEffect(() => {
@@ -182,7 +197,7 @@ export function TransactionForm({
           {isOpen && !disabled && (
             <>
               <div className="fixed inset-0 z-[100]" onClick={() => setIsOpen(false)} />
-              <ul className="absolute top-full left-0 right-0 mt-1 z-[101] bg-[#0d1117] border-2 border-white/10 rounded-xl overflow-hidden max-h-[500px] overflow-y-auto shadow-[0_10px_50px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200">
+              <ul className="absolute top-full left-0 right-0 mt-1 z-[101] bg-[#0d1117] border-2 border-white/10 rounded-xl overflow-hidden max-h-[360px] overflow-y-auto shadow-[0_10px_50px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200">
                 <li
                   onClick={() => {
                     onChange("");
@@ -328,43 +343,56 @@ export function TransactionForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
     if (!user || !selectedParentId) {
-      toast.error("Selecione uma categoria");
+      setFormError("Selecione uma categoria");
       return;
     }
     const parent = dbCategories.find((c) => c.id === selectedParentId);
     const sub = dbSubCategories.find((s) => s.id === selectedSubId);
 
     if (!nature) {
-      toast.error("Selecione o tipo de lançamento");
+      setFormError("Selecione o tipo de lançamento");
       return;
     }
+    
+    if (!selectedSubId && parent?.name.toUpperCase() !== "SALDO INICIAL") {
+      setFormError("Selecione ou crie uma subcategoria");
+      return;
+    }
+
+    if (!description || !description.trim()) {
+      setFormError(isManutencaoOrLocacaoIncome ? "Insira o número da nota fiscal" : "Preencha os detalhes (descrição) do lançamento");
+      return;
+    }
+
     const value = parseFloat(amount.replace(/\./g, "").replace(",", "."));
     if (isNaN(value) || value <= 0) {
-      toast.error("Insira um valor válido");
+      setFormError("Insira um valor válido");
       return;
     }
 
     const costValue = isAntecipacao ? parseFloat(operationCost.replace(/\./g, "").replace(",", ".")) : 0;
     if (isAntecipacao) {
       if (!description.trim()) {
-        toast.error("Insira o número da nota fiscal");
+        setFormError("Insira o número da nota fiscal");
         return;
       }
       if (isNaN(costValue) || costValue < 0) {
-        toast.error("Insira um valor de antecipação de notas válido");
+        setFormError("Insira um valor de antecipação de notas válido");
         return;
       }
       if (!dueDate) {
-        toast.error("Selecione a data de vencimento");
+        setFormError("Selecione a data de vencimento");
         return;
       }
     }
 
     setBusy(true);
 
+    const nfText = description.toUpperCase().includes("NF") ? description.toUpperCase() : `NF ${description.toUpperCase()}`;
     const finalDescription = isAntecipacao 
-      ? (description.toUpperCase().includes("NF") ? description.toUpperCase() : `NF ${description.toUpperCase()}`)
+      ? (sub?.name ? `${sub.name} - ${nfText}` : nfText)
       : (description.trim().toUpperCase() || sub?.name || null);
 
     // Verificação de duplicados
@@ -469,8 +497,9 @@ export function TransactionForm({
           user_id: user.id,
           type: "expense",
           nature: "variable",
-          category: "ANTECIPAÇÃO DE NOTAS",
-          description: `CUSTO ANTECIPAÇÃO - ${finalDescription}`,
+          category: "CUSTO ANTECIPAÇÃO",
+          subcategory_id_v2: selectedSubId || null,
+          description: finalDescription,
           amount: costValue,
           occurred_on: date,
         });
@@ -815,12 +844,12 @@ export function TransactionForm({
         ) : (
           <div className={spaceY}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground font-black ml-2">
-              Descrição
+              {isManutencaoOrLocacaoIncome ? "Número da Nota Fiscal" : "Descrição"}
             </span>
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value.toUpperCase())}
-              placeholder="DIGITE INFORMAÇÕES ADICIONAIS..."
+              placeholder={isManutencaoOrLocacaoIncome ? "DIGITE O NÚMERO DA NF..." : "DIGITE INFORMAÇÕES ADICIONAIS..."}
               className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none uppercase font-bold tracking-wide border-2`}
             />
           </div>
@@ -859,7 +888,7 @@ export function TransactionForm({
           </div>
           <div className={spaceY}>
             <span className="block text-[11px] uppercase tracking-[0.3em] text-red-500 font-black ml-2">
-              Antecipação de Notas
+              Custo Antecipação
             </span>
             <div className="relative">
               <span className="absolute left-5 top-1/2 -translate-y-1/2 text-red-500 font-bold text-sm">
@@ -883,6 +912,12 @@ export function TransactionForm({
               />
             </div>
           </div>
+        </div>
+      )}
+
+      {formError && (
+        <div className="p-3.5 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] sm:text-xs rounded-xl font-black uppercase tracking-wider text-center animate-in fade-in slide-in-from-top-2 duration-300">
+          ⚠️ {formError}
         </div>
       )}
 

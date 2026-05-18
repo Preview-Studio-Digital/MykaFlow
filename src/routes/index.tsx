@@ -73,6 +73,47 @@ function Dashboard() {
     return numMonths > 0 ? totalExpenses / numMonths : 0;
   }, [rows]);
 
+  const averageMonthlyIncome = useMemo(() => {
+    if (rows.length === 0) return 0;
+    const incomeRows = rows.filter(
+      (r) => r.type === "income" && r.category !== "VENCIMENTO ANTECIPAÇÃO"
+    );
+    if (incomeRows.length === 0) return 0;
+
+    const today = new Date();
+    const currentYYYYMM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+
+    const closedMonthSums = new Map<string, number>();
+    const currentMonthSums = new Map<string, number>();
+
+    incomeRows.forEach((r) => {
+      if (!r.occurred_on) return;
+      const yyyyMm = r.occurred_on.substring(0, 7); // "YYYY-MM"
+      
+      // Considera apenas meses rigorosamente passados/fechados
+      if (yyyyMm < currentYYYYMM) {
+        closedMonthSums.set(yyyyMm, (closedMonthSums.get(yyyyMm) ?? 0) + Number(r.amount));
+      } 
+      // Salva o atual apenas como fallback para sistemas sem histórico
+      else if (yyyyMm === currentYYYYMM) {
+        currentMonthSums.set(yyyyMm, (currentMonthSums.get(yyyyMm) ?? 0) + Number(r.amount));
+      }
+    });
+
+    let totalIncome = 0;
+    let numMonths = 0;
+
+    if (closedMonthSums.size > 0) {
+      totalIncome = Array.from(closedMonthSums.values()).reduce((sum, val) => sum + val, 0);
+      numMonths = closedMonthSums.size;
+    } else if (currentMonthSums.size > 0) {
+      totalIncome = Array.from(currentMonthSums.values()).reduce((sum, val) => sum + val, 0);
+      numMonths = currentMonthSums.size;
+    }
+
+    return numMonths > 0 ? totalIncome / numMonths : 0;
+  }, [rows]);
+
   const businessDays = useMemo(() => {
     return getBusinessDaysInMonth(year, month);
   }, [year, month]);
@@ -474,7 +515,7 @@ function Dashboard() {
   return (
     <div className="relative z-10 min-h-screen px-4 pt-4 pb-2 md:px-8">
       <header className="mb-2 flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between border-b border-white/5 pb-2">
-        <div className="flex items-center gap-3 lg:w-1/3 lg:justify-start">
+        <div className="flex items-center gap-3 lg:w-1/4 lg:justify-start">
           <div className="rounded-lg bg-primary/20 p-2 glow">
             <Zap className="h-6 w-6 text-accent" />
           </div>
@@ -488,11 +529,29 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Diária Empresarial & Hora Operacional Glow Buttons */}
-        <div className="flex flex-wrap items-center gap-3 lg:w-1/3 lg:justify-center lg:flex-nowrap">
+        {/* 4 Glow Buttons / KPI Cards */}
+        <div className="flex flex-wrap items-center gap-2 justify-center lg:flex-1 lg:max-w-4xl">
+          {/* Receita Média Mensal (Lado Esquerdo) */}
+          <div
+            className={`glass group relative overflow-hidden rounded-xl border px-3.5 py-1.5 hover:scale-105 transition-all text-right flex items-center gap-2.5 cursor-help ${headerBtnBorderClass}`}
+            title="Média de receitas dos meses totalmente fechados"
+          >
+            <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
+            <div className="text-right">
+              <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
+                Receita Média
+              </p>
+              <p className="text-xs font-black font-mono text-white mt-0.5">
+                {fmtCurrency(averageMonthlyIncome)}
+              </p>
+            </div>
+            <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
+          </div>
+
+          {/* Diária Empresarial (Centro-Esquerdo) */}
           <button
             onClick={() => setExplanationModal("diaria")}
-            className={`glass group relative overflow-hidden rounded-xl border px-4 py-2 hover:scale-105 active:scale-95 transition-all text-right flex items-center gap-3 ${headerBtnBorderClass}`}
+            className={`glass group relative overflow-hidden rounded-xl border px-3.5 py-1.5 hover:scale-105 active:scale-95 transition-all text-right flex items-center gap-2.5 ${headerBtnBorderClass}`}
             title="Clique para ver o detalhamento do cálculo"
           >
             <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
@@ -500,32 +559,50 @@ function Dashboard() {
               <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
                 Diária Empresarial
               </p>
-              <p className="text-sm font-black font-mono text-white mt-0.5">
+              <p className="text-xs font-black font-mono text-white mt-0.5">
                 {fmtCurrency(diariaEmpresarial)}
               </p>
             </div>
-            <div className={`w-1.5 h-8 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
+            <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
           </button>
 
+          {/* Hora Operacional (Centro-Direito) */}
           <button
             onClick={() => setExplanationModal("hora")}
-            className={`glass group relative overflow-hidden rounded-xl border px-4 py-2 hover:scale-105 active:scale-95 transition-all text-left flex items-center gap-3 ${headerBtnBorderClass}`}
+            className={`glass group relative overflow-hidden rounded-xl border px-3.5 py-1.5 hover:scale-105 active:scale-95 transition-all text-left flex items-center gap-2.5 ${headerBtnBorderClass}`}
             title="Clique para ver o detalhamento do cálculo"
           >
             <div className={`absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
-            <div className={`w-1.5 h-8 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
+            <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
             <div>
               <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
                 Hora Operacional
               </p>
-              <p className="text-sm font-black font-mono text-white mt-0.5">
+              <p className="text-xs font-black font-mono text-white mt-0.5">
                 {fmtCurrency(horaOperacional)}
               </p>
             </div>
           </button>
+
+          {/* Despesa Média Mensal (Lado Direito) */}
+          <div
+            className={`glass group relative overflow-hidden rounded-xl border px-3.5 py-1.5 hover:scale-105 transition-all text-left flex items-center gap-2.5 cursor-help ${headerBtnBorderClass}`}
+            title="Média de despesas dos meses totalmente fechados"
+          >
+            <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
+            <div>
+              <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
+                Despesa Média
+              </p>
+              <p className="text-xs font-black font-mono text-white mt-0.5">
+                {fmtCurrency(averageMonthlyExpense)}
+              </p>
+            </div>
+            <div className={`absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
+          </div>
         </div>
 
-        <div className="flex items-center gap-4 justify-between lg:w-1/3 lg:justify-end shrink-0">
+        <div className="flex items-center gap-4 justify-between lg:w-1/4 lg:justify-end shrink-0">
           <div className="flex flex-col items-end">
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
               {role === "admin" ? "Administrador" : "Funcionário"}

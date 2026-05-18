@@ -185,6 +185,7 @@ function Dashboard() {
       : "animate-pulse-red bg-rose-500";
 
   const dismissAlert = (alertId: string) => {
+    if (typeof window === "undefined") return;
     const dismissed = JSON.parse(localStorage.getItem("mykaflow_dismissed_alerts") || "[]");
     if (!dismissed.includes(alertId)) {
       dismissed.push(alertId);
@@ -198,6 +199,8 @@ function Dashboard() {
 
     // 1. Agrupar transações do mês corrente por categoria e tipo
     const currentGroups: { [key: string]: { category: string; type: string; amount: number; date: string; description?: string } } = {};
+    let totalIncomeCurr = 0;
+    let totalExpenseCurr = 0;
     rows.forEach((r) => {
       if (!r.occurred_on) return;
       const d = new Date(r.occurred_on + "T00:00:00");
@@ -213,6 +216,8 @@ function Dashboard() {
           };
         }
         currentGroups[key].amount += Number(r.amount);
+        if (r.type === "income") totalIncomeCurr += Number(r.amount);
+        else totalExpenseCurr += Number(r.amount);
       }
     });
 
@@ -222,21 +227,29 @@ function Dashboard() {
     const prevMonth = prevMonthDate.getMonth();
 
     const prevGroups: { [key: string]: number } = {};
+    let totalIncomePrev = 0;
+    let totalExpensePrev = 0;
     rows.forEach((r) => {
       if (!r.occurred_on) return;
       const d = new Date(r.occurred_on + "T00:00:00");
       if (d.getFullYear() === prevYear && d.getMonth() === prevMonth) {
         const key = `${r.type}-${r.category.toUpperCase()}`;
-        if (!prevGroups[key]) {
-          prevGroups[key] = 0;
-        }
+        if (!prevGroups[key]) prevGroups[key] = 0;
         prevGroups[key] += Number(r.amount);
+        if (r.type === "income") totalIncomePrev += Number(r.amount);
+        else totalExpensePrev += Number(r.amount);
       }
     });
 
+    const netCurr = totalIncomeCurr - totalExpenseCurr;
+    const netPrev = totalIncomePrev - totalExpensePrev;
+    const netImproved = netCurr > netPrev;
+
     // 3. Comparar grupos e gerar alertas de variação
     const generated: any[] = [];
-    const dismissed = JSON.parse(localStorage.getItem("mykaflow_dismissed_alerts") || "[]");
+    const dismissed = typeof window !== "undefined"
+      ? JSON.parse(localStorage.getItem("mykaflow_dismissed_alerts") || "[]")
+      : [];
 
     Object.keys(currentGroups).forEach((key) => {
       const current = currentGroups[key];
@@ -246,25 +259,48 @@ function Dashboard() {
         const percentDiff = ((current.amount - prevVal) / prevVal) * 100;
         if (Math.abs(percentDiff) > 10) {
           const alertId = `alert-${current.type}-${current.category.toUpperCase()}-${year}-${month}`;
-          
-          if (!dismissed.includes(alertId)) {
-            generated.push({
-              id: alertId,
-              category: current.category,
-              type: current.type,
-              date: current.date,
-              oldAmount: prevVal,
-              newAmount: current.amount,
-              percentChange: percentDiff,
-              description: current.description
-            });
+          if (dismissed.includes(alertId)) return;
+
+          const isExpense = current.type === "expense";
+          const isIncrease = percentDiff > 0;
+          // Classificação base: receita↑ ou despesa↓ = positivo; o oposto = negativo
+          let isPositive = isExpense ? !isIncrease : isIncrease;
+          let analysis = "";
+          if (isExpense && isIncrease) {
+            // Despesa subiu — pode ser bom se o lucro líquido melhorou
+            if (netImproved && netCurr > 0) {
+              isPositive = true;
+              analysis = "Despesa subiu, mas o lucro líquido melhorou — investimento vantajoso.";
+            } else {
+              analysis = "Revise fornecedores e contratos desta categoria para reduzir custo.";
+            }
+          } else if (isExpense && !isIncrease) {
+            analysis = "Boa contenção de custo. Mantenha o controle e replique a prática.";
+          } else if (!isExpense && isIncrease) {
+            analysis = "Receita em alta. Reforce os canais que geraram esse crescimento.";
+          } else {
+            analysis = "Queda de receita. Investigue causas e reative ações comerciais.";
           }
+
+          generated.push({
+            id: alertId,
+            category: current.category,
+            type: current.type,
+            date: current.date,
+            oldAmount: prevVal,
+            newAmount: current.amount,
+            percentChange: percentDiff,
+            description: current.description,
+            isPositive,
+            analysis,
+          });
         }
       }
     });
 
     return generated;
   }, [rows, year, month, refreshKey]);
+
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });

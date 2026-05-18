@@ -291,3 +291,5 @@ html[data-scroll-dir="down"] ::-webkit-scrollbar-thumb {
 .recharts-wrapper svg {
   overflow: visible !important;
 }
+
+/* Force desktop view on all devices (disable responsive variations) */

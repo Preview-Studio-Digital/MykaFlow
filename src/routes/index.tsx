@@ -530,16 +530,16 @@ function Dashboard() {
         </div>
 
         {/* 4 Glow Buttons / KPI Cards */}
-        <div className="flex flex-wrap items-center gap-2 justify-center lg:flex-1 lg:max-w-4xl">
+        <div className="grid grid-cols-4 gap-2 w-max mx-auto">
           {/* Receita Média Mensal (Lado Esquerdo) */}
           <div
-            className={`glass group relative overflow-hidden rounded-xl border px-3.5 py-1.5 hover:scale-105 transition-all text-right flex items-center gap-2.5 cursor-help ${headerBtnBorderClass}`}
+            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 transition-all text-right flex items-center justify-end gap-2 cursor-help w-full h-full ${headerBtnBorderClass}`}
             title="Média de receitas dos meses totalmente fechados"
           >
             <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
             <div className="text-right">
               <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
-                Receita Média
+                Receita Média Mensal
               </p>
               <p className="text-xs font-black font-mono text-white mt-0.5">
                 {fmtCurrency(averageMonthlyIncome)}
@@ -551,7 +551,7 @@ function Dashboard() {
           {/* Diária Empresarial (Centro-Esquerdo) */}
           <button
             onClick={() => setExplanationModal("diaria")}
-            className={`glass group relative overflow-hidden rounded-xl border px-3.5 py-1.5 hover:scale-105 active:scale-95 transition-all text-right flex items-center gap-2.5 ${headerBtnBorderClass}`}
+            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 active:scale-95 transition-all text-right flex items-center justify-end gap-2 w-full h-full ${headerBtnBorderClass}`}
             title="Clique para ver o detalhamento do cálculo"
           >
             <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
@@ -569,12 +569,12 @@ function Dashboard() {
           {/* Hora Operacional (Centro-Direito) */}
           <button
             onClick={() => setExplanationModal("hora")}
-            className={`glass group relative overflow-hidden rounded-xl border px-3.5 py-1.5 hover:scale-105 active:scale-95 transition-all text-left flex items-center gap-2.5 ${headerBtnBorderClass}`}
+            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 active:scale-95 transition-all text-left flex items-center justify-start gap-2 w-full h-full ${headerBtnBorderClass}`}
             title="Clique para ver o detalhamento do cálculo"
           >
             <div className={`absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
             <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
-            <div>
+            <div className="text-left">
               <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
                 Hora Operacional
               </p>
@@ -586,13 +586,13 @@ function Dashboard() {
 
           {/* Despesa Média Mensal (Lado Direito) */}
           <div
-            className={`glass group relative overflow-hidden rounded-xl border px-3.5 py-1.5 hover:scale-105 transition-all text-left flex items-center gap-2.5 cursor-help ${headerBtnBorderClass}`}
+            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 transition-all text-left flex items-center justify-start gap-2 cursor-help w-full h-full ${headerBtnBorderClass}`}
             title="Média de despesas dos meses totalmente fechados"
           >
             <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
-            <div>
+            <div className="text-left">
               <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
-                Despesa Média
+                Despesa Média Mensal
               </p>
               <p className="text-xs font-black font-mono text-white mt-0.5">
                 {fmtCurrency(averageMonthlyExpense)}

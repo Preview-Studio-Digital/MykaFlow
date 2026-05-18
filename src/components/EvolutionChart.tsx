@@ -111,6 +111,7 @@ export function EvolutionChart({
   onMonthShift,
   canShiftPrev,
   canShiftNext,
+  averageMonthlyExpense,
 }: {
   data: Tx[];
   year: number;
@@ -122,6 +123,7 @@ export function EvolutionChart({
   onDashboardModeChange?: (mode: "monthly" | "annual") => void;
   canShiftPrev?: boolean;
   canShiftNext?: boolean;
+  averageMonthlyExpense?: number;
 }) {
   const [viewMode, setViewMode] = useState<"annual" | "monthly">("annual");
   const [mounted, setMounted] = useState(false);
@@ -295,107 +297,109 @@ export function EvolutionChart({
 
   if (!mounted) {
     return (
-      <div className="h-[420px] w-full bg-white/5 animate-pulse rounded-2xl border-2 border-white/5" />
+      <div className="h-[390px] w-full bg-white/5 animate-pulse rounded-2xl border-2 border-white/5" />
     );
   }
 
   return (
     <div
-      className={`rounded-2xl p-6 transition-all duration-500 border-2 ${
+      className={`rounded-2xl transition-all duration-500 border-2 ${
         currentSaldo < 0
           ? "bg-red-500/10 border-red-500/30 shadow-[inset_0_0_50px_rgba(239,68,68,0.1)]"
           : "bg-cyan-500/10 border-cyan-500/30 shadow-[inset_0_0_50px_rgba(34,211,238,0.1)]"
-      } backdrop-blur-md p-4`}
+      } backdrop-blur-md p-3`}
     >
-      <div className="relative flex items-center justify-between mb-4">
-        <div className="flex flex-col gap-1 pl-[34px]">
-          <div className="flex items-center gap-4">
-            <h3 className="text-lg font-bold uppercase tracking-widest text-gradient flex items-center gap-2">
-              <Activity className="h-6 w-6" />
-              {effectiveViewMode === "annual" ? "Evolução Anual" : "Saldo Mensal"}
+      <div className="relative flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-4 pl-[58px] flex-wrap">
+          {/* Title Toggle: MENSAL / ANUAL */}
+          {onDashboardModeChange && dashboardMode ? (
+            <div className="flex items-center gap-1.5 text-base font-black tracking-widest uppercase leading-tight select-none">
+              {dashboardMode === "monthly" ? (
+                <>
+                  <span className="text-gradient drop-shadow-[0_0_8px_rgba(34,211,238,0.3)] scale-105">
+                    SALDO MENSAL
+                  </span>
+                  <span className="text-muted-foreground/20 font-light mx-1">|</span>
+                  <button
+                    onClick={() => onDashboardModeChange("annual")}
+                    className="text-muted-foreground/50 hover:text-white hover:scale-102 transition-all duration-300"
+                  >
+                    EVOLUÇÃO ANUAL
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-gradient drop-shadow-[0_0_8px_rgba(34,211,238,0.3)] scale-105">
+                    EVOLUÇÃO ANUAL
+                  </span>
+                  <span className="text-muted-foreground/20 font-light mx-1">|</span>
+                  <button
+                    onClick={() => onDashboardModeChange("monthly")}
+                    className="text-muted-foreground/50 hover:text-white hover:scale-102 transition-all duration-300"
+                  >
+                    SALDO MENSAL
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <h3 className="text-base font-black tracking-widest uppercase text-gradient leading-tight">
+              {effectiveViewMode === "annual" ? "EVOLUÇÃO ANUAL" : "SALDO MENSAL"}
             </h3>
-          </div>
-
-          {effectiveViewMode === "monthly" && !forcedViewMode && (
-            <button
-              onClick={() => setViewMode("annual")}
-              className="flex items-center gap-1 text-[10px] uppercase font-black tracking-widest text-accent hover:text-white transition-all w-fit"
-            >
-              <ChevronLeft className="h-3 w-3" /> Voltar ao Anual
-            </button>
           )}
         </div>
 
-        {/* Toggle Mensal / Anual */}
+        {/* Absolute Centered Month/Year selector */}
         {onDashboardModeChange && dashboardMode && (
-          <div className="flex flex-col items-center gap-3 absolute left-1/2 -translate-x-1/2">
-            <div className="flex items-center gap-3">
-              <button
-                disabled={!canShiftPrev}
-                onClick={() => onMonthShift?.(dashboardMode === "annual" ? -12 : -1)}
-                className={`text-muted-foreground transition-all flex items-center gap-2 group ${!canShiftPrev ? "opacity-20 cursor-not-allowed" : "hover:text-white hover:scale-110"}`}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase hidden sm:inline">
-                  {dashboardMode === "annual" ? year - 1 : MONTHS_PT[(month + 11) % 12]}
-                </span>
-              </button>
-              <span className="text-xl font-black tracking-[0.2em] uppercase text-muted-foreground opacity-90 min-w-[150px] text-center">
-                {dashboardMode === "annual" ? year : MONTHS_PT[month]}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/[0.03] border border-white/5 rounded-xl px-3 py-1 shadow-[0_0_10px_rgba(0,0,0,0.1)] z-10">
+            <button
+              disabled={!canShiftPrev}
+              onClick={() => onMonthShift?.(dashboardMode === "annual" ? -12 : -1)}
+              className={`text-muted-foreground transition-all flex items-center gap-1 group ${!canShiftPrev ? "opacity-20 cursor-not-allowed" : "hover:text-white hover:scale-110"}`}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              <span className="text-[9px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase hidden md:inline">
+                {dashboardMode === "annual" ? year - 1 : MONTHS_PT[(month + 11) % 12]}
               </span>
-              <button
-                disabled={!canShiftNext}
-                onClick={() => onMonthShift?.(dashboardMode === "annual" ? 12 : 1)}
-                className={`text-muted-foreground transition-all flex items-center gap-2 group ${!canShiftNext ? "opacity-20 cursor-not-allowed" : "hover:text-white hover:scale-110"}`}
-              >
-                <span className="text-[10px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase hidden sm:inline">
-                  {dashboardMode === "annual" ? year + 1 : MONTHS_PT[(month + 1) % 12]}
-                </span>
-                <ChevronLeft className="h-4 w-4 rotate-180" />
-              </button>
-            </div>
+            </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onDashboardModeChange("monthly")}
-                className={`btn-ghost-neon rounded-lg px-4 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  dashboardMode === "monthly" ? "glow brightness-125" : "opacity-50"
-                }`}
-              >
-                Mensal
-              </button>
-              <button
-                onClick={() => onDashboardModeChange("annual")}
-                className={`btn-ghost-neon rounded-lg px-4 py-1 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  dashboardMode === "annual" ? "glow brightness-125" : "opacity-50"
-                }`}
-              >
-                Anual
-              </button>
-            </div>
+            <span className="text-base font-black tracking-widest uppercase text-white min-w-[120px] text-center leading-tight">
+              {dashboardMode === "annual" ? year : MONTHS_PT[month]}
+            </span>
+
+            <button
+              disabled={!canShiftNext}
+              onClick={() => onMonthShift?.(dashboardMode === "annual" ? 12 : 1)}
+              className={`text-muted-foreground transition-all flex items-center gap-1 group ${!canShiftNext ? "opacity-20 cursor-not-allowed" : "hover:text-white hover:scale-110"}`}
+            >
+              <span className="text-[9px] font-black tracking-widest opacity-30 group-hover:opacity-100 transition-opacity uppercase hidden md:inline">
+                {dashboardMode === "annual" ? year + 1 : MONTHS_PT[(month + 1) % 12]}
+              </span>
+              <ChevronLeft className="h-3.5 w-3.5 rotate-180" />
+            </button>
           </div>
         )}
 
-        <div className="flex items-center gap-8 pr-[60px]">
+        <div className="flex items-center gap-4 pr-[60px]">
           {effectiveViewMode === "annual" ? (
             <>
               <div className="flex flex-col items-end">
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                <span className="text-[8px] uppercase tracking-widest text-muted-foreground font-bold">
                   Balanço até {MONTHS_PT[month]}
                 </span>
                 <span
-                  className={`text-2xl font-black font-mono tracking-tighter ${currentAnnualBalance >= 0 ? "text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"}`}
+                  className={`text-lg font-black font-mono tracking-tighter ${currentAnnualBalance >= 0 ? "text-accent drop-shadow-[0_0_6px_rgba(34,211,238,0.4)]" : "text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.3)]"}`}
                 >
                   {fmtCurrency(currentAnnualBalance)}
                 </span>
               </div>
 
-              <div className="flex flex-col items-end border-l border-white/10 pl-8">
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+              <div className="flex flex-col items-end border-l border-white/10 pl-4">
+                <span className="text-[8px] uppercase tracking-widest text-muted-foreground font-bold">
                   Projeção Anual
                 </span>
                 <span
-                  className={`text-2xl font-black font-mono tracking-tighter ${annualBalance >= 0 ? "text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"}`}
+                  className={`text-lg font-black font-mono tracking-tighter ${annualBalance >= 0 ? "text-accent drop-shadow-[0_0_6px_rgba(34,211,238,0.4)]" : "text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.3)]"}`}
                 >
                   {fmtCurrency(annualBalance)}
                 </span>
@@ -405,11 +409,11 @@ export function EvolutionChart({
             <>
               {isCurrentMonth && (
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                  <span className="text-[8px] uppercase tracking-widest text-muted-foreground font-bold">
                     Saldo até {currentDay} de {MONTHS_PT[month]}
                   </span>
                   <span
-                    className={`text-2xl font-black font-mono tracking-tighter ${saldoAteHoje >= 0 ? "text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"}`}
+                    className={`text-lg font-black font-mono tracking-tighter ${saldoAteHoje >= 0 ? "text-accent drop-shadow-[0_0_6px_rgba(34,211,238,0.4)]" : "text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.3)]"}`}
                   >
                     {fmtCurrency(saldoAteHoje)}
                   </span>
@@ -417,15 +421,15 @@ export function EvolutionChart({
               )}
 
               <div
-                className={`flex flex-col items-end ${isCurrentMonth ? "border-l border-white/10 pl-8" : ""}`}
+                className={`flex flex-col items-end ${isCurrentMonth ? "border-l border-white/10 pl-4" : ""}`}
               >
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">
+                <span className="text-[8px] uppercase tracking-widest text-muted-foreground font-bold">
                   {isCurrentMonth || isFutureMonth
                     ? "Projeção Mensal"
                     : `Saldo Final ${MONTHS_PT[month]}`}
                 </span>
                 <span
-                  className={`text-2xl font-black font-mono tracking-tighter ${(isCurrentMonth || isFutureMonth ? projecaoMensal : saldoAteHoje) >= 0 ? "text-accent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" : "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"}`}
+                  className={`text-lg font-black font-mono tracking-tighter ${(isCurrentMonth || isFutureMonth ? projecaoMensal : saldoAteHoje) >= 0 ? "text-accent drop-shadow-[0_0_6px_rgba(34,211,238,0.4)]" : "text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.3)]"}`}
                 >
                   {fmtCurrency(isCurrentMonth || isFutureMonth ? projecaoMensal : saldoAteHoje)}
                 </span>
@@ -435,9 +439,9 @@ export function EvolutionChart({
         </div>
       </div>
 
-      <div className="h-[280px]">
+      <div className="h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.6} />
@@ -494,6 +498,7 @@ export function EvolutionChart({
               yAxisId="left"
               width={58}
               domain={globalDomain}
+              tickCount={8}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
               axisLine={false}
@@ -508,6 +513,7 @@ export function EvolutionChart({
               orientation="right"
               width={58}
               domain={globalDomain}
+              tickCount={8}
               stroke="oklch(0.7 0.04 235)"
               fontSize={11}
               axisLine={false}

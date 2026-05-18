@@ -35,12 +35,12 @@ const renderActiveShape = (props: any) => {
         cx={cx}
         cy={cy}
         innerRadius={innerRadius}
-        outerRadius={outerRadius + 10}
+        outerRadius={outerRadius + 8}
         startAngle={startAngle}
         endAngle={endAngle}
         fill={fill}
         className={className}
-        style={{ filter: `drop-shadow(0 0 12px ${fill}88)`, transition: "all 0.3s" }}
+        style={{ filter: `drop-shadow(0 0 10px ${fill}88)`, transition: "all 0.3s" }}
       />
     </g>
   );
@@ -123,7 +123,7 @@ export function CategoryPie({
   };
 
   return (
-    <div className="glass rounded-2xl h-full min-h-[260px] relative overflow-hidden">
+    <div className="glass rounded-2xl h-[250px] min-h-[250px] relative overflow-hidden">
       {/* Header Area - Absolute to not affect vertical centering of the Pie */}
       <div
         className={`absolute top-4 left-4 right-4 z-20 flex items-start justify-between gap-4 pointer-events-none ${alignTitle === "right" ? "flex-row-reverse" : ""}`}
@@ -132,12 +132,12 @@ export function CategoryPie({
           className={`flex flex-col flex-1 px-2 pointer-events-auto ${alignTitle === "right" ? "items-end text-right pr-6" : "items-start text-left"}`}
         >
           <h3
-            className="text-lg font-black tracking-widest uppercase text-gradient leading-tight"
+            className="text-base font-black tracking-widest uppercase text-gradient leading-tight"
             style={{ color: accent }}
           >
             {selectedCategory ? `DETALHAMENTO ${selectedCategory}` : title}
           </h3>
-          <p className="text-[10px] uppercase opacity-50 tracking-wider font-bold">
+          <p className="text-[9px] uppercase opacity-50 tracking-wider font-bold">
             {selectedCategory ? "DETALHAMENTO" : "CLIQUE NAS FATIAS PARA DETALHAR"}
           </p>
 
@@ -145,7 +145,7 @@ export function CategoryPie({
             <div className="mt-2">
               <button
                 onClick={() => setSelectedCategory(null)}
-                className="rounded-lg px-3 py-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border transition-all hover:brightness-125"
+                className="rounded-lg px-3 py-1 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest border transition-all hover:brightness-125"
                 style={{
                   color: accent,
                   borderColor: `${accent}44`,
@@ -161,7 +161,7 @@ export function CategoryPie({
         <div
           className={`flex flex-col pointer-events-auto ${alignTitle === "right" ? "items-start" : "items-end"}`}
         >
-          <div className={`group/comp flex flex-col mb-2 ${alignTitle === "right" ? "items-start" : "items-end"}`}>
+          <div className={`group/comp flex flex-col mb-1.5 ${alignTitle === "right" ? "items-start" : "items-end"}`}>
             <div
               className="text-2xl font-black font-mono tracking-tighter cursor-help"
               style={{
@@ -208,12 +208,12 @@ export function CategoryPie({
           {!selectedCategory && onAddClick && (
             <button
               onClick={onAddClick}
-              className="rounded-xl px-5 py-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] border-2 transition-all hover:brightness-125 hover:scale-105 active:scale-95"
+              className="rounded-xl px-5 py-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] border transition-all hover:brightness-125 hover:scale-105 active:scale-95"
               style={{
                 color: accent,
-                borderColor: `${accent}66`,
+                borderColor: `${accent}55`,
                 backgroundColor: `${accent}15`,
-                boxShadow: `0 0 15px ${accent}33`,
+                boxShadow: `0 0 10px ${accent}22`,
               }}
             >
               {type === "income" ? "+ NOVA RECEITA" : "+ NOVA DESPESA"}
@@ -227,10 +227,10 @@ export function CategoryPie({
           Sem dados
         </div>
       ) : (
-        <div className="h-full w-full flex items-center justify-center pt-8">
+        <div className="h-full w-full flex items-center justify-center pt-6">
           {/* Custom Legend Side (Absolute to keep Pie centered) */}
           <div
-            className={`absolute top-0 bottom-0 z-10 flex flex-col gap-3 min-w-[150px] max-w-[240px] justify-center pr-6 pl-6 pt-20 pb-10 custom-scrollbar ${
+            className={`absolute top-0 bottom-0 z-10 flex flex-col gap-1.5 min-w-[150px] max-w-[240px] justify-center pr-6 pl-6 pt-16 pb-4 custom-scrollbar ${
               alignTitle === "right"
                 ? "right-0 items-end text-right"
                 : "left-0 items-start text-left"
@@ -372,8 +372,8 @@ export function CategoryPie({
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
+                  innerRadius={50}
+                  outerRadius={82}
                   paddingAngle={2}
                   stroke="oklch(0.16 0.04 255)"
                   activeIndex={activeIndex !== null ? activeIndex : undefined}

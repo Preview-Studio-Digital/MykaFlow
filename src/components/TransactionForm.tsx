@@ -38,6 +38,11 @@ export function TransactionForm({
   const [dueDate, setDueDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  // Estado para Depreciação Frota
+  const [quantityOfCars, setQuantityOfCars] = useState("1");
+  const [carValue, setCarValue] = useState("");
+  const [depreciationTerm, setDepreciationTerm] = useState("5");
+
   const getInitialDate = (m?: number, y?: number) => {
     const now = new Date();
     const targetM = m ?? now.getMonth();
@@ -84,6 +89,14 @@ export function TransactionForm({
   }, [selectedParentId, dbCategories]);
 
   const selectedCategoryName = dbCategories.find((c) => c.id === selectedParentId)?.name.toUpperCase();
+  const selectedSubCategoryName = dbSubCategories.find((s) => s.id === selectedSubId)?.name.toUpperCase();
+  const isDepreciacaoFrota =
+    type === "expense" &&
+    selectedCategoryName === "FROTA" &&
+    (selectedSubCategoryName === "DEPRECIAÇÃO" ||
+     selectedSubCategoryName === "DEPRECIACO" ||
+     selectedSubCategoryName === "DEPRECIACAO");
+
   const isAntecipacao = type === "income" && selectedCategoryName === "ANTECIPAÇÃO DE NOTAS";
   const isPeriodic =
     (type === "income" && selectedCategoryName === "LOCAÇÃO") ||
@@ -96,6 +109,25 @@ export function TransactionForm({
       setEndDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
     }
   }, [isPeriodic, date]);
+
+  // Efeito para cálculo automático da Depreciação Frota
+  useEffect(() => {
+    if (!isDepreciacaoFrota) return;
+    const qty = parseInt(quantityOfCars) || 0;
+    const val = parseFloat(carValue.replace(/\./g, "").replace(",", ".")) || 0;
+    const term = parseFloat(depreciationTerm) || 5;
+
+    if (qty > 0 && val > 0 && term > 0) {
+      const calculated = (qty * val) / (term * 12);
+      const formatted = calculated.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      setAmount(formatted);
+    } else {
+      setAmount("");
+    }
+  }, [isDepreciacaoFrota, quantityOfCars, carValue, depreciationTerm]);
 
   // Variáveis para layout
   const inputHeight = "h-11";
@@ -150,7 +182,7 @@ export function TransactionForm({
           {isOpen && !disabled && (
             <>
               <div className="fixed inset-0 z-[100]" onClick={() => setIsOpen(false)} />
-              <ul className="absolute top-full left-0 right-0 mt-1 z-[101] bg-[#0d1117] border-2 border-white/10 rounded-xl overflow-hidden max-h-48 overflow-y-auto shadow-[0_10px_50px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200">
+              <ul className="absolute top-full left-0 right-0 mt-1 z-[101] bg-[#0d1117] border-2 border-white/10 rounded-xl overflow-hidden max-h-[500px] overflow-y-auto shadow-[0_10px_50px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200">
                 <li
                   onClick={() => {
                     onChange("");
@@ -465,6 +497,9 @@ export function TransactionForm({
     setSelectedSubId("");
     setDescription("");
     setSelectedParentId("");
+    setQuantityOfCars("1");
+    setCarValue("");
+    setDepreciationTerm("5");
     onCreated();
   }
 
@@ -576,6 +611,64 @@ export function TransactionForm({
         </div>
       </div>
 
+      {isDepreciacaoFrota && (
+        <div className={`grid grid-cols-1 sm:grid-cols-3 ${gridGap} animate-in slide-in-from-top-4 duration-500 bg-white/[0.02] border border-white/5 p-4 rounded-2xl shadow-[inset_0_0_20px_rgba(255,255,255,0.01)]`}>
+          <div className={spaceY}>
+            <span className="block text-[11px] uppercase tracking-[0.2em] text-red-400 font-black ml-2">
+              Quantidade de Carros
+            </span>
+            <input
+              required
+              type="number"
+              min="1"
+              value={quantityOfCars}
+              onChange={(e) => setQuantityOfCars(e.target.value)}
+              placeholder="1"
+              className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none font-bold border-2 border-red-500/20`}
+            />
+          </div>
+          <div className={spaceY}>
+            <span className="block text-[11px] uppercase tracking-[0.2em] text-red-400 font-black ml-2">
+              Valor do Carro Novo
+            </span>
+            <div className="relative">
+              <span className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">
+                R$
+              </span>
+              <input
+                required
+                inputMode="numeric"
+                value={carValue}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  const formatted = (Number(val) / 100).toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  });
+                  setCarValue(formatted);
+                }}
+                placeholder="0,00"
+                className={`input-futuristic w-full ${inputHeight} rounded-2xl pl-12 pr-5 text-sm outline-none font-bold border-2 border-red-500/20`}
+              />
+            </div>
+          </div>
+          <div className={spaceY}>
+            <span className="block text-[11px] uppercase tracking-[0.2em] text-red-400 font-black ml-2">
+              Prazo (Anos)
+            </span>
+            <input
+              required
+              type="number"
+              min="1"
+              value={depreciationTerm}
+              onChange={(e) => setDepreciationTerm(e.target.value)}
+              placeholder="5"
+              className={`input-futuristic w-full ${inputHeight} rounded-2xl px-5 text-sm outline-none font-bold border-2 border-red-500/20`}
+            />
+          </div>
+        </div>
+      )}
+
       <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridGap}`}>
         <CustomSelect
           label="Fluxo de Caixa"
@@ -633,6 +726,7 @@ export function TransactionForm({
                 inputMode="numeric"
                 value={amount}
                 onChange={(e) => {
+                  if (isDepreciacaoFrota) return;
                   const val = e.target.value.replace(/\D/g, "");
                   const centered = (Number(val) / 100).toLocaleString("pt-BR", {
                     minimumFractionDigits: 2,
@@ -641,7 +735,12 @@ export function TransactionForm({
                   setAmount(centered);
                 }}
                 placeholder="0,00"
-                className={`input-futuristic w-full ${inputHeight} rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2`}
+                readOnly={isDepreciacaoFrota}
+                className={`input-futuristic w-full ${inputHeight} rounded-2xl pl-12 pr-5 text-2xl outline-none font-black tracking-tighter border-2 transition-all ${
+                  isDepreciacaoFrota
+                    ? "border-red-500/50 bg-red-500/5 cursor-not-allowed shadow-[0_0_15px_rgba(239,68,68,0.1)]"
+                    : ""
+                }`}
                 style={{ color: type === "expense" ? "oklch(0.7 0.2 30)" : "oklch(0.78 0.16 150)" }}
               />
             </div>

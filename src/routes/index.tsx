@@ -10,6 +10,7 @@ import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { TransactionCreateDialog } from "@/components/TransactionCreateDialog";
 import { LogOut, Zap, ChevronLeft, ShieldCheck, User as UserIcon, Lock } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -27,6 +28,39 @@ function Dashboard() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dashboardMode, setDashboardMode] = useState<"monthly" | "annual">("monthly");
+  const [explanationModal, setExplanationModal] = useState<"diaria" | "hora" | null>(null);
+
+  const averageMonthlyExpense = useMemo(() => {
+    if (rows.length === 0) return 0;
+    const expenseRows = rows.filter(
+      (r) => r.type === "expense" && r.category !== "VENCIMENTO ANTECIPAÇÃO"
+    );
+    if (expenseRows.length === 0) return 0;
+
+    const monthSums = new Map<string, number>();
+    expenseRows.forEach((r) => {
+      if (!r.occurred_on) return;
+      const yyyyMm = r.occurred_on.substring(0, 7); // "YYYY-MM"
+      monthSums.set(yyyyMm, (monthSums.get(yyyyMm) ?? 0) + Number(r.amount));
+    });
+
+    const totalExpenses = Array.from(monthSums.values()).reduce((sum, val) => sum + val, 0);
+    const numMonths = monthSums.size;
+
+    return numMonths > 0 ? totalExpenses / numMonths : 0;
+  }, [rows]);
+
+  const businessDays = useMemo(() => {
+    return getBusinessDaysInMonth(year, month);
+  }, [year, month]);
+
+  const diariaEmpresarial = useMemo(() => {
+    return businessDays > 0 ? averageMonthlyExpense / businessDays : 0;
+  }, [averageMonthlyExpense, businessDays]);
+
+  const horaOperacional = useMemo(() => {
+    return averageMonthlyExpense / 560; // 5 * 160 * 0.70 (30% efficiency reduction)
+  }, [averageMonthlyExpense]);
 
   const dismissAlert = (alertId: string) => {
     const dismissed = JSON.parse(localStorage.getItem("mykaflow_dismissed_alerts") || "[]");
@@ -373,9 +407,9 @@ function Dashboard() {
   }
 
   return (
-    <div className="relative z-10 min-h-screen px-4 py-3 md:px-8">
-      <header className="mb-6 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
+    <div className="relative z-10 min-h-screen px-4 pt-4 pb-2 md:px-8">
+      <header className="mb-2 flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between border-b border-white/5 pb-2">
+        <div className="flex items-center gap-3 lg:w-1/3 lg:justify-start">
           <div className="rounded-lg bg-primary/20 p-2 glow">
             <Zap className="h-6 w-6 text-accent" />
           </div>
@@ -388,7 +422,45 @@ function Dashboard() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+
+        {/* Diária Empresarial & Hora Operacional Glow Buttons */}
+        <div className="flex flex-wrap items-center gap-3 lg:w-1/3 lg:justify-center lg:flex-nowrap">
+          <button
+            onClick={() => setExplanationModal("diaria")}
+            className="glass group relative overflow-hidden rounded-xl border border-white/10 px-4 py-2 hover:border-cyan-400/40 hover:scale-105 active:scale-95 transition-all text-right flex items-center gap-3"
+            title="Clique para ver o detalhamento do cálculo"
+          >
+            <div className="absolute inset-0 bg-gradient-to-l from-cyan-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <div className="text-right">
+              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-cyan-400 transition-colors">
+                Diária Empresarial
+              </p>
+              <p className="text-sm font-black font-mono text-white mt-0.5">
+                {fmtCurrency(diariaEmpresarial)}
+              </p>
+            </div>
+            <div className="w-1.5 h-8 rounded-full bg-cyan-400 group-hover:scale-y-110 transition-transform" />
+          </button>
+
+          <button
+            onClick={() => setExplanationModal("hora")}
+            className="glass group relative overflow-hidden rounded-xl border border-white/10 px-4 py-2 hover:border-sky-400/40 hover:scale-105 active:scale-95 transition-all text-left flex items-center gap-3"
+            title="Clique para ver o detalhamento do cálculo"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-sky-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <div className="w-1.5 h-8 rounded-full bg-sky-400 group-hover:scale-y-110 transition-transform" />
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-sky-400 transition-colors">
+                Hora Operacional
+              </p>
+              <p className="text-sm font-black font-mono text-white mt-0.5">
+                {fmtCurrency(horaOperacional)}
+              </p>
+            </div>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4 justify-between lg:w-1/3 lg:justify-end shrink-0">
           <div className="flex flex-col items-end">
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
               {role === "admin" ? "Administrador" : "Funcionário"}
@@ -444,7 +516,158 @@ function Dashboard() {
         }}
       />
 
-      <section className="mb-3 grid grid-cols-2 gap-3">
+      {explanationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md bg-black/60 animate-in fade-in duration-200">
+          <div className="glass max-w-lg w-full rounded-2xl border border-white/10 p-6 md:p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden animate-in zoom-in-95 duration-200 space-y-6">
+            {/* Ambient glows inside modal */}
+            <div className="absolute -top-24 -left-24 w-48 h-48 rounded-full bg-cyan-500/10 blur-[60px] pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-48 h-48 rounded-full bg-sky-500/10 blur-[60px] pointer-events-none" />
+
+            {explanationModal === "diaria" ? (
+              <>
+                <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                    <h2 className="text-xl font-black uppercase tracking-wider text-cyan-400">
+                      Diária Empresarial
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setExplanationModal(null)}
+                    className="text-muted-foreground hover:text-white transition-colors text-xs font-black uppercase tracking-widest bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10"
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-muted-foreground text-sm leading-relaxed">
+                    A <strong className="text-white">Diária Empresarial</strong> representa o custo operacional diário (baseado exclusivamente em <strong className="text-white">dias úteis</strong>) que a empresa precisa faturar para cobrir suas despesas correntes médias.
+                  </p>
+
+                  <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Fórmula Aplicada</p>
+                    <p className="text-lg font-bold text-cyan-400">
+                      Diária = Despesa Média / Dias Úteis
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-white">Detalhamento dos Valores:</h3>
+                    
+                    <div className="space-y-2.5">
+                      <div className="flex items-start justify-between text-sm py-1.5 border-b border-white/[0.03]">
+                        <span className="text-muted-foreground">1. Despesa Média Mensal:</span>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-white">{fmtCurrency(averageMonthlyExpense)}</span>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Soma despesas reais / meses ativos</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between text-sm py-1.5 border-b border-white/[0.03]">
+                        <span className="text-muted-foreground">2. Dias Úteis (Segunda a Sexta):</span>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-white">{businessDays} dias</span>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Em {MONTHS_PT[month]} de {year}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between text-sm pt-2">
+                        <span className="text-cyan-400 font-bold">➔ Diária Útil Calculada:</span>
+                        <div className="text-right">
+                          <span className="font-mono font-black text-cyan-400 text-lg">{fmtCurrency(diariaEmpresarial)}</span>
+                          <p className="text-[9px] text-cyan-400/80 uppercase mt-0.5">Custo por dia útil trabalhado</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4 text-xs text-muted-foreground leading-relaxed">
+                    <strong className="text-cyan-400 block mb-1">💡 Nota de Gestão:</strong>
+                    Qualquer dia útil em que a empresa não faturar pelo menos este valor representa um déficit operacional acumulado que precisará ser compensado em outros dias.
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="h-2 w-2 rounded-full bg-sky-400 animate-ping" />
+                    <h2 className="text-xl font-black uppercase tracking-wider text-sky-400">
+                      Hora Operacional
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setExplanationModal(null)}
+                    className="text-muted-foreground hover:text-white transition-colors text-xs font-black uppercase tracking-widest bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10"
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-muted-foreground text-sm leading-relaxed">
+                    A <strong className="text-white">Hora Operacional</strong> define o custo hora-homem real para manter a empresa funcionando. Ela assume <strong className="text-white">5 funcionários</strong> trabalhando <strong className="text-white">160 horas por mês cada</strong>, com uma <strong className="text-white">redução de 30% na eficiência operacional</strong>.
+                  </p>
+
+                  <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Fórmula Aplicada</p>
+                    <p className="text-lg font-bold text-sky-400">
+                      Hora = Despesa Média / 560h Operacionais
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-white">Detalhamento dos Valores:</h3>
+                    
+                    <div className="space-y-2.5">
+                      <div className="flex items-start justify-between text-sm py-1.5 border-b border-white/[0.03]">
+                        <span className="text-muted-foreground">1. Despesa Média Mensal:</span>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-white">{fmtCurrency(averageMonthlyExpense)}</span>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Soma despesas reais / meses ativos</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between text-sm py-1.5 border-b border-white/[0.03]">
+                        <span className="text-muted-foreground">2. Capacidade Operativa Nominal:</span>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-white">800 Horas / mês</span>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">5 funcionários x 160h</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between text-sm py-1.5 border-b border-white/[0.03]">
+                        <span className="text-muted-foreground">3. Margem de Eficiência:</span>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-rose-400">70% (-30% ineficiência)</span>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Capacidade líquida real: 560h</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between text-sm pt-2">
+                        <span className="text-sky-400 font-bold">➔ Custo Hora-Homem:</span>
+                        <div className="text-right">
+                          <span className="font-mono font-black text-sky-400 text-lg">{fmtCurrency(horaOperacional)}</span>
+                          <p className="text-[9px] text-sky-400/80 uppercase mt-0.5">Valor mínimo de venda por hora/homem</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-sky-500/5 border border-sky-500/20 rounded-xl p-4 text-xs text-muted-foreground leading-relaxed">
+                    <strong className="text-sky-400 block mb-1">💡 Nota de Precificação:</strong>
+                    Ao vender serviços, o valor cobrado por hora por colaborador deve ser superior a este custo de <strong className="text-white">{fmtCurrency(horaOperacional)}</strong> para gerar lucro real para a empresa.
+                  </div>
+                </div>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      <section className="mb-2 grid grid-cols-2 gap-2">
         <CategoryPie
           key={`income-${refreshKey}-${year}-${month}-${dashboardMode}`}
           title={dashboardMode === "annual" ? "Receitas Anuais" : `Receitas ${MONTHS_PT[month]}`}
@@ -481,7 +704,7 @@ function Dashboard() {
         />
       </section>
 
-      <section className="mb-3">
+      <section className="mb-2">
         <EvolutionChart
           key={`evolution-${refreshKey}-${year}-${month}-${dashboardMode}`}
           data={rows}
@@ -494,10 +717,9 @@ function Dashboard() {
           onDashboardModeChange={setDashboardMode}
           canShiftPrev={canShiftPrev}
           canShiftNext={canShiftNext}
+          averageMonthlyExpense={averageMonthlyExpense}
         />
       </section>
-
-
 
       {monthAlerts.length > 0 && (
         <section className="mb-3 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -598,4 +820,17 @@ function agg(list: TxRow[]) {
     map.set(catName, (map.get(catName) ?? 0) + Number(r.amount));
   }
   return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+}
+
+function getBusinessDaysInMonth(year: number, month: number): number {
+  let count = 0;
+  const date = new Date(year, month, 1);
+  while (date.getMonth() === month) {
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) { // 0 = Sunday, 6 = Saturday
+      count++;
+    }
+    date.setDate(date.getDate() + 1);
+  }
+  return count;
 }

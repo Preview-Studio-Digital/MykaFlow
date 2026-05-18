@@ -1,42 +1,32 @@
-## Diagnóstico
+## Problema
 
-As tabelas necessárias já existem no banco (`profiles`, `user_roles`, `financial_categories`, `financial_subcategories`, `transactions`). O formulário falha por **dois motivos reais**, não por falta de banco:
+Em `src/routes/index.tsx`, a coloração (verde/vermelho) dos botões/cards do cabeçalho usa:
 
-1. **Bug de runtime no `TransactionForm.tsx`** (linha 329): chama `setSubCategory("")`, função que não existe. Quando você seleciona uma categoria, o JavaScript quebra silenciosamente e impede o salvamento.
-2. **Esquema com pontas soltas** que atrapalham os gráficos:
-   - `financial_subcategories.category_id` é nullable (subcategoria pode ficar órfã).
-   - Não há `FOREIGN KEY` real entre subcategoria → categoria, nem entre `transactions.category_id_v2` → `financial_categories`.
-   - RLS de categorias está como "Acesso Livre" / "Permitir Tudo" — qualquer usuário vê e edita categorias dos outros.
-   - Existem colunas legadas duplicadas em `transactions` (`category_id`, `subcategory_id`, `category_id_v2`, `subcategory_id_v2`) que confundem o gráfico de pizza.
+```ts
+const faturamentoBateuCusto = currentMonthFaturamento >= averageMonthlyExpense;
+```
 
-## O que vou fazer
+Ou seja, compara a receita acumulada do mês corrente com a despesa média mensal inteira. No início do mês a receita acumulada é naturalmente baixa, então sempre fica vermelho até quase o fim do mês — mesmo quando o ritmo diário de faturamento está acima do necessário.
 
-### 1. Corrigir o bug do formulário
-- Trocar `setSubCategory("")` por `setSelectedSubId("")` em `src/components/TransactionForm.tsx`.
+## Solução
 
-### 2. Migração de banco para consolidar o esquema
-- Tornar `financial_subcategories.category_id` **NOT NULL** + adicionar `FOREIGN KEY` para `financial_categories(id) ON DELETE CASCADE`.
-- Adicionar `FOREIGN KEY` em `transactions.category_id_v2` → `financial_categories(id)` e `transactions.subcategory_id_v2` → `financial_subcategories(id)`.
-- Renomear `category_id_v2` → `category_id` e `subcategory_id_v2` → `subcategory_id` (depois de migrar dados das colunas antigas, se houver).
-- Remover colunas legadas `category_id`/`subcategory_id` antigas vazias e a coluna texto `category` (ou mantê-la apenas como cache, a confirmar — ver pergunta abaixo).
-- Substituir as policies "Acesso Livre"/"Permitir Tudo" das categorias por:
-  - SELECT: qualquer usuário autenticado (categorias são compartilhadas) **ou** apenas o dono — depende da resposta abaixo.
-  - INSERT/UPDATE/DELETE: apenas o dono (`auth.uid() = user_id`) ou admin (`has_role(...)`).
-- Criar índices em `transactions(user_id, occurred_on)`, `transactions(category_id)`, `financial_subcategories(category_id)` para acelerar os gráficos.
+Comparar a receita acumulada com a **meta prorratada por dias úteis já decorridos** no mês:
 
-### 3. Ajustar componentes que leem o esquema
-- Atualizar `TransactionForm.tsx`, `CategoryPie.tsx`, `EvolutionChart.tsx`, `TransactionList.tsx`, `TransactionEditDialog.tsx` para usarem os nomes finais de coluna (`category_id` / `subcategory_id`).
-- Regenerar `src/integrations/supabase/types.ts` (automático após a migração).
+```
+metaProrratada = diariaEmpresarial * diasÚteisDecorridos
+              = (averageMonthlyExpense / businessDays) * diasÚteisDecorridos
+```
 
-### 4. Validação
-- Testar fluxo: criar categoria → criar subcategoria → registrar despesa → ver no gráfico de pizza e na lista.
+Assim, no dia 1 a meta é ~1 diária; no fim do mês a meta converge para `averageMonthlyExpense` (comportamento atual preservado para meses fechados). Se o mês visualizado não for o mês corrente (navegação para meses passados/futuros), usar a meta cheia para não distorcer.
 
-## Perguntas antes de eu escrever a migração
+## Mudanças
 
-Preciso de duas decisões suas para fechar o esquema:
+Arquivo único: `src/routes/index.tsx`
 
-1. **Categorias são compartilhadas entre todos os usuários do sistema, ou cada usuário tem as suas?**
-   (Hoje cada categoria tem `user_id`, mas a RLS deixa todos verem tudo — preciso saber qual é o comportamento desejado.)
+1. Adicionar `businessDaysElapsed` via `useMemo`: conta dias úteis (seg–sex) entre o dia 1 e `min(hoje, último dia do mês visualizado)`. Reutilizar a mesma lógica/helper já usado em `getBusinessDaysInMonth`.
+2. Calcular `proratedExpenseTarget`:
+   - Se `year`/`month` = mês/ano atuais → `diariaEmpresarial * businessDaysElapsed` (com mínimo de 1 dia útil para evitar zero no dia 1).
+   - Caso contrário → `averageMonthlyExpense` (comportamento atual).
+3. Trocar `faturamentoBateuCusto` para `currentMonthFaturamento >= proratedExpenseTarget`.
 
-2. **Posso remover as colunas legadas `category` (texto), `category_id` e `subcategory_id` antigas de `transactions`?**
-   Se houver lançamentos antigos usando só o texto `category`, eu migro esses dados para as novas FKs antes de remover.
+Nada de lógica de negócio, schema ou outros componentes muda. Tooltips informativos (Diária Empresarial etc.) permanecem iguais — eles já explicam a fórmula correta.

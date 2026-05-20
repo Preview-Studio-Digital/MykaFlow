@@ -168,10 +168,12 @@ export function IntegrationManager() {
       .single();
 
     // Buscar subs atuais da categoria Receita
-    const { data: currentSubs } = await localSupabase
-      .from("financial_subcategories")
-      .select("id, name")
-      .eq("category_id", catDataInc?.id);
+    const { data: currentSubs } = catDataInc?.id
+      ? await localSupabase
+          .from("financial_subcategories")
+          .select("id, name")
+          .eq("category_id", catDataInc.id)
+      : { data: null };
 
     const subsMap = new Map(currentSubs?.map(s => [s.name.toUpperCase(), s.id]) || []);
 

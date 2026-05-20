@@ -248,7 +248,7 @@ export function IntegrationManager() {
 
       if (err2) {
         console.error("Erro ao inserir despesa:", err2);
-        toast.error(`Erro na despesa NF ${invoiceNum}: ${err2.message}`);
+        toast.error(`Erro na despesa ${item.invoice_number || "S/N"}: ${err2.message}`);
         // Even if expense fails, we already inserted income. 
       }
 

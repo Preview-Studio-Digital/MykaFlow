@@ -22,6 +22,8 @@ function Dashboard() {
   const [rows, setRows] = useState<TxRow[]>([]);
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
+  const [aiAnalyses, setAiAnalyses] = useState<Record<string, { text: string; hash: string }>>({});
+  const [isGeneratingAi, setIsGeneratingAi] = useState<Record<string, boolean>>({});
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addType, setAddType] = useState<"income" | "expense">("expense");
@@ -206,13 +208,15 @@ function Dashboard() {
       const d = new Date(r.occurred_on + "T00:00:00");
       if (d.getFullYear() === year && d.getMonth() === month) {
         const key = `${r.type}-${r.category.toUpperCase()}`;
+        const isAntecipacao = r.category.toUpperCase() === "ANTECIPAÇÃO DE NOTAS" || r.category.toUpperCase() === "CUSTO ANTECIPAÇÃO";
+        
         if (!currentGroups[key]) {
           currentGroups[key] = {
             category: r.category,
             type: r.type,
             amount: 0,
             date: r.occurred_on,
-            description: r.description || undefined
+            description: isAntecipacao ? undefined : (r.description || undefined)
           };
         }
         currentGroups[key].amount += Number(r.amount);
@@ -263,23 +267,37 @@ function Dashboard() {
 
           const isExpense = current.type === "expense";
           const isIncrease = percentDiff > 0;
-          // Classificação base: receita↑ ou despesa↓ = positivo; o oposto = negativo
           let isPositive = isExpense ? !isIncrease : isIncrease;
           let analysis = "";
-          if (isExpense && isIncrease) {
-            // Despesa subiu — pode ser bom se o lucro líquido melhorou
-            if (netImproved && netCurr > 0) {
-              isPositive = true;
-              analysis = "Despesa subiu, mas o lucro líquido melhorou — investimento vantajoso.";
-            } else {
-              analysis = "Revise fornecedores e contratos desta categoria para reduzir custo.";
-            }
-          } else if (isExpense && !isIncrease) {
-            analysis = "Boa contenção de custo. Mantenha o controle e replique a prática.";
-          } else if (!isExpense && isIncrease) {
-            analysis = "Receita em alta. Reforce os canais que geraram esse crescimento.";
+
+          const isAntecipacaoIncome = !isExpense && current.category.toUpperCase() === "ANTECIPAÇÃO DE NOTAS";
+          const isAntecipacaoExpense = isExpense && current.category.toUpperCase() === "CUSTO ANTECIPAÇÃO";
+
+          if (isAntecipacaoIncome) {
+             isPositive = !isIncrease;
+             analysis = isIncrease 
+                ? "Aumento de antecipações indica fluxo de caixa prejudicado para arcar com despesas imediatas."
+                : "Redução nas antecipações aponta para um fluxo de caixa mais saudável e sustentável.";
+          } else if (isAntecipacaoExpense) {
+             isPositive = !isIncrease;
+             analysis = isIncrease
+                ? "Custo com antecipações aumentou, sinalizando um péssimo sinal financeiro."
+                : "Menor custo com antecipações é um excelente sinal, indicando menos dependência.";
           } else {
-            analysis = "Queda de receita. Investigue causas e reative ações comerciais.";
+            if (isExpense && isIncrease) {
+              if (netImproved && netCurr > 0) {
+                isPositive = true;
+                analysis = "Despesa subiu, mas o lucro líquido melhorou — investimento vantajoso.";
+              } else {
+                analysis = "Revise fornecedores e contratos desta categoria para reduzir custo.";
+              }
+            } else if (isExpense && !isIncrease) {
+              analysis = "Boa contenção de custo. Mantenha o controle e replique a prática.";
+            } else if (!isExpense && isIncrease) {
+              analysis = "Receita em alta. Reforce os canais que geraram esse crescimento.";
+            } else {
+              analysis = "Queda de receita. Investigue causas e reative ações comerciais.";
+            }
           }
 
           generated.push({
@@ -290,7 +308,7 @@ function Dashboard() {
             oldAmount: prevVal,
             newAmount: current.amount,
             percentChange: percentDiff,
-            description: current.description,
+            description: isAntecipacaoIncome || isAntecipacaoExpense ? undefined : (current.description || undefined),
             isPositive,
             analysis,
           });
@@ -299,8 +317,49 @@ function Dashboard() {
     });
 
     return generated;
-  }, [rows, year, month, refreshKey]);
+  }, [rows, month, year]);
 
+  useEffect(() => {
+    async function processAiAlerts() {
+      if (!import.meta.env.VITE_GEMINI_API_KEY) return;
+      
+      const { generateAlertAnalysis } = await import("@/lib/ai-analysis");
+      
+      for (const alert of monthAlerts) {
+        const hash = `ai-v2-${alert.category}-${alert.type}-${alert.newAmount}-${alert.oldAmount}`;
+        
+        if (aiAnalyses[alert.id] && aiAnalyses[alert.id].hash === hash) continue;
+
+        const cached = localStorage.getItem(hash);
+        if (cached) {
+          setAiAnalyses(prev => ({ ...prev, [alert.id]: { text: cached, hash } }));
+          continue;
+        }
+
+        setIsGeneratingAi(prev => ({ ...prev, [alert.id]: true }));
+        try {
+          const text = await generateAlertAnalysis(
+            alert.category,
+            alert.type,
+            alert.newAmount,
+            alert.oldAmount,
+            alert.percentChange
+          );
+          
+          if (!text.includes("Não foi possível")) {
+            localStorage.setItem(hash, text);
+          }
+          setAiAnalyses(prev => ({ ...prev, [alert.id]: { text, hash } }));
+        } finally {
+          setIsGeneratingAi(prev => ({ ...prev, [alert.id]: false }));
+        }
+      }
+    }
+    
+    processAiAlerts();
+  }, [monthAlerts, aiAnalyses]);
+
+  const [activeTab, setActiveTab] = useState<"dashboard" | "transactions">("dashboard");
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
@@ -971,9 +1030,25 @@ function Dashboard() {
                   )}
                 </div>
               </div>
-              <p className="text-[11px] font-normal text-muted-foreground/80 leading-snug pl-1">
-                {al.analysis}
-              </p>
+              <div className="text-[11px] font-normal text-muted-foreground/80 leading-snug pl-1">
+                {isGeneratingAi[al.id] ? (
+                  <span className="flex items-center gap-2 animate-pulse text-accent">
+                    <span className="h-1.5 w-1.5 bg-accent rounded-full animate-bounce" />
+                    <span className="h-1.5 w-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                    <span className="h-1.5 w-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    Analisando cenário com IA...
+                  </span>
+                ) : (
+                  <span className="relative z-10 flex items-start gap-1.5">
+                    {aiAnalyses[al.id]?.text || al.analysis}
+                    {aiAnalyses[al.id] && (
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[8px] bg-accent/20 text-accent font-black uppercase tracking-widest border border-accent/30 flex-shrink-0 mt-0.5">
+                        IA
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
             </div>
           );
         };

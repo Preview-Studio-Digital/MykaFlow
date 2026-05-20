@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   ArrowRightLeft,
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  Trash2
 } from "lucide-react";
 
 const FACTORING_CONFIG = {
@@ -24,6 +25,48 @@ export function IntegrationManager() {
   const [status, setStatus] = useState<"idle" | "loading" | "connected" | "error">("idle");
   const [externalData, setExternalData] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDeleteImported() {
+    if (!confirm("Tem certeza que deseja apagar TODAS as operações importadas? Isso não pode ser desfeito.")) return;
+    
+    setDeleting(true);
+    try {
+      const { data: auth } = await localSupabase.auth.getUser();
+      const uid = auth.user?.id;
+      
+      if (!uid) {
+        toast.error("Faça login para realizar esta ação");
+        return;
+      }
+      
+      // Apaga em múltiplas chamadas para evitar problemas com caracteres especiais no filtro OR
+      const filters = [
+        "%SYNC NF%",   // formato atual: CLIENTE - SYNC NF: 123
+        "SYNC%",       // formato legado
+        "LIQUIDO%",    // formato legado
+        "JUROS%",      // formato legado
+      ];
+
+      let totalDeleted = 0;
+      for (const pattern of filters) {
+        const { count: deleted, error } = await localSupabase
+          .from("transactions")
+          .delete({ count: 'exact' })
+          .eq("user_id", uid)
+          .ilike("description", pattern);
+        if (error) throw error;
+        totalDeleted += deleted || 0;
+      }
+        
+      toast.success(`${totalDeleted} operações importadas foram apagadas com sucesso!`);
+    } catch (err: any) {
+      console.error("Erro ao apagar:", err);
+      toast.error(`Falha ao apagar: ${err.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function checkConnection() {
     setStatus("loading");
@@ -99,47 +142,51 @@ export function IntegrationManager() {
   async function handleSync() {
     if (externalData.length === 0) return;
     
+    setSyncing(true);
+    let successCount = 0;
+    let skippedCount = 0;
     const { data: { user } } = await localSupabase.auth.getUser();
     if (!user) {
       toast.error("Usuário não autenticado.");
       return;
     }
 
-    setSyncing(true);
-    let successCount = 0;
 
-    const { data: catData } = await localSupabase
+
+    const { data: catDataInc } = await localSupabase
       .from("financial_categories")
       .select("id")
       .eq("name", "ANTECIPAÇÃO DE NOTAS")
       .limit(1)
       .single();
 
-    if (!catData) {
-      toast.error("Categoria não encontrada.");
-      setSyncing(false);
-      return;
-    }
+    const { data: catDataExp } = await localSupabase
+      .from("financial_categories")
+      .select("id")
+      .eq("name", "CUSTO ANTECIPAÇÃO")
+      .limit(1)
+      .single();
 
-    // Buscar subs atuais
+    // Buscar subs atuais da categoria Receita
     const { data: currentSubs } = await localSupabase
       .from("financial_subcategories")
       .select("id, name")
-      .eq("category_id", catData.id);
+      .eq("category_id", catDataInc?.id);
 
     const subsMap = new Map(currentSubs?.map(s => [s.name.toUpperCase(), s.id]) || []);
-    
+
     for (const item of externalData) {
       const clientName = (item.client_name || "CLIENTE DESCONHECIDO").toUpperCase();
-      const incomeDesc = `LIQUIDO NF ${item.invoice_number}`.toUpperCase();
-      const expenseDesc = `JUROS NF ${item.invoice_number}`.toUpperCase();
+      const invoiceNum = item.invoice_number || "S/N";
+      const invoiceId = item.id || invoiceNum; // Usa o ID único para evitar conflito entre notas com mesmo número
+      const baseDesc = `${clientName} - SYNC NF: ${invoiceNum} [${invoiceId}]`.toUpperCase();
 
       // 1. Garantir Subcategoria (CLIENTE)
       let subId = subsMap.get(clientName);
-      if (!subId) {
+      if (!subId && catDataInc) {
         const { data: newSub, error: subErr } = await localSupabase
           .from("financial_subcategories")
-          .insert({ name: clientName, category_id: catData.id, user_id: user.id })
+          .insert({ name: clientName, category_id: catDataInc.id, user_id: user.id })
           .select().single();
         if (newSub) {
           subId = newSub.id;
@@ -147,49 +194,75 @@ export function IntegrationManager() {
         }
       }
 
-      // 2. Verificar se já existe (Proteção)
-      const { data: existing } = await localSupabase
+      // 2. Verificar se já existe (Proteção contra duplicidade)
+      const { data: existing, error: existErr } = await localSupabase
         .from("transactions")
         .select("id")
-        .eq("description", incomeDesc)
-        .eq("category_id_v2", catData.id)
+        .eq("user_id", user.id)
+        .eq("description", baseDesc)
         .limit(1);
 
-      if (existing && existing.length > 0) continue;
+      if (existErr) {
+        console.error("Erro ao checar duplicidade:", existErr);
+        continue;
+      }
+
+      if (existing && existing.length > 0) {
+        skippedCount++;
+        continue;
+      }
 
       const discount = item.gross_value - item.net_value;
 
       // 3. Inserir Receita
-      await localSupabase.from("transactions").insert({
+      const { error: err1 } = await localSupabase.from("transactions").insert({
         user_id: user.id,
         type: "income",
         nature: "variable",
         category: "ANTECIPAÇÃO DE NOTAS",
-        category_id_v2: catData.id,
-        subcategory_id_v2: subId,
-        description: incomeDesc,
-        amount: item.net_value,
-        occurred_on: item.operation_date,
+        category_id_v2: catDataInc?.id || null,
+        subcategory_id_v2: subId || null,
+        description: baseDesc,
+        amount: item.gross_value || 0,
+        occurred_on: item.operation_date || new Date().toISOString().split('T')[0],
       });
 
+      if (err1) {
+        console.error("Erro ao inserir receita:", err1);
+        toast.error(`Erro na receita NF ${invoiceNum}: ${err1.message}`);
+        continue;
+      }
+
       // 4. Inserir Despesa
-      await localSupabase.from("transactions").insert({
+      const { error: err2 } = await localSupabase.from("transactions").insert({
         user_id: user.id,
         type: "expense",
         nature: "variable",
-        category: "ANTECIPAÇÃO DE NOTAS",
-        category_id_v2: catData.id,
-        subcategory_id_v2: subId,
-        description: expenseDesc,
-        amount: discount,
-        occurred_on: item.operation_date,
+        category: "CUSTO ANTECIPAÇÃO",
+        category_id_v2: catDataExp?.id || null,
+        subcategory_id_v2: subId || null,
+        description: baseDesc,
+        amount: discount || 0,
+        occurred_on: item.operation_date || new Date().toISOString().split('T')[0],
       });
+
+      if (err2) {
+        console.error("Erro ao inserir despesa:", err2);
+        toast.error(`Erro na despesa NF ${invoiceNum}: ${err2.message}`);
+        // Even if expense fails, we already inserted income. 
+      }
 
       successCount++;
     }
 
     setSyncing(false);
-    toast.success(`${successCount} operações sincronizadas com sucesso!`);
+    if (successCount > 0) {
+      toast.success(`${successCount} operações novas sincronizadas! ${skippedCount > 0 ? `(${skippedCount} já existiam e foram ignoradas)` : ''}`);
+    } else if (skippedCount > 0) {
+      toast.info(`Nenhuma operação nova. ${skippedCount} operações já haviam sido importadas.`);
+    } else {
+      toast.info("Nenhuma operação encontrada para importar.");
+    }
     setExternalData([]);
   }
 
@@ -254,6 +327,22 @@ export function IntegrationManager() {
             className="w-full py-6 rounded-2xl bg-white/5 border-2 border-white/10 hover:border-accent/40 hover:bg-accent/5 transition-all text-sm font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 disabled:opacity-30"
           >
             BUSCAR OPERAÇÕES <ChevronRight className="h-5 w-5" />
+          </button>
+
+          <button
+            disabled={deleting}
+            onClick={handleDeleteImported}
+            className="w-full py-4 mt-4 rounded-2xl bg-red-500/10 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/20 transition-all text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 text-red-500 disabled:opacity-30"
+          >
+            {deleting ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" /> APAGANDO...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4" /> APAGAR IMPORTADOS
+              </>
+            )}
           </button>
         </div>
 

@@ -195,12 +195,18 @@ export function IntegrationManager() {
         }
       }
 
-      // 2. Verificar se já existe (Proteção contra duplicidade)
+      // 2. Verificar se já existe (NF + data + valor + cliente)
+      const occurredOn = item.operation_date || new Date().toISOString().split('T')[0];
+      const grossAmount = item.gross_value || 0;
       const { data: existing, error: existErr } = await localSupabase
         .from("transactions")
         .select("id")
         .eq("user_id", user.id)
         .eq("description", baseDesc)
+        .eq("occurred_on", occurredOn)
+        .eq("amount", grossAmount)
+        .eq("type", "income")
+        .eq("subcategory_id_v2", subId || null)
         .limit(1);
 
       if (existErr) {

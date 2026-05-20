@@ -168,18 +168,18 @@ export function IntegrationManager() {
       .single();
 
     // Buscar subs atuais da categoria Receita
-    const { data: currentSubs } = await localSupabase
-      .from("financial_subcategories")
-      .select("id, name")
-      .eq("category_id", catDataInc?.id);
+    const { data: currentSubs } = catDataInc?.id
+      ? await localSupabase
+          .from("financial_subcategories")
+          .select("id, name")
+          .eq("category_id", catDataInc.id)
+      : { data: null };
 
     const subsMap = new Map(currentSubs?.map(s => [s.name.toUpperCase(), s.id]) || []);
 
     for (const item of externalData) {
       const clientName = (item.client_name || "CLIENTE DESCONHECIDO").toUpperCase();
-      const invoiceNum = item.invoice_number || "S/N";
-      const invoiceId = item.id || invoiceNum; // Usa o ID único para evitar conflito entre notas com mesmo número
-      const baseDesc = `${clientName} - SYNC NF: ${invoiceNum} [${invoiceId}]`.toUpperCase();
+      const baseDesc = `SYNC: ${clientName}`;
 
       // 1. Garantir Subcategoria (CLIENTE)
       let subId = subsMap.get(clientName);
@@ -229,7 +229,7 @@ export function IntegrationManager() {
 
       if (err1) {
         console.error("Erro ao inserir receita:", err1);
-        toast.error(`Erro na receita NF ${invoiceNum}: ${err1.message}`);
+        toast.error(`Erro na receita ${item.invoice_number || "S/N"}: ${err1.message}`);
         continue;
       }
 
@@ -248,7 +248,7 @@ export function IntegrationManager() {
 
       if (err2) {
         console.error("Erro ao inserir despesa:", err2);
-        toast.error(`Erro na despesa NF ${invoiceNum}: ${err2.message}`);
+        toast.error(`Erro na despesa ${item.invoice_number || "S/N"}: ${err2.message}`);
         // Even if expense fails, we already inserted income. 
       }
 

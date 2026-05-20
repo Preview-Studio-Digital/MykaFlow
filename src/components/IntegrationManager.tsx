@@ -195,13 +195,19 @@ export function IntegrationManager() {
         }
       }
 
-      // 2. Verificar se já existe (Proteção contra duplicidade)
-      const { data: existing, error: existErr } = await localSupabase
+      // 2. Verificar se já existe (NF + data + valor + cliente)
+      const occurredOn = item.operation_date || new Date().toISOString().split('T')[0];
+      const grossAmount = item.gross_value || 0;
+      let dupQuery = localSupabase
         .from("transactions")
         .select("id")
         .eq("user_id", user.id)
         .eq("description", baseDesc)
-        .limit(1);
+        .eq("occurred_on", occurredOn)
+        .eq("amount", grossAmount)
+        .eq("type", "income");
+      dupQuery = subId ? dupQuery.eq("subcategory_id_v2", subId) : dupQuery.is("subcategory_id_v2", null);
+      const { data: existing, error: existErr } = await dupQuery.limit(1);
 
       if (existErr) {
         console.error("Erro ao checar duplicidade:", existErr);

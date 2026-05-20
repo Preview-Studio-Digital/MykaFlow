@@ -179,7 +179,8 @@ export function IntegrationManager() {
 
     for (const item of externalData) {
       const clientName = (item.client_name || "CLIENTE DESCONHECIDO").toUpperCase();
-      const baseDesc = `SYNC: ${clientName}`;
+      const invoiceNumber = item.invoice_number ? String(item.invoice_number) : "S/N";
+      const baseDesc = `SYNC: NF ${invoiceNumber} - ${clientName}`;
 
       // 1. Garantir Subcategoria (CLIENTE)
       let subId = subsMap.get(clientName);

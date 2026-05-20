@@ -229,7 +229,7 @@ export function IntegrationManager() {
 
       if (err1) {
         console.error("Erro ao inserir receita:", err1);
-        toast.error(`Erro na receita NF ${invoiceNum}: ${err1.message}`);
+        toast.error(`Erro na receita ${item.invoice_number || "S/N"}: ${err1.message}`);
         continue;
       }
 

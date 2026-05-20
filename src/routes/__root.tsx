@@ -100,8 +100,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:description", content: "Sistema de controle de receitas e despesas." },
       { name: "twitter:description", content: "Sistema de controle de receitas e despesas." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/f4fa2b99-bffc-43dd-a01e-8d5e7c2baf4c" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/f4fa2b99-bffc-43dd-a01e-8d5e7c2baf4c" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/009f4a99-c795-4399-a744-333451e54b55" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/009f4a99-c795-4399-a744-333451e54b55" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },

@@ -89,7 +89,7 @@ function IntegrationPage() {
         type: "income",
         nature: "variable",
         category: "ANTECIPAÇÃO DE NOTAS",
-        description: `SYNC: ${item.client_name || "CLIENTE EXTERNO"} - NF: ${item.invoice_number || "S/N"}`,
+        description: `SYNC: ${item.client_name || "CLIENTE EXTERNO"}`,
         amount: item.amount || 0,
         occurred_on: item.date || new Date().toISOString().split('T')[0],
       });

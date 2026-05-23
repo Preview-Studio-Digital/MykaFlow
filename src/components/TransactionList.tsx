@@ -43,8 +43,15 @@ export function TransactionList({
 
   // Sort State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
-  const getSubcategoryName = (r: TxRow) => r.financial_subcategories?.name || "";
-  const getDisplayDescription = (r: TxRow) => stripLegacyClientFromFactoringDescription(r.description, getSubcategoryName(r));
+  const getSubcategoryName = (r: TxRow) =>
+    r.financial_subcategories?.name || (r.description || "").split(" - ")[0] || "";
+  const getDisplayDescription = (r: TxRow) => {
+    const cleaned = (r.description || "").replace(" | VALIDAR VALOR", "").replace("VALIDAR VALOR", "").trim();
+    if (cleaned.toUpperCase().includes("SYNC: NF")) {
+      return stripLegacyClientFromFactoringDescription(cleaned, getSubcategoryName(r));
+    }
+    return cleaned.split(" - ").slice(1).join(" - ") || cleaned;
+  };
 
   const filteredRows = rows.filter((r) => {
     const day = new Date(r.occurred_on + "T00:00:00").getDate().toString();
@@ -293,7 +300,7 @@ export function TransactionList({
                     .trim();
 
                   const sub = getSubcategoryName(r) || "—";
-                  const desc = stripLegacyClientFromFactoringDescription(rawDescCleaned, sub) || "—";
+                  const desc = getDisplayDescription(r) || "—";
                   const colorClass = r.type === "income" ? "text-accent" : "text-destructive";
                   const cellClass = `px-4 py-4 text-center text-sm font-sans font-semibold ${colorClass}`;
 

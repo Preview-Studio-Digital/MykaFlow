@@ -31,7 +31,10 @@ function Dashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [dashboardMode, setDashboardMode] = useState<"monthly" | "annual">("monthly");
   const [explanationModal, setExplanationModal] = useState<"diaria" | "hora" | null>(null);
-  const [employeesCount, setEmployeesCount] = useState(() => Number(localStorage.getItem("mykaflow_employees_count")) || 5);
+  const [employeesCount, setEmployeesCount] = useState(() => {
+    if (typeof window === "undefined") return 5;
+    return Number(localStorage.getItem("mykaflow_employees_count")) || 5;
+  });
 
   const averageMonthlyExpense = useMemo(() => {
     if (rows.length === 0) return 0;
@@ -368,7 +371,7 @@ function Dashboard() {
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("transactions")
-      .select("*")
+      .select("*, financial_subcategories:subcategory_id_v2(name)")
       .order("occurred_on", { ascending: false });
     if (!error && data) {
       setRows(data as TxRow[]);

@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { supabase as localSupabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { formatFactoringClientSubcategory, formatFactoringInvoiceDescription } from "@/lib/factoring-import-format";
 import { 
   Link2, 
   RefreshCw, 
@@ -52,18 +53,22 @@ function IntegrationPage() {
 
   async function fetchOperations() {
     setStatus("loading");
-    const { data, error } = await factoringSupabase
-      .from("invoices")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [invRes, cliRes] = await Promise.all([
+      factoringSupabase.from("invoices").select("*").order("created_at", { ascending: false }),
+      factoringSupabase.from("clients").select("id, name"),
+    ]);
 
-    if (error) {
+    if (invRes.error || cliRes.error) {
       toast.error("Não foi possível ler as operações. Verifique as permissões de RLS.");
       setStatus("error");
     } else {
-      setExternalData(data || []);
+      const clientsMap = new Map(cliRes.data?.map((c) => [c.id, c.name]) || []);
+      setExternalData((invRes.data || []).map((inv) => ({
+        ...inv,
+        client_name: clientsMap.get(inv.client_id) || "Cliente Desconhecido",
+      })));
       setStatus("connected");
-      if (data?.length === 0) {
+      if (invRes.data?.length === 0) {
         toast.info("Nenhuma operação encontrada (ou acesso restrito)");
       }
     }
@@ -82,16 +87,52 @@ function IntegrationPage() {
     }
 
     let successCount = 0;
+    const { data: catDataInc } = await localSupabase
+      .from("financial_categories")
+      .select("id")
+      .eq("name", "ANTECIPAÇÃO DE NOTAS")
+      .limit(1)
+      .single();
+
+    const { data: currentSubs } = catDataInc?.id
+      ? await localSupabase
+          .from("financial_subcategories")
+          .select("id, name")
+          .eq("category_id", catDataInc.id)
+      : { data: null };
+    const subsMap = new Map(currentSubs?.map((s) => [s.name.toUpperCase(), s.id]) || []);
     
     for (const item of externalData) {
+      const clientName = formatFactoringClientSubcategory(item.client_name);
+      const baseDesc = formatFactoringInvoiceDescription(item.invoice_number);
+      const amount = item.invoice_value || item.gross_value || item.amount || 0;
+      const occurredOn = item.operation_date || item.date || new Date().toISOString().split('T')[0];
+
+      // REGRA EXPLÍCITA: subcategoria = CLIENTE; descrição = apenas "SYNC: NF <número>".
+      // Nunca inverter estes campos e nunca prefixar o cliente na descrição.
+      let subId = subsMap.get(clientName);
+      if (!subId && catDataInc?.id) {
+        const { data: newSub } = await localSupabase
+          .from("financial_subcategories")
+          .insert({ name: clientName, category_id: catDataInc.id, user_id: uid })
+          .select("id")
+          .single();
+        if (newSub) {
+          subId = newSub.id;
+          subsMap.set(clientName, subId);
+        }
+      }
+
       const { error } = await localSupabase.from("transactions").insert({
         user_id: uid,
         type: "income",
         nature: "variable",
         category: "ANTECIPAÇÃO DE NOTAS",
-        description: `SYNC: NF ${item.invoice_number ? String(item.invoice_number) : "S/N"}`,
-        amount: item.amount || 0,
-        occurred_on: item.date || new Date().toISOString().split('T')[0],
+        category_id_v2: catDataInc?.id || null,
+        subcategory_id_v2: subId || null,
+        description: baseDesc,
+        amount,
+        occurred_on: occurredOn,
       });
 
       if (!error) successCount++;

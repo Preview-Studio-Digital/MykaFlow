@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState } from "react";
 import { TransactionEditDialog } from "./TransactionEditDialog";
+import { stripLegacyClientFromFactoringDescription } from "@/lib/factoring-import-format";
 
 export interface TxRow {
   id: string;
@@ -15,6 +16,7 @@ export interface TxRow {
   amount: number;
   occurred_on: string;
   profiles?: { display_name: string | null };
+  financial_subcategories?: { name: string | null } | null;
 }
 
 export function TransactionList({
@@ -41,10 +43,12 @@ export function TransactionList({
 
   // Sort State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const getSubcategoryName = (r: TxRow) => r.financial_subcategories?.name || "";
+  const getDisplayDescription = (r: TxRow) => stripLegacyClientFromFactoringDescription(r.description, getSubcategoryName(r));
 
   const filteredRows = rows.filter((r) => {
     const day = new Date(r.occurred_on + "T00:00:00").getDate().toString();
-    const sub = (r.description || "").split(" - ")[0] || "";
+    const sub = getSubcategoryName(r);
 
     if (r.category === "VENCIMENTO ANTECIPAÇÃO") return false;
     if (filterDay && day !== filterDay) return false;
@@ -67,11 +71,11 @@ export function TransactionList({
       valA = new Date(a.occurred_on + "T00:00:00").getTime();
       valB = new Date(b.occurred_on + "T00:00:00").getTime();
     } else if (key === "sub") {
-      valA = (a.description || "").split(" - ")[0] || "";
-      valB = (b.description || "").split(" - ")[0] || "";
+      valA = getSubcategoryName(a);
+      valB = getSubcategoryName(b);
     } else if (key === "desc") {
-      valA = (a.description || "").split(" - ").slice(1).join(" - ") || "";
-      valB = (b.description || "").split(" - ").slice(1).join(" - ") || "";
+      valA = getDisplayDescription(a);
+      valB = getDisplayDescription(b);
     } else if (key === "author") {
       valA = allProfiles.find((p) => p.id === a.user_id)?.display_name || allProfiles.find((p) => p.id === a.user_id)?.email || "";
       valB = allProfiles.find((p) => p.id === b.user_id)?.display_name || allProfiles.find((p) => p.id === b.user_id)?.email || "";
@@ -103,7 +107,7 @@ export function TransactionList({
   ).sort((a, b) => Number(a) - Number(b));
   const uniqueCats = Array.from(new Set(rows.map((r) => r.category === "CUSTO OPERAÇÃO" ? "ANTECIPAÇÃO DE NOTAS" : r.category))).sort();
   const uniqueSubs = Array.from(
-    new Set(rows.map((r) => (r.description || "").split(" - ")[0] || "")),
+    new Set(rows.map((r) => getSubcategoryName(r))),
   )
     .filter(Boolean)
     .sort();
@@ -288,9 +292,8 @@ export function TransactionList({
                     .replace("VALIDAR VALOR", "")
                     .trim();
 
-                  const parts = rawDescCleaned.split(" - ");
-                  const sub = parts[0] || "—";
-                  const desc = parts.slice(1).join(" - ") || "—";
+                  const sub = getSubcategoryName(r) || "—";
+                  const desc = stripLegacyClientFromFactoringDescription(rawDescCleaned, sub) || "—";
                   const colorClass = r.type === "income" ? "text-accent" : "text-destructive";
                   const cellClass = `px-4 py-4 text-center text-sm font-sans font-semibold ${colorClass}`;
 

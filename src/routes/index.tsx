@@ -151,20 +151,6 @@ function Dashboard() {
     return averageMonthlyExpense / (employeesCount * 160 * 0.70); // N * 160 * 0.70 (30% efficiency reduction)
   }, [averageMonthlyExpense, employeesCount]);
 
-  const currentMonthFaturamento = useMemo(() => {
-    const today = new Date();
-    const currYear = today.getFullYear();
-    const currMonth = today.getMonth();
-    return rows
-      .filter((r) => {
-        if (r.type !== "income") return false;
-        if (!r.occurred_on) return false;
-        const d = new Date(r.occurred_on + "T00:00:00");
-        return d.getFullYear() === currYear && d.getMonth() === currMonth;
-      })
-      .reduce((sum, r) => sum + Number(r.amount), 0);
-  }, [rows]);
-
   const isWorkDay = isBusinessDay(new Date());
 
   const headerBtnBorderClass = isWorkDay

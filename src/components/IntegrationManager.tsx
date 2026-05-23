@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { supabase as localSupabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { formatFactoringClientSubcategory, formatFactoringInvoiceDescription } from "@/lib/factoring-import-format";
 import { 
   Link2, 
   RefreshCw, 
@@ -42,8 +43,8 @@ export function IntegrationManager() {
       
       // Apaga em múltiplas chamadas para evitar problemas com caracteres especiais no filtro OR
       const filters = [
-        "%SYNC NF%",   // formato atual: CLIENTE - SYNC NF: 123
-        "SYNC%",       // formato legado
+        "SYNC%",       // formato atual: SYNC: NF 123
+        "%SYNC NF%",   // formato legado: CLIENTE - SYNC NF: 123
         "LIQUIDO%",    // formato legado
         "JUROS%",      // formato legado
       ];
@@ -178,10 +179,11 @@ export function IntegrationManager() {
     const subsMap = new Map(currentSubs?.map(s => [s.name.toUpperCase(), s.id]) || []);
 
     for (const item of externalData) {
-      const clientName = (item.client_name || "CLIENTE DESCONHECIDO").toUpperCase();
-      const invoiceNumber = item.invoice_number ? String(item.invoice_number) : "S/N";
-      const baseDesc = `SYNC: NF ${invoiceNumber}`;
+      const clientName = formatFactoringClientSubcategory(item.client_name);
+      const baseDesc = formatFactoringInvoiceDescription(item.invoice_number);
 
+      // REGRA EXPLÍCITA: subcategoria = CLIENTE; descrição = apenas "SYNC: NF <número>".
+      // Nunca inverter estes campos e nunca prefixar o cliente na descrição.
       // 1. Garantir Subcategoria (CLIENTE)
       let subId = subsMap.get(clientName);
       if (!subId && catDataInc) {

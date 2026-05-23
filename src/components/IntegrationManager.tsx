@@ -195,14 +195,15 @@ export function IntegrationManager() {
         }
       }
 
-      // 2. Verificar se já existe (NF + data + valor + cliente)
+      // 2. Verificar se já existe (subcategoria/cliente + data + valor + tipo)
+      // Não comparamos a descrição porque importações antigas usavam outro formato
+      // (ex: "CLIENTE - SYNC: NF X") e geravam falsos negativos.
       const occurredOn = item.operation_date || new Date().toISOString().split('T')[0];
       const grossAmount = item.gross_value || 0;
       let dupQuery = localSupabase
         .from("transactions")
         .select("id")
         .eq("user_id", user.id)
-        .eq("description", baseDesc)
         .eq("occurred_on", occurredOn)
         .eq("amount", grossAmount)
         .eq("type", "income");
@@ -218,6 +219,7 @@ export function IntegrationManager() {
         skippedCount++;
         continue;
       }
+
 
       const discount = item.gross_value - item.net_value;
 

@@ -43,8 +43,8 @@ export function IntegrationManager() {
       
       // Apaga em múltiplas chamadas para evitar problemas com caracteres especiais no filtro OR
       const filters = [
-        "%SYNC NF%",   // formato atual: CLIENTE - SYNC NF: 123
-        "SYNC%",       // formato legado
+        "SYNC%",       // formato atual: SYNC: NF 123
+        "%SYNC NF%",   // formato legado: CLIENTE - SYNC NF: 123
         "LIQUIDO%",    // formato legado
         "JUROS%",      // formato legado
       ];

@@ -94,7 +94,7 @@ export function CategoryPie({
     const nameMap = new Map<string, number>();
 
     catTxs.forEach((t) => {
-      let txDesc = (t.description || "OUTROS").split(" - ")[0].trim().toUpperCase();
+      let txDesc = (t.financial_subcategories?.name || (t.description || "OUTROS").split(" - ")[0]).trim().toUpperCase();
       if (txDesc.includes("TI -") || txDesc === "TI") txDesc = "TI - TECNOLOGIA DA INFORMAÇÃO";
       if (txDesc.includes("FROTA")) txDesc = "FROTA";
       if (txDesc.includes("TELEFONIA")) txDesc = "TELEFONIA";

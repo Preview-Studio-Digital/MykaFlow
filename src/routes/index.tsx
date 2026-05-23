@@ -16,6 +16,26 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
+// Feriados nacionais brasileiros fixos (MM-DD)
+const NATIONAL_HOLIDAYS = new Set([
+  "01-01", // Ano Novo
+  "04-21", // Tiradentes
+  "05-01", // Dia do Trabalho
+  "09-07", // Independência
+  "10-12", // Nossa Senhora Aparecida
+  "11-02", // Finados
+  "11-15", // Proclamação da República
+  "12-25", // Natal
+]);
+
+function isBusinessDay(date: Date) {
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return false; // Domingo ou Sábado
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return !NATIONAL_HOLIDAYS.has(`${mm}-${dd}`);
+}
+
 function Dashboard() {
   const { user, loading, role, signOut } = useAuth();
   const navigate = useNavigate();
@@ -131,63 +151,23 @@ function Dashboard() {
     return averageMonthlyExpense / (employeesCount * 160 * 0.70); // N * 160 * 0.70 (30% efficiency reduction)
   }, [averageMonthlyExpense, employeesCount]);
 
-  const currentMonthFaturamento = useMemo(() => {
-    const today = new Date();
-    const currYear = today.getFullYear();
-    const currMonth = today.getMonth();
-    return rows
-      .filter((r) => {
-        if (r.type !== "income") return false;
-        if (!r.occurred_on) return false;
-        const d = new Date(r.occurred_on + "T00:00:00");
-        return d.getFullYear() === currYear && d.getMonth() === currMonth;
-      })
-      .reduce((sum, r) => sum + Number(r.amount), 0);
-  }, [rows]);
+  const isWorkDay = isBusinessDay(new Date());
 
-  const proratedExpenseTarget = useMemo(() => {
-    const today = new Date();
-    const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
-    if (!isCurrentMonth || businessDays <= 0) return averageMonthlyExpense;
-    let elapsed = 0;
-    const d = new Date(year, month, 1);
-    const todayDate = today.getDate();
-    while (d.getMonth() === month && d.getDate() <= todayDate) {
-      const day = d.getDay();
-      if (day !== 0 && day !== 6) elapsed++;
-      d.setDate(d.getDate() + 1);
-    }
-    elapsed = Math.max(1, elapsed);
-    return (averageMonthlyExpense / businessDays) * elapsed;
-  }, [year, month, averageMonthlyExpense, businessDays]);
+  const headerBtnBorderClass = isWorkDay
+    ? "border-amber-500/20 hover:border-amber-400/40"
+    : "border-white/10 hover:border-white/30";
 
-  const faturamentoBateuCusto = currentMonthFaturamento >= proratedExpenseTarget;
+  const headerBtnGradientClass = isWorkDay
+    ? "from-amber-500/10 to-transparent"
+    : "from-white/5 to-transparent";
 
-  const hasExpenseData = averageMonthlyExpense > 0;
+  const headerBtnTextHoverClass = isWorkDay
+    ? "group-hover:text-amber-400"
+    : "group-hover:text-white";
 
-  const headerBtnBorderClass = !hasExpenseData
-    ? "border-white/10 hover:border-white/30"
-    : faturamentoBateuCusto
-      ? "border-emerald-500/20 hover:border-emerald-400/40"
-      : "border-rose-500/20 hover:border-rose-400/40";
-
-  const headerBtnGradientClass = !hasExpenseData
-    ? "from-white/5 to-transparent"
-    : faturamentoBateuCusto
-      ? "from-emerald-500/10 to-transparent"
-      : "from-rose-500/10 to-transparent";
-
-  const headerBtnTextHoverClass = !hasExpenseData
-    ? "group-hover:text-white"
-    : faturamentoBateuCusto
-      ? "group-hover:text-emerald-400"
-      : "group-hover:text-rose-400";
-
-  const headerBtnBarClass = !hasExpenseData
-    ? "bg-white"
-    : faturamentoBateuCusto
-      ? "animate-pulse-green bg-emerald-400"
-      : "animate-pulse-red bg-rose-500";
+  const headerBtnBarClass = isWorkDay
+    ? "animate-pulse-yellow bg-amber-400"
+    : "bg-white";
 
   const dismissAlert = (alertId: string) => {
     if (typeof window === "undefined") return;

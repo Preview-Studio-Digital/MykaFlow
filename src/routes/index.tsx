@@ -16,6 +16,26 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
+// Feriados nacionais brasileiros fixos (MM-DD)
+const NATIONAL_HOLIDAYS = new Set([
+  "01-01", // Ano Novo
+  "04-21", // Tiradentes
+  "05-01", // Dia do Trabalho
+  "09-07", // Independência
+  "10-12", // Nossa Senhora Aparecida
+  "11-02", // Finados
+  "11-15", // Proclamação da República
+  "12-25", // Natal
+]);
+
+function isBusinessDay(date: Date) {
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return false; // Domingo ou Sábado
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return !NATIONAL_HOLIDAYS.has(`${mm}-${dd}`);
+}
+
 function Dashboard() {
   const { user, loading, role, signOut } = useAuth();
   const navigate = useNavigate();

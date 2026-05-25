@@ -28,7 +28,7 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
     if (isMonthly) {
       const saldo =
         payload.find((p: any) => p.dataKey === "saldo")?.value ?? (payload[0]?.value || 0);
-      const vencimentoTexts = payload[0]?.payload?.vencimentoTexts || [];
+      // Marcação de vencimento removida
       const daysOfWeek = [
         "Domingo",
         "Segunda-feira",

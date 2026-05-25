@@ -174,8 +174,6 @@ export function EvolutionChart({
       receitas: 0,
       despesas: 0,
       day: i + 1,
-      isVencimento: false,
-      vencimentoTexts: [] as string[],
     }));
 
     let initialBalance = 0;
@@ -187,13 +185,8 @@ export function EvolutionChart({
         const dayIdx = d.getDate() - 1;
         const amount = Number(t.amount) || 0;
         if (days[dayIdx]) {
-          if (t.category === "VENCIMENTO ANTECIPAÇÃO") {
-            days[dayIdx].isVencimento = true;
-            if (t.description) days[dayIdx].vencimentoTexts.push(t.description);
-          } else {
-            if (t.type === "income") days[dayIdx].receitas += amount;
-            else days[dayIdx].despesas += amount;
-          }
+          if (t.type === "income") days[dayIdx].receitas += amount;
+          else days[dayIdx].despesas += amount;
         }
       }
     }

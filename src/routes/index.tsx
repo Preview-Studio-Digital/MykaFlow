@@ -713,9 +713,10 @@ function Dashboard() {
           </button>
 
           {/* Despesa Média Mensal (Lado Direito) */}
-          <div
-            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 transition-all text-left flex items-center justify-start gap-2 cursor-help w-full h-full ${headerBtnBorderClass}`}
-            title="Média de despesas dos meses totalmente fechados"
+          <button
+            onClick={() => setExplanationModal("despesa")}
+            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 active:scale-95 transition-all text-left flex items-center justify-start gap-2 w-full h-full ${headerBtnBorderClass}`}
+            title="Clique para ver o detalhamento do cálculo"
           >
             <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
             <div className="text-left">
@@ -727,7 +728,7 @@ function Dashboard() {
               </p>
             </div>
             <div className={`absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
-          </div>
+          </button>
         </div>
 
         <div className="flex items-center gap-4 justify-between lg:w-1/4 lg:justify-end shrink-0">

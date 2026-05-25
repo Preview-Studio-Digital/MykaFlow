@@ -48,7 +48,12 @@ function IntegrationPage() {
   async function checkConnection() {
     setStatus("loading");
     try {
-      // Tenta ler algo básico para testar a conexão e RLS
+      const authed = await ensureFactoringAuth();
+      if (!authed) {
+        setStatus("error");
+        toast.error("Falha ao autenticar no MykaCash");
+        return;
+      }
       const { error } = await factoringSupabase.from("invoices").select("*", { count: "exact", head: true });
       
       if (error) {
@@ -67,6 +72,12 @@ function IntegrationPage() {
 
   async function fetchOperations() {
     setStatus("loading");
+    const authed = await ensureFactoringAuth();
+    if (!authed) {
+      toast.error("Falha ao autenticar no MykaCash");
+      setStatus("error");
+      return;
+    }
     const [invRes, cliRes] = await Promise.all([
       factoringSupabase.from("invoices").select("*").order("created_at", { ascending: false }),
       factoringSupabase.from("clients").select("id, name"),

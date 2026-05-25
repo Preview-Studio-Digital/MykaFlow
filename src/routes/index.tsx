@@ -659,9 +659,10 @@ function Dashboard() {
         {/* 4 Glow Buttons / KPI Cards */}
         <div className="grid grid-cols-4 gap-2 w-max mx-auto">
           {/* Receita Média Mensal (Lado Esquerdo) */}
-          <div
-            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 transition-all text-right flex items-center justify-end gap-2 cursor-help w-full h-full ${headerBtnBorderClass}`}
-            title="Média de receitas dos meses totalmente fechados"
+          <button
+            onClick={() => setExplanationModal("receita")}
+            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 active:scale-95 transition-all text-right flex items-center justify-end gap-2 w-full h-full ${headerBtnBorderClass}`}
+            title="Clique para ver o detalhamento do cálculo"
           >
             <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
             <div className="text-right">
@@ -673,7 +674,7 @@ function Dashboard() {
               </p>
             </div>
             <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
-          </div>
+          </button>
 
           {/* Diária Empresarial (Centro-Esquerdo) */}
           <button

@@ -50,7 +50,7 @@ function Dashboard() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dashboardMode, setDashboardMode] = useState<"monthly" | "annual">("monthly");
-  const [explanationModal, setExplanationModal] = useState<"diaria" | "hora" | null>(null);
+  const [explanationModal, setExplanationModal] = useState<"diaria" | "hora" | "receita" | "despesa" | null>(null);
   const [employeesCount, setEmployeesCount] = useState(() => {
     if (typeof window === "undefined") return 5;
     return Number(localStorage.getItem("mykaflow_employees_count")) || 5;

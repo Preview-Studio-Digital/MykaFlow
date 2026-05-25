@@ -371,16 +371,14 @@ export function CategoryPie({
                     <p className="text-lg font-bold leading-tight" style={{ color }}>
                       {isGrowth ? "+" : "-"}{Math.abs(perc).toFixed(1)}%
                     </p>
-                    <div className="flex items-center justify-between gap-2 mt-1">
-                      <div className="flex items-center gap-1">
-                        <p
-                          className="text-[10px] font-black tracking-wider px-1 py-0.5 rounded bg-white/10 font-mono"
-                          style={{ color }}
-                        >
-                          {diff >= 0 ? "+" : "-"}{fmtCurrency(Math.abs(diff)).replace(/^R\$\s*/, "R$ ")}
-                        </p>
-                      </div>
-                      <span className="text-[8px] uppercase opacity-50 font-bold tracking-wider text-right leading-tight max-w-[110px]">
+                    <div className="flex flex-col gap-0.5 mt-1">
+                      <p
+                        className="text-[10px] font-black tracking-wider px-1 py-0.5 rounded bg-white/10 font-mono w-fit"
+                        style={{ color }}
+                      >
+                        {diff >= 0 ? "+" : "-"}{fmtCurrency(Math.abs(diff)).replace(/^R\$\s*/, "R$ ")}
+                      </p>
+                      <span className="text-[8px] uppercase opacity-50 font-bold tracking-wider leading-tight">
                         {comparisonLabel || "EM RELAÇÃO AO MÊS PASSADO"}
                       </span>
                     </div>

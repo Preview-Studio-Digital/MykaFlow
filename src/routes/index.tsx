@@ -709,6 +709,9 @@ function Dashboard() {
               <p className="text-xs font-black font-mono text-white mt-0.5">
                 {fmtCurrency(horaOperacional)}
               </p>
+              <p className="text-[9px] text-muted-foreground mt-0.5">
+                {employeesCount} funcionários operacionais
+              </p>
             </div>
           </button>
 
@@ -878,7 +881,7 @@ function Dashboard() {
 
                 <div className="space-y-4">
                   <p className="text-muted-foreground text-sm leading-relaxed">
-                    A <strong className="text-white">Hora Operacional</strong> define o custo hora-homem real para manter a empresa funcionando. Ela assume o número de <strong className="text-white">funcionários indicados</strong> trabalhando <strong className="text-white">160 horas por mês cada</strong>, com uma <strong className="text-white">redução de 30% na eficiência operacional</strong>.
+                    A <strong className="text-white">Hora Operacional</strong> define o custo hora-homem real para manter a empresa funcionando. Ela assume o número de <strong className="text-white">funcionários operacionais indicados</strong> trabalhando <strong className="text-white">160 horas por mês cada</strong>, com uma <strong className="text-white">redução de 30% na eficiência operacional</strong>.
                   </p>
 
                   <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">
@@ -901,7 +904,12 @@ function Dashboard() {
                       </div>
 
                       <div className="flex items-center justify-between text-sm py-1.5 border-b border-white/[0.03]">
-                        <span className="text-muted-foreground">2. Número de Funcionários:</span>
+                        <div>
+                          <span className="text-muted-foreground">2. Número de Funcionários Operacionais:</span>
+                          <p className="text-[9px] text-muted-foreground/70 mt-0.5 max-w-[200px]">
+                            Conte apenas funcionários que produzem serviços relativos à atividade da empresa.
+                          </p>
+                        </div>
                         <input
                           type="number"
                           min="1"

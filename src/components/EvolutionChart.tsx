@@ -508,35 +508,8 @@ export function EvolutionChart({
               }}
             />
 
-            {effectiveViewMode === "monthly" &&
-              chartData.map((d: any, i: number) => {
-                if (d.isVencimento) {
-                  return (
-                    <ReferenceLine
-                      key={`venc-${i}`}
-                      yAxisId="left"
-                      x={d.label}
-                      stroke="#facc15"
-                      strokeWidth={2}
-                      strokeDasharray="3 3"
-                      label={(props: any) => {
-                        return (
-                          <text
-                            x={props.viewBox.x}
-                            y={props.viewBox.y - 10}
-                            fill="#facc15"
-                            fontSize={16}
-                            textAnchor="middle"
-                          >
-                            ⚠️
-                          </text>
-                        );
-                      }}
-                    />
-                  );
-                }
-                return null;
-              })}
+            {/* Marcação de vencimento removida */}
+
 
             <Tooltip
               cursor={false}

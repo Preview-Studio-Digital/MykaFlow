@@ -139,6 +139,39 @@ function Dashboard() {
     return numMonths > 0 ? totalIncome / numMonths : 0;
   }, [rows]);
 
+  // Detalhamento por mês fechado para os modais de Receita/Despesa Média Mensal
+  function buildMonthlyBreakdown(type: "income" | "expense") {
+    const filtered = rows.filter(
+      (r) => r.type === type && r.category !== "VENCIMENTO ANTECIPAÇÃO"
+    );
+    const today = new Date();
+    const currentYYYYMM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    const closed = new Map<string, number>();
+    const current = new Map<string, number>();
+    filtered.forEach((r) => {
+      if (!r.occurred_on) return;
+      const k = r.occurred_on.substring(0, 7);
+      if (k < currentYYYYMM) closed.set(k, (closed.get(k) ?? 0) + Number(r.amount));
+      else if (k === currentYYYYMM) current.set(k, (current.get(k) ?? 0) + Number(r.amount));
+    });
+    const useClosed = closed.size > 0;
+    const source = useClosed ? closed : current;
+    const months = Array.from(source.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([key, value]) => ({ key, value }));
+    const total = months.reduce((s, m) => s + m.value, 0);
+    return { months, total, count: months.length, usedFallback: !useClosed && current.size > 0 };
+  }
+
+  const incomeBreakdown = useMemo(() => buildMonthlyBreakdown("income"), [rows]);
+  const expenseBreakdown = useMemo(() => buildMonthlyBreakdown("expense"), [rows]);
+
+  function formatMonthKey(key: string) {
+    const [y, m] = key.split("-");
+    const idx = Math.max(0, Math.min(11, parseInt(m, 10) - 1));
+    return `${MONTHS_PT[idx]}/${y}`;
+  }
+
   const businessDays = useMemo(() => {
     return getBusinessDaysInMonth(year, month);
   }, [year, month]);

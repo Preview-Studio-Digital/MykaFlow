@@ -50,7 +50,7 @@ function Dashboard() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dashboardMode, setDashboardMode] = useState<"monthly" | "annual">("monthly");
-  const [explanationModal, setExplanationModal] = useState<"diaria" | "hora" | null>(null);
+  const [explanationModal, setExplanationModal] = useState<"diaria" | "hora" | "receita" | "despesa" | null>(null);
   const [employeesCount, setEmployeesCount] = useState(() => {
     if (typeof window === "undefined") return 5;
     return Number(localStorage.getItem("mykaflow_employees_count")) || 5;
@@ -138,6 +138,39 @@ function Dashboard() {
 
     return numMonths > 0 ? totalIncome / numMonths : 0;
   }, [rows]);
+
+  // Detalhamento por mês fechado para os modais de Receita/Despesa Média Mensal
+  function buildMonthlyBreakdown(type: "income" | "expense") {
+    const filtered = rows.filter(
+      (r) => r.type === type && r.category !== "VENCIMENTO ANTECIPAÇÃO"
+    );
+    const today = new Date();
+    const currentYYYYMM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    const closed = new Map<string, number>();
+    const current = new Map<string, number>();
+    filtered.forEach((r) => {
+      if (!r.occurred_on) return;
+      const k = r.occurred_on.substring(0, 7);
+      if (k < currentYYYYMM) closed.set(k, (closed.get(k) ?? 0) + Number(r.amount));
+      else if (k === currentYYYYMM) current.set(k, (current.get(k) ?? 0) + Number(r.amount));
+    });
+    const useClosed = closed.size > 0;
+    const source = useClosed ? closed : current;
+    const months = Array.from(source.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([key, value]) => ({ key, value }));
+    const total = months.reduce((s, m) => s + m.value, 0);
+    return { months, total, count: months.length, usedFallback: !useClosed && current.size > 0 };
+  }
+
+  const incomeBreakdown = useMemo(() => buildMonthlyBreakdown("income"), [rows]);
+  const expenseBreakdown = useMemo(() => buildMonthlyBreakdown("expense"), [rows]);
+
+  function formatMonthKey(key: string) {
+    const [y, m] = key.split("-");
+    const idx = Math.max(0, Math.min(11, parseInt(m, 10) - 1));
+    return `${MONTHS_PT[idx]}/${y}`;
+  }
 
   const businessDays = useMemo(() => {
     return getBusinessDaysInMonth(year, month);
@@ -626,9 +659,10 @@ function Dashboard() {
         {/* 4 Glow Buttons / KPI Cards */}
         <div className="grid grid-cols-4 gap-2 w-max mx-auto">
           {/* Receita Média Mensal (Lado Esquerdo) */}
-          <div
-            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 transition-all text-right flex items-center justify-end gap-2 cursor-help w-full h-full ${headerBtnBorderClass}`}
-            title="Média de receitas dos meses totalmente fechados"
+          <button
+            onClick={() => setExplanationModal("receita")}
+            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 active:scale-95 transition-all text-right flex items-center justify-end gap-2 w-full h-full ${headerBtnBorderClass}`}
+            title="Clique para ver o detalhamento do cálculo"
           >
             <div className={`absolute inset-0 bg-gradient-to-l opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
             <div className="text-right">
@@ -640,7 +674,7 @@ function Dashboard() {
               </p>
             </div>
             <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
-          </div>
+          </button>
 
           {/* Diária Empresarial (Centro-Esquerdo) */}
           <button
@@ -679,9 +713,10 @@ function Dashboard() {
           </button>
 
           {/* Despesa Média Mensal (Lado Direito) */}
-          <div
-            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 transition-all text-left flex items-center justify-start gap-2 cursor-help w-full h-full ${headerBtnBorderClass}`}
-            title="Média de despesas dos meses totalmente fechados"
+          <button
+            onClick={() => setExplanationModal("despesa")}
+            className={`glass group relative overflow-hidden rounded-xl border px-3 py-1.5 hover:scale-105 active:scale-95 transition-all text-left flex items-center justify-start gap-2 w-full h-full ${headerBtnBorderClass}`}
+            title="Clique para ver o detalhamento do cálculo"
           >
             <div className={`w-1 h-7 rounded-full group-hover:scale-y-110 transition-transform ${headerBtnBarClass}`} />
             <div className="text-left">
@@ -693,7 +728,7 @@ function Dashboard() {
               </p>
             </div>
             <div className={`absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${headerBtnGradientClass}`} />
-          </div>
+          </button>
         </div>
 
         <div className="flex items-center gap-4 justify-between lg:w-1/4 lg:justify-end shrink-0">
@@ -824,7 +859,7 @@ function Dashboard() {
                   </div>
                 </div>
               </>
-            ) : (
+            ) : explanationModal === "hora" ? (
               <>
                 <div className="flex items-center justify-between border-b border-white/5 pb-4">
                   <div className="flex items-center gap-3">
@@ -910,6 +945,148 @@ function Dashboard() {
                   <div className="bg-sky-500/5 border border-sky-500/20 rounded-xl p-4 text-xs text-muted-foreground leading-relaxed">
                     <strong className="text-sky-400 block mb-1">💡 Nota de Precificação:</strong>
                     Ao vender serviços, o valor cobrado por hora por colaborador deve ser superior a este custo de <strong className="text-white">{fmtCurrency(horaOperacional)}</strong> para gerar lucro real para a empresa.
+                  </div>
+                </div>
+              </>
+            ) : explanationModal === "receita" ? (
+              <>
+                <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                    <h2 className="text-xl font-black uppercase tracking-wider text-emerald-400">
+                      Receita Média Mensal
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setExplanationModal(null)}
+                    className="text-muted-foreground hover:text-white transition-colors text-xs font-black uppercase tracking-widest bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10"
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-muted-foreground text-sm leading-relaxed">
+                    A <strong className="text-white">Receita Média Mensal</strong> é a média aritmética das receitas totais de cada mês <strong className="text-white">já fechado</strong> (anteriores ao mês corrente). Lançamentos da categoria <strong className="text-white">VENCIMENTO ANTECIPAÇÃO</strong> são excluídos para evitar dupla contagem.
+                  </p>
+
+                  <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Fórmula Aplicada</p>
+                    <p className="text-lg font-bold text-emerald-400">
+                      Média = Σ Receitas dos meses fechados / Nº de meses
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-white">
+                      Detalhamento por Mês{incomeBreakdown.usedFallback ? " (mês atual — fallback)" : ""}:
+                    </h3>
+
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                      {incomeBreakdown.months.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">Sem dados de meses fechados.</p>
+                      ) : (
+                        incomeBreakdown.months.map((m) => (
+                          <div key={m.key} className="flex items-center justify-between text-sm py-1.5 border-b border-white/[0.03]">
+                            <span className="text-muted-foreground uppercase text-xs">{formatMonthKey(m.key)}</span>
+                            <span className="font-mono font-bold text-white">{fmtCurrency(m.value)}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="flex items-start justify-between text-sm py-1.5 border-t border-white/10 pt-3">
+                      <span className="text-muted-foreground">Soma Total:</span>
+                      <span className="font-mono font-bold text-white">{fmtCurrency(incomeBreakdown.total)}</span>
+                    </div>
+                    <div className="flex items-start justify-between text-sm py-1.5">
+                      <span className="text-muted-foreground">Nº de Meses Considerados:</span>
+                      <span className="font-mono font-bold text-white">{incomeBreakdown.count}</span>
+                    </div>
+
+                    <div className="flex items-start justify-between text-sm pt-2">
+                      <span className="text-emerald-400 font-bold">➔ Receita Média Mensal:</span>
+                      <div className="text-right">
+                        <span className="font-mono font-black text-emerald-400 text-lg">{fmtCurrency(averageMonthlyIncome)}</span>
+                        <p className="text-[9px] text-emerald-400/80 uppercase mt-0.5">Total / Nº de meses</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 text-xs text-muted-foreground leading-relaxed">
+                    <strong className="text-emerald-400 block mb-1">💡 Nota:</strong>
+                    O mês corrente não entra no cálculo por ainda não estar fechado. Caso não exista nenhum mês passado com dados, é usado o mês atual como referência mínima.
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="h-2 w-2 rounded-full bg-rose-400 animate-ping" />
+                    <h2 className="text-xl font-black uppercase tracking-wider text-rose-400">
+                      Despesa Média Mensal
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setExplanationModal(null)}
+                    className="text-muted-foreground hover:text-white transition-colors text-xs font-black uppercase tracking-widest bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10"
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-muted-foreground text-sm leading-relaxed">
+                    A <strong className="text-white">Despesa Média Mensal</strong> é a média aritmética das despesas totais de cada mês <strong className="text-white">já fechado</strong> (anteriores ao mês corrente). Lançamentos da categoria <strong className="text-white">VENCIMENTO ANTECIPAÇÃO</strong> são excluídos para evitar dupla contagem.
+                  </p>
+
+                  <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Fórmula Aplicada</p>
+                    <p className="text-lg font-bold text-rose-400">
+                      Média = Σ Despesas dos meses fechados / Nº de meses
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-white">
+                      Detalhamento por Mês{expenseBreakdown.usedFallback ? " (mês atual — fallback)" : ""}:
+                    </h3>
+
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                      {expenseBreakdown.months.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">Sem dados de meses fechados.</p>
+                      ) : (
+                        expenseBreakdown.months.map((m) => (
+                          <div key={m.key} className="flex items-center justify-between text-sm py-1.5 border-b border-white/[0.03]">
+                            <span className="text-muted-foreground uppercase text-xs">{formatMonthKey(m.key)}</span>
+                            <span className="font-mono font-bold text-white">{fmtCurrency(m.value)}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="flex items-start justify-between text-sm py-1.5 border-t border-white/10 pt-3">
+                      <span className="text-muted-foreground">Soma Total:</span>
+                      <span className="font-mono font-bold text-white">{fmtCurrency(expenseBreakdown.total)}</span>
+                    </div>
+                    <div className="flex items-start justify-between text-sm py-1.5">
+                      <span className="text-muted-foreground">Nº de Meses Considerados:</span>
+                      <span className="font-mono font-bold text-white">{expenseBreakdown.count}</span>
+                    </div>
+
+                    <div className="flex items-start justify-between text-sm pt-2">
+                      <span className="text-rose-400 font-bold">➔ Despesa Média Mensal:</span>
+                      <div className="text-right">
+                        <span className="font-mono font-black text-rose-400 text-lg">{fmtCurrency(averageMonthlyExpense)}</span>
+                        <p className="text-[9px] text-rose-400/80 uppercase mt-0.5">Total / Nº de meses</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4 text-xs text-muted-foreground leading-relaxed">
+                    <strong className="text-rose-400 block mb-1">💡 Nota:</strong>
+                    Este valor alimenta os cálculos de <strong className="text-white">Diária Empresarial</strong> e <strong className="text-white">Hora Operacional</strong>. Manter as despesas lançadas corretamente é essencial para a precisão de toda a gestão.
                   </div>
                 </div>
               </>

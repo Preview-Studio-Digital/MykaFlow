@@ -17,10 +17,24 @@ import {
 
 const FACTORING_CONFIG = {
   url: "https://wzxrhkjyxpphrclravfz.supabase.co",
-  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6eHJoa2p5eHBwaHJjbHJhdmZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTIxMjUsImV4cCI6MjA5Mjg4ODEyNX0.rowKt4jHw7ufQ_TuijiLh73AHzGe2WcrI9w-cKApmNo"
+  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6eHJoa2p5eHBwaHJjbHJhdmZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTIxMjUsImV4cCI6MjA5Mjg4ODEyNX0.rowKt4jHw7ufQ_TuijiLh73AHzGe2WcrI9w-cKApmNo",
+  email: "integracao@mykacompressores.com.br",
+  password: "Senhadiego2307",
 };
 
-const factoringSupabase = createClient(FACTORING_CONFIG.url, FACTORING_CONFIG.key);
+const factoringSupabase = createClient(FACTORING_CONFIG.url, FACTORING_CONFIG.key, {
+  auth: { storageKey: "myka-factoring-auth", persistSession: true, autoRefreshToken: true },
+});
+
+async function ensureFactoringAuth() {
+  const { data: { session } } = await factoringSupabase.auth.getSession();
+  if (session) return true;
+  const { error } = await factoringSupabase.auth.signInWithPassword({
+    email: FACTORING_CONFIG.email,
+    password: FACTORING_CONFIG.password,
+  });
+  return !error;
+}
 
 export function IntegrationManager() {
   const [status, setStatus] = useState<"idle" | "loading" | "connected" | "error">("idle");
@@ -72,17 +86,14 @@ export function IntegrationManager() {
   async function checkConnection() {
     setStatus("loading");
     try {
-      // Testa se consegue ler faturas e clientes
+      const authed = await ensureFactoringAuth();
+      if (!authed) { setStatus("error"); return; }
       const [inv, cli] = await Promise.all([
         factoringSupabase.from("invoices").select("id").limit(1),
         factoringSupabase.from("clients").select("id").limit(1)
       ]);
-      
-      if (inv.error || cli.error) {
-        setStatus("error");
-      } else {
-        setStatus("connected");
-      }
+      if (inv.error || cli.error) setStatus("error");
+      else setStatus("connected");
     } catch (err) {
       setStatus("error");
     }
@@ -91,7 +102,12 @@ export function IntegrationManager() {
   async function fetchOperations() {
     setStatus("loading");
     try {
-      // Busca faturas e clientes em paralelo
+      const authed = await ensureFactoringAuth();
+      if (!authed) {
+        toast.error("Falha ao autenticar no MykaCash.");
+        setStatus("error");
+        return;
+      }
       const [invRes, cliRes] = await Promise.all([
         factoringSupabase.from("invoices").select("*").order("operation_date", { ascending: false }),
         factoringSupabase.from("clients").select("id, name")

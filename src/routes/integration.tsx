@@ -21,10 +21,24 @@ export const Route = createFileRoute("/integration")({
 
 const FACTORING_CONFIG = {
   url: "https://wzxrhkjyxpphrclravfz.supabase.co",
-  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6eHJoa2p5eHBwaHJjbHJhdmZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTIxMjUsImV4cCI6MjA5Mjg4ODEyNX0.rowKt4jHw7ufQ_TuijiLh73AHzGe2WcrI9w-cKApmNo"
+  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6eHJoa2p5eHBwaHJjbHJhdmZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTIxMjUsImV4cCI6MjA5Mjg4ODEyNX0.rowKt4jHw7ufQ_TuijiLh73AHzGe2WcrI9w-cKApmNo",
+  email: "integracao@mykacompressores.com.br",
+  password: "Senhadiego2307",
 };
 
-const factoringSupabase = createClient(FACTORING_CONFIG.url, FACTORING_CONFIG.key);
+const factoringSupabase = createClient(FACTORING_CONFIG.url, FACTORING_CONFIG.key, {
+  auth: { storageKey: "myka-factoring-auth", persistSession: true, autoRefreshToken: true },
+});
+
+async function ensureFactoringAuth() {
+  const { data: { session } } = await factoringSupabase.auth.getSession();
+  if (session) return true;
+  const { error } = await factoringSupabase.auth.signInWithPassword({
+    email: FACTORING_CONFIG.email,
+    password: FACTORING_CONFIG.password,
+  });
+  return !error;
+}
 
 function IntegrationPage() {
   const [status, setStatus] = useState<"idle" | "loading" | "connected" | "error">("idle");
@@ -34,7 +48,12 @@ function IntegrationPage() {
   async function checkConnection() {
     setStatus("loading");
     try {
-      // Tenta ler algo básico para testar a conexão e RLS
+      const authed = await ensureFactoringAuth();
+      if (!authed) {
+        setStatus("error");
+        toast.error("Falha ao autenticar no MykaCash");
+        return;
+      }
       const { error } = await factoringSupabase.from("invoices").select("*", { count: "exact", head: true });
       
       if (error) {
@@ -53,6 +72,12 @@ function IntegrationPage() {
 
   async function fetchOperations() {
     setStatus("loading");
+    const authed = await ensureFactoringAuth();
+    if (!authed) {
+      toast.error("Falha ao autenticar no MykaCash");
+      setStatus("error");
+      return;
+    }
     const [invRes, cliRes] = await Promise.all([
       factoringSupabase.from("invoices").select("*").order("created_at", { ascending: false }),
       factoringSupabase.from("clients").select("id, name"),

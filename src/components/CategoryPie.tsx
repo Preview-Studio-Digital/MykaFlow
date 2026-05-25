@@ -162,49 +162,20 @@ export function CategoryPie({
         <div
           className={`flex flex-col pointer-events-auto ${alignTitle === "right" ? "items-start" : "items-end"}`}
         >
-          <div className={`group/comp flex flex-col mb-1.5 ${alignTitle === "right" ? "items-start" : "items-end"}`}>
+          <div className={`flex flex-col mb-1.5 ${alignTitle === "right" ? "items-start" : "items-end"}`}>
             <div
               className="text-2xl font-black font-mono tracking-tighter cursor-help"
               style={{
                 color: accent,
                 textShadow: `0 0 10px ${accent}`,
               }}
+              onMouseEnter={() => prevTotal !== undefined && !selectedCategory && setHoverTotal(true)}
+              onMouseLeave={() => setHoverTotal(false)}
             >
               {fmtCurrency(total)}
             </div>
-
-            {prevTotal !== undefined && !selectedCategory && (
-              <div
-                className={`flex flex-col mb-1 transition-all duration-300 opacity-0 group-hover/comp:opacity-100 ${alignTitle === "right" ? "items-start text-left" : "items-end text-right"}`}
-              >
-                {(() => {
-                  const diff = total - prevTotal;
-                  const perc = prevTotal > 0 ? (diff / prevTotal) * 100 : 100;
-                  const isGrowth = diff > 0;
-                  const color =
-                    type === "income"
-                      ? isGrowth
-                        ? "oklch(0.78 0.16 150)"
-                        : "oklch(0.7 0.2 30)"
-                      : isGrowth
-                        ? "oklch(0.7 0.2 30)"
-                        : "oklch(0.78 0.16 150)";
-
-                  return (
-                    <p
-                      className="text-xs font-bold uppercase tracking-wider leading-tight"
-                      style={{ color }}
-                    >
-                      {isGrowth ? "Aumento" : "Diminuição"} de {Math.abs(perc).toFixed(1)}%
-                      <span className="opacity-50 block text-[10px] tracking-widest mt-0.5">
-                        {comparisonLabel || "EM RELAÇÃO AO MÊS PASSADO"}
-                      </span>
-                    </p>
-                  );
-                })()}
-              </div>
-            )}
           </div>
+
 
           {!selectedCategory && onAddClick && (
             <button

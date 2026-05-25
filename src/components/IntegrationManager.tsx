@@ -86,17 +86,14 @@ export function IntegrationManager() {
   async function checkConnection() {
     setStatus("loading");
     try {
-      // Testa se consegue ler faturas e clientes
+      const authed = await ensureFactoringAuth();
+      if (!authed) { setStatus("error"); return; }
       const [inv, cli] = await Promise.all([
         factoringSupabase.from("invoices").select("id").limit(1),
         factoringSupabase.from("clients").select("id").limit(1)
       ]);
-      
-      if (inv.error || cli.error) {
-        setStatus("error");
-      } else {
-        setStatus("connected");
-      }
+      if (inv.error || cli.error) setStatus("error");
+      else setStatus("connected");
     } catch (err) {
       setStatus("error");
     }
@@ -105,7 +102,12 @@ export function IntegrationManager() {
   async function fetchOperations() {
     setStatus("loading");
     try {
-      // Busca faturas e clientes em paralelo
+      const authed = await ensureFactoringAuth();
+      if (!authed) {
+        toast.error("Falha ao autenticar no MykaCash.");
+        setStatus("error");
+        return;
+      }
       const [invRes, cliRes] = await Promise.all([
         factoringSupabase.from("invoices").select("*").order("operation_date", { ascending: false }),
         factoringSupabase.from("clients").select("id, name")

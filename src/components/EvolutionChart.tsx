@@ -52,15 +52,8 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
             <span className="text-white">Saldo</span>
             <span className="font-mono text-white">{fmtCurrency(saldo)}</span>
           </div>
-          {vencimentoTexts.length > 0 && (
-            <div className="mt-3 text-yellow-400 text-[11px] font-bold bg-yellow-400/10 p-2 rounded-lg border border-yellow-400/20 flex flex-col gap-1.5 max-w-[250px]">
-              <span className="flex items-start gap-1.5 leading-tight">
-                <span className="shrink-0">⚠️</span>
-                <span>{vencimentoTexts.join(" | ")}</span>
-              </span>
-            </div>
-          )}
         </div>
+
       );
     } else {
       // Modo Anual (Receitas e Despesas)

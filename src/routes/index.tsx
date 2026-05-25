@@ -967,7 +967,7 @@ function Dashboard() {
 
                 <div className="space-y-4">
                   <p className="text-muted-foreground text-sm leading-relaxed">
-                    A <strong className="text-white">Receita Média Mensal</strong> é a média aritmética das receitas totais de cada mês <strong className="text-white">já fechado</strong> (anteriores ao mês corrente). Lançamentos da categoria <strong className="text-white">VENCIMENTO ANTECIPAÇÃO</strong> são excluídos para evitar dupla contagem.
+                    A <strong className="text-white">Receita Média Mensal</strong> é a média aritmética das receitas totais de cada mês <strong className="text-white">já fechado</strong> (anteriores ao mês corrente).
                   </p>
 
                   <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">
@@ -1038,7 +1038,7 @@ function Dashboard() {
 
                 <div className="space-y-4">
                   <p className="text-muted-foreground text-sm leading-relaxed">
-                    A <strong className="text-white">Despesa Média Mensal</strong> é a média aritmética das despesas totais de cada mês <strong className="text-white">já fechado</strong> (anteriores ao mês corrente). Lançamentos da categoria <strong className="text-white">VENCIMENTO ANTECIPAÇÃO</strong> são excluídos para evitar dupla contagem.
+                    A <strong className="text-white">Despesa Média Mensal</strong> é a média aritmética das despesas totais de cada mês <strong className="text-white">já fechado</strong> (anteriores ao mês corrente).
                   </p>
 
                   <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">

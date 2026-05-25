@@ -28,7 +28,7 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
     if (isMonthly) {
       const saldo =
         payload.find((p: any) => p.dataKey === "saldo")?.value ?? (payload[0]?.value || 0);
-      const vencimentoTexts = payload[0]?.payload?.vencimentoTexts || [];
+      // Marcação de vencimento removida
       const daysOfWeek = [
         "Domingo",
         "Segunda-feira",
@@ -52,15 +52,8 @@ const CustomTooltip = ({ active, payload, label, isMonthly, year, month }: any) 
             <span className="text-white">Saldo</span>
             <span className="font-mono text-white">{fmtCurrency(saldo)}</span>
           </div>
-          {vencimentoTexts.length > 0 && (
-            <div className="mt-3 text-yellow-400 text-[11px] font-bold bg-yellow-400/10 p-2 rounded-lg border border-yellow-400/20 flex flex-col gap-1.5 max-w-[250px]">
-              <span className="flex items-start gap-1.5 leading-tight">
-                <span className="shrink-0">⚠️</span>
-                <span>{vencimentoTexts.join(" | ")}</span>
-              </span>
-            </div>
-          )}
         </div>
+
       );
     } else {
       // Modo Anual (Receitas e Despesas)
@@ -174,8 +167,6 @@ export function EvolutionChart({
       receitas: 0,
       despesas: 0,
       day: i + 1,
-      isVencimento: false,
-      vencimentoTexts: [] as string[],
     }));
 
     let initialBalance = 0;
@@ -187,13 +178,8 @@ export function EvolutionChart({
         const dayIdx = d.getDate() - 1;
         const amount = Number(t.amount) || 0;
         if (days[dayIdx]) {
-          if (t.category === "VENCIMENTO ANTECIPAÇÃO") {
-            days[dayIdx].isVencimento = true;
-            if (t.description) days[dayIdx].vencimentoTexts.push(t.description);
-          } else {
-            if (t.type === "income") days[dayIdx].receitas += amount;
-            else days[dayIdx].despesas += amount;
-          }
+          if (t.type === "income") days[dayIdx].receitas += amount;
+          else days[dayIdx].despesas += amount;
         }
       }
     }
@@ -522,35 +508,8 @@ export function EvolutionChart({
               }}
             />
 
-            {effectiveViewMode === "monthly" &&
-              chartData.map((d: any, i: number) => {
-                if (d.isVencimento) {
-                  return (
-                    <ReferenceLine
-                      key={`venc-${i}`}
-                      yAxisId="left"
-                      x={d.label}
-                      stroke="#facc15"
-                      strokeWidth={2}
-                      strokeDasharray="3 3"
-                      label={(props: any) => {
-                        return (
-                          <text
-                            x={props.viewBox.x}
-                            y={props.viewBox.y - 10}
-                            fill="#facc15"
-                            fontSize={16}
-                            textAnchor="middle"
-                          >
-                            ⚠️
-                          </text>
-                        );
-                      }}
-                    />
-                  );
-                }
-                return null;
-              })}
+            {/* Marcação de vencimento removida */}
+
 
             <Tooltip
               cursor={false}

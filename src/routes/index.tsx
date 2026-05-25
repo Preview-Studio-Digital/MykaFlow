@@ -904,7 +904,12 @@ function Dashboard() {
                       </div>
 
                       <div className="flex items-center justify-between text-sm py-1.5 border-b border-white/[0.03]">
-                        <span className="text-muted-foreground">2. Número de Funcionários:</span>
+                        <div>
+                          <span className="text-muted-foreground">2. Número de Funcionários Operacionais:</span>
+                          <p className="text-[9px] text-muted-foreground/70 mt-0.5 max-w-[200px]">
+                            Conte apenas funcionários que produzem serviços relativos à atividade da empresa.
+                          </p>
+                        </div>
                         <input
                           type="number"
                           min="1"

@@ -706,11 +706,8 @@ function Dashboard() {
               <p className={`text-[9px] font-black uppercase tracking-wider text-muted-foreground transition-colors ${headerBtnTextHoverClass}`}>
                 Hora Operacional
               </p>
-              <p className="text-xs font-black font-mono text-white mt-0.5">
+              <p className="text-xs font-black font-mono text-white mt-1">
                 {fmtCurrency(horaOperacional)}
-              </p>
-              <p className="text-[9px] text-muted-foreground mt-0.5">
-                {employeesCount} funcionários operacionais
               </p>
             </div>
           </button>

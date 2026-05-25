@@ -881,7 +881,7 @@ function Dashboard() {
 
                 <div className="space-y-4">
                   <p className="text-muted-foreground text-sm leading-relaxed">
-                    A <strong className="text-white">Hora Operacional</strong> define o custo hora-homem real para manter a empresa funcionando. Ela assume o número de <strong className="text-white">funcionários indicados</strong> trabalhando <strong className="text-white">160 horas por mês cada</strong>, com uma <strong className="text-white">redução de 30% na eficiência operacional</strong>.
+                    A <strong className="text-white">Hora Operacional</strong> define o custo hora-homem real para manter a empresa funcionando. Ela assume o número de <strong className="text-white">funcionários operacionais indicados</strong> trabalhando <strong className="text-white">160 horas por mês cada</strong>, com uma <strong className="text-white">redução de 30% na eficiência operacional</strong>.
                   </p>
 
                   <div className="bg-black/40 border border-white/5 rounded-xl p-4 text-center font-mono space-y-2">

@@ -709,6 +709,9 @@ function Dashboard() {
               <p className="text-xs font-black font-mono text-white mt-0.5">
                 {fmtCurrency(horaOperacional)}
               </p>
+              <p className="text-[9px] text-muted-foreground mt-0.5">
+                {employeesCount} funcionários operacionais
+              </p>
             </div>
           </button>
 

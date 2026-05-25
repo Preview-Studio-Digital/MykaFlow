@@ -335,6 +335,63 @@ export function CategoryPie({
             </div>
           )}
 
+          {/* Total Hover Tooltip - Aumento/Diminuição em relação ao período anterior */}
+          {hoverTotal && prevTotal !== undefined && !selectedCategory && activeIndex === null && (() => {
+            const diff = total - prevTotal;
+            const perc = prevTotal > 0 ? (diff / prevTotal) * 100 : (total > 0 ? 100 : 0);
+            const isGrowth = diff > 0;
+            const isGood =
+              type === "income" ? isGrowth : !isGrowth;
+            const color = isGood ? "oklch(0.78 0.16 150)" : "oklch(0.7 0.2 30)";
+            const label = isGrowth
+              ? type === "income" ? "Aumento de Receita" : "Aumento de Despesa"
+              : type === "income" ? "Diminuição de Receita" : "Diminuição de Despesa";
+
+            return (
+              <div
+                className={`absolute bottom-4 z-20 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+                  alignTitle === "right" ? "left-4" : "right-4"
+                }`}
+              >
+                <div
+                  className="glass rounded-xl px-2.5 py-2 border shadow-2xl min-w-[145px]"
+                  style={{
+                    borderColor: `${color}44`,
+                    backgroundColor: "oklch(0.15 0.05 255 / 0.9)",
+                    backdropFilter: "blur(12px)",
+                  }}
+                >
+                  <p
+                    className="text-[9px] uppercase tracking-[0.2em] mb-0.5 font-black opacity-80"
+                    style={{ color }}
+                  >
+                    {label}
+                  </p>
+                  <div className="flex flex-col gap-0">
+                    <p className="text-lg font-bold leading-tight" style={{ color }}>
+                      {isGrowth ? "+" : "-"}{Math.abs(perc).toFixed(1)}%
+                    </p>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <div className="flex items-center gap-1">
+                        <p
+                          className="text-[10px] font-black tracking-wider px-1 py-0.5 rounded bg-white/10 font-mono"
+                          style={{ color }}
+                        >
+                          {diff >= 0 ? "+" : "-"}{fmtCurrency(Math.abs(diff)).replace(/^R\$\s*/, "R$ ")}
+                        </p>
+                      </div>
+                      <span className="text-[8px] uppercase opacity-50 font-bold tracking-wider text-right leading-tight max-w-[110px]">
+                        {comparisonLabel || "EM RELAÇÃO AO MÊS PASSADO"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+
+
           <div className="w-full h-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>

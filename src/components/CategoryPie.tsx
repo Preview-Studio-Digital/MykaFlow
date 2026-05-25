@@ -69,6 +69,7 @@ export function CategoryPie({
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [hoverTotal, setHoverTotal] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

@@ -88,13 +88,38 @@ function IntegrationPage() {
       setStatus("error");
     } else {
       const clientsMap = new Map(cliRes.data?.map((c) => [c.id, c.name]) || []);
-      setExternalData((invRes.data || []).map((inv) => ({
+      const allOps = (invRes.data || []).map((inv) => ({
         ...inv,
         client_name: clientsMap.get(inv.client_id) || "Cliente Desconhecido",
-      })));
+      }));
+
+      // Buscar transações já importadas para filtrar duplicadas
+      const { data: { user } } = await localSupabase.auth.getUser();
+      let existingDescs = new Set<string>();
+      if (user) {
+        const { data: existingTx } = await localSupabase
+          .from("transactions")
+          .select("description")
+          .eq("user_id", user.id)
+          .like("description", "SYNC: NF%");
+        existingDescs = new Set((existingTx || []).map((t) => (t.description || "").trim().toUpperCase()));
+      }
+
+      const newOps = allOps.filter((inv) => {
+        const desc = formatFactoringInvoiceDescription(inv.invoice_number).toUpperCase();
+        return !existingDescs.has(desc);
+      });
+
+      setExternalData(newOps);
       setStatus("connected");
-      if (invRes.data?.length === 0) {
+      const totalCount = allOps.length;
+      const newCount = newOps.length;
+      if (totalCount === 0) {
         toast.info("Nenhuma operação encontrada (ou acesso restrito)");
+      } else if (newCount === 0) {
+        toast.info(`Todas as ${totalCount} operações já foram importadas`);
+      } else {
+        toast.success(`${newCount} nova(s) operação(ões) encontrada(s) (${totalCount - newCount} já importadas)`);
       }
     }
   }

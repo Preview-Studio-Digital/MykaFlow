@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as IntegrationRouteImport } from './routes/integration'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicMykacashAuthRouteImport } from './routes/api/public/mykacash-auth'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -34,18 +35,25 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicMykacashAuthRoute = ApiPublicMykacashAuthRouteImport.update({
+  id: '/api/public/mykacash-auth',
+  path: '/api/public/mykacash-auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/integration': typeof IntegrationRoute
   '/login': typeof LoginRoute
+  '/api/public/mykacash-auth': typeof ApiPublicMykacashAuthRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/integration': typeof IntegrationRoute
   '/login': typeof LoginRoute
+  '/api/public/mykacash-auth': typeof ApiPublicMykacashAuthRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,25 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/integration': typeof IntegrationRoute
   '/login': typeof LoginRoute
+  '/api/public/mykacash-auth': typeof ApiPublicMykacashAuthRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/integration' | '/login'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/integration'
+    | '/login'
+    | '/api/public/mykacash-auth'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/integration' | '/login'
-  id: '__root__' | '/' | '/admin' | '/integration' | '/login'
+  to: '/' | '/admin' | '/integration' | '/login' | '/api/public/mykacash-auth'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/integration'
+    | '/login'
+    | '/api/public/mykacash-auth'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +87,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   IntegrationRoute: typeof IntegrationRoute
   LoginRoute: typeof LoginRoute
+  ApiPublicMykacashAuthRoute: typeof ApiPublicMykacashAuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +120,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/mykacash-auth': {
+      id: '/api/public/mykacash-auth'
+      path: '/api/public/mykacash-auth'
+      fullPath: '/api/public/mykacash-auth'
+      preLoaderRoute: typeof ApiPublicMykacashAuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +135,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   IntegrationRoute: IntegrationRoute,
   LoginRoute: LoginRoute,
+  ApiPublicMykacashAuthRoute: ApiPublicMykacashAuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

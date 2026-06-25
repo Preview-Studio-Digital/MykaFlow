@@ -36,9 +36,91 @@ async function ensureFactoringAuth() {
   return !error;
 }
 
+type Installment = {
+  id: string;
+  value: number;
+  dueDate: string;
+};
+
+type CalcInput = {
+  invoiceValue: number;
+  operationDate: string;
+  monthlyRate: number;
+  installments: Installment[];
+};
+
+const diffDays = (from: string, to: string): number => {
+  const a = new Date(from + "T00:00:00");
+  const b = new Date(to + "T00:00:00");
+  return Math.max(0, Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24)));
+};
+
+const calculateFactoring = (input: CalcInput) => {
+  const r = (input.monthlyRate || 0) / 100;
+  const totalInvoice = input.installments.reduce((s, i) => s + (i.value || 0), 0) || input.invoiceValue;
+  const MIN_EFFECTIVE_PCT = 1.5;
+
+  let sumPV = 0;
+  let sumDaysWeighted = 0;
+  let sumValues = 0;
+  let maxDays = 0;
+
+  const installmentCalcs = input.installments.map((inst) => {
+    const days = inst.dueDate ? diffDays(input.operationDate, inst.dueDate) : 0;
+    const factor = Math.pow(1 + r, days / 30);
+    let pv = (inst.value || 0) / factor;
+    
+    // Piso de taxa efetiva por parcela
+    const naturalCost = (inst.value || 0) - pv;
+    const naturalPct = (inst.value || 0) > 0 ? (naturalCost / (inst.value || 0)) * 100 : 0;
+    if ((inst.value || 0) > 0 && naturalPct < MIN_EFFECTIVE_PCT) {
+      pv = (inst.value || 0) * (1 - MIN_EFFECTIVE_PCT / 100);
+    }
+    
+    sumPV += pv;
+    sumDaysWeighted += days * (inst.value || 0);
+    sumValues += inst.value || 0;
+    if (days > maxDays) maxDays = days;
+    
+    return {
+      id: inst.id,
+      value: inst.value || 0,
+      dueDate: inst.dueDate,
+      days,
+      presentValue: pv,
+    };
+  });
+
+  let netValue = sumPV;
+  let operationCost = totalInvoice - netValue;
+  let effectiveRatePct = totalInvoice > 0 ? (operationCost / totalInvoice) * 100 : 0;
+
+  if (totalInvoice > 0 && effectiveRatePct < MIN_EFFECTIVE_PCT) {
+    operationCost = totalInvoice * (MIN_EFFECTIVE_PCT / 100);
+    netValue = totalInvoice - operationCost;
+    effectiveRatePct = MIN_EFFECTIVE_PCT;
+  }
+
+  return {
+    totalInvoice,
+    netValue,
+    operationCost,
+    effectiveRatePct
+  };
+};
+
+const MONTH_OPTIONS = [
+  { value: "2026-03", label: "Março 2026" },
+  { value: "2026-04", label: "Abril 2026" },
+  { value: "2026-05", label: "Maio 2026" },
+  { value: "2026-06", label: "Junho 2026" },
+];
+
 export function IntegrationManager() {
   const [status, setStatus] = useState<"idle" | "loading" | "connected" | "error">("idle");
+  const [selectedMonth, setSelectedMonth] = useState<string>("2026-03");
   const [externalData, setExternalData] = useState<any[]>([]);
+  const [syncedData, setSyncedData] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -75,6 +157,7 @@ export function IntegrationManager() {
       }
         
       toast.success(`${totalDeleted} operações importadas foram apagadas com sucesso!`);
+      await fetchOperations();
     } catch (err: any) {
       console.error("Erro ao apagar:", err);
       toast.error(`Falha ao apagar: ${err.message}`);
@@ -119,36 +202,98 @@ export function IntegrationManager() {
         return;
       }
 
+      // Buscar transações locais para evitar duplicados e carregar o histórico sincronizado do mês
+      const { data: auth } = await localSupabase.auth.getUser();
+      const uid = auth.user?.id;
+      const existingNfs = new Set<string>();
+      const syncedMap = new Map<string, any>();
+
+      if (uid) {
+        const [yearStr, monthStr] = selectedMonth.split("-");
+        const lastDay = new Date(Number(yearStr), Number(monthStr), 0).getDate();
+        const endDate = `${selectedMonth}-${String(lastDay).padStart(2, "0")}`;
+
+        const { data: existingTx } = await localSupabase
+          .from("transactions")
+          .select("*, financial_subcategories:subcategory_id_v2(name)")
+          .eq("user_id", uid)
+          .gte("occurred_on", `${selectedMonth}-01`)
+          .lte("occurred_on", endDate)
+          .like("description", "%SYNC%");
+        
+        existingTx?.forEach(t => {
+          const desc = t.description || "";
+          const match = desc.match(/NF\s*:?\s*(\w+)/i);
+          if (match) {
+            const nf = match[match.length - 1].trim().toUpperCase();
+            existingNfs.add(nf);
+
+            const existing = syncedMap.get(nf) || {
+              invoice_number: nf,
+              client_name: t.financial_subcategories?.name || "Cliente Desconhecido",
+              gross_value: 0,
+              discount: 0,
+              operation_date: t.occurred_on
+            };
+
+            if (t.type === "income") {
+              existing.gross_value = t.amount;
+            } else {
+              existing.discount = t.amount;
+            }
+
+            syncedMap.set(nf, existing);
+          }
+        });
+      }
+
       const clientsMap = new Map(cliRes.data?.map(c => [c.id, c.name]));
       
-      const enrichedData = (invRes.data || []).map(inv => {
-        const firstInstallment = inv.installments?.[0] || {};
-        const dueDate = firstInstallment.dueDate || "---";
-        const grossValue = inv.invoice_value || 0;
-        
-        // Cálculo básico de valor líquido (exemplo usando a taxa mensal do sistema)
-        // Valor Líquido = Bruto - (Bruto * Taxa Mensal * (Dias / 30))
-        const rate = inv.factoring_monthly_rate || inv.monthly_rate || 0;
-        const start = new Date(inv.operation_date);
-        const end = new Date(dueDate);
-        const diffDays = Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)));
-        const discount = grossValue * (rate / 100) * (diffDays / 30);
-        const netValue = grossValue - discount;
+      const enrichedData = (invRes.data || [])
+        .filter(inv => {
+          // 1. Filtrar pelo mês selecionado
+          if (!inv.operation_date || !inv.operation_date.startsWith(selectedMonth)) {
+            return false;
+          }
+          // 2. Filtrar notas já importadas
+          const nf = String(inv.invoice_number || "").trim().toUpperCase();
+          return !existingNfs.has(nf);
+        })
+        .map(inv => {
+          const installments = Array.isArray(inv.installments) ? inv.installments : [];
+          
+          // Calcular desconto e valor líquido usando juros compostos oficial do MykaCash
+          const calc = calculateFactoring({
+            invoiceValue: Number(inv.invoice_value) || 0,
+            operationDate: inv.operation_date,
+            monthlyRate: Number(inv.monthly_rate) || 0,
+            installments: installments as Installment[]
+          });
 
-        return {
-          ...inv,
-          client_name: clientsMap.get(inv.client_id) || "Cliente Desconhecido",
-          gross_value: grossValue,
-          net_value: netValue,
-          due_date: dueDate,
-          diff_days: diffDays
-        };
-      });
+          const grossValue = calc.totalInvoice;
+          const netValue = calc.netValue;
+          const discount = calc.operationCost;
+
+          const firstInstallment = installments[0] || {};
+          const dueDate = firstInstallment.dueDate || "---";
+
+          return {
+            ...inv,
+            client_name: clientsMap.get(inv.client_id) || "Cliente Desconhecido",
+            gross_value: grossValue,
+            net_value: netValue,
+            discount: discount,
+            due_date: dueDate
+          };
+        });
 
       setExternalData(enrichedData);
+      setSyncedData(Array.from(syncedMap.values()));
       setStatus("connected");
       if (enrichedData.length === 0) {
-        toast.info("Nenhuma fatura encontrada.");
+        toast.info(`Nenhuma nova fatura pendente de importação para o mês ${selectedMonth.split('-')[1]}/${selectedMonth.split('-')[0]}.`);
+      } else {
+        toast.success(`${enrichedData.length} nova(s) fatura(s) carregada(s) para importação.`);
       }
     } catch (err) {
       console.error(err);
@@ -165,10 +310,9 @@ export function IntegrationManager() {
     const { data: { user } } = await localSupabase.auth.getUser();
     if (!user) {
       toast.error("Usuário não autenticado.");
+      setSyncing(false);
       return;
     }
-
-
 
     const { data: catDataInc } = await localSupabase
       .from("financial_categories")
@@ -194,12 +338,52 @@ export function IntegrationManager() {
 
     const subsMap = new Map(currentSubs?.map(s => [s.name.toUpperCase(), s.id]) || []);
 
-    for (const item of externalData) {
+    // Buscar transações locais de última hora para evitar duplicados caso o botão seja clicado rapidamente
+    const { data: existingTx } = await localSupabase
+      .from("transactions")
+      .select("description")
+      .eq("user_id", user.id)
+      .like("description", "%SYNC%");
+    
+    const existingNfs = new Set<string>();
+    existingTx?.forEach(t => {
+      const desc = t.description || "";
+      const match = desc.match(/NF\s*:?\s*(\w+)/i);
+      if (match) {
+        existingNfs.add(match[match.length - 1].trim().toUpperCase());
+      }
+    });
+
+    // Calcular custos individuais arredondados e aplicar ajuste
+    let totalUnroundedCost = 0;
+    const itemsWithAdjustedCost = externalData.map((item) => {
+      totalUnroundedCost += item.discount || 0;
+      return {
+        ...item,
+        adjustedCost: Math.round((item.discount || 0) * 100) / 100,
+        adjustedGross: Math.round((item.gross_value || 0) * 100) / 100
+      };
+    });
+
+    const expectedMonthlyCost = Math.round(totalUnroundedCost * 100) / 100;
+    const sumOfRoundedCosts = itemsWithAdjustedCost.reduce((sum, item) => sum + item.adjustedCost, 0);
+    const roundingDiff = Math.round((expectedMonthlyCost - sumOfRoundedCosts) * 100) / 100;
+
+    if (roundingDiff !== 0 && itemsWithAdjustedCost.length > 0) {
+      const lastIndex = itemsWithAdjustedCost.length - 1;
+      itemsWithAdjustedCost[lastIndex].adjustedCost = Math.round((itemsWithAdjustedCost[lastIndex].adjustedCost + roundingDiff) * 100) / 100;
+    }
+
+    for (const item of itemsWithAdjustedCost) {
       const clientName = formatFactoringClientSubcategory(item.client_name);
       const baseDesc = formatFactoringInvoiceDescription(item.invoice_number);
+      const nf = String(item.invoice_number || "").trim().toUpperCase();
 
-      // REGRA EXPLÍCITA: subcategoria = CLIENTE; descrição = apenas "SYNC: NF <número>".
-      // Nunca inverter estes campos e nunca prefixar o cliente na descrição.
+      if (existingNfs.has(nf)) {
+        skippedCount++;
+        continue;
+      }
+
       // 1. Garantir Subcategoria (CLIENTE)
       let subId = subsMap.get(clientName);
       if (!subId && catDataInc) {
@@ -213,33 +397,7 @@ export function IntegrationManager() {
         }
       }
 
-      // 2. Verificar se já existe (subcategoria/cliente + data + valor + tipo)
-      // Não comparamos a descrição porque importações antigas usavam outro formato
-      // (ex: "CLIENTE - SYNC: NF X") e geravam falsos negativos.
       const occurredOn = item.operation_date || new Date().toISOString().split('T')[0];
-      const grossAmount = item.gross_value || 0;
-      let dupQuery = localSupabase
-        .from("transactions")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("occurred_on", occurredOn)
-        .eq("amount", grossAmount)
-        .eq("type", "income");
-      dupQuery = subId ? dupQuery.eq("subcategory_id_v2", subId) : dupQuery.is("subcategory_id_v2", null);
-      const { data: existing, error: existErr } = await dupQuery.limit(1);
-
-      if (existErr) {
-        console.error("Erro ao checar duplicidade:", existErr);
-        continue;
-      }
-
-      if (existing && existing.length > 0) {
-        skippedCount++;
-        continue;
-      }
-
-
-      const discount = item.gross_value - item.net_value;
 
       // 3. Inserir Receita
       const { error: err1 } = await localSupabase.from("transactions").insert({
@@ -250,8 +408,8 @@ export function IntegrationManager() {
         category_id_v2: catDataInc?.id || null,
         subcategory_id_v2: subId || null,
         description: baseDesc,
-        amount: item.gross_value || 0,
-        occurred_on: item.operation_date || new Date().toISOString().split('T')[0],
+        amount: item.adjustedGross || 0,
+        occurred_on: occurredOn,
       });
 
       if (err1) {
@@ -269,28 +427,28 @@ export function IntegrationManager() {
         category_id_v2: catDataExp?.id || null,
         subcategory_id_v2: subId || null,
         description: baseDesc,
-        amount: discount || 0,
-        occurred_on: item.operation_date || new Date().toISOString().split('T')[0],
+        amount: item.adjustedCost || 0,
+        occurred_on: occurredOn,
       });
 
       if (err2) {
         console.error("Erro ao inserir despesa:", err2);
         toast.error(`Erro na despesa ${item.invoice_number || "S/N"}: ${err2.message}`);
-        // Even if expense fails, we already inserted income. 
       }
 
       successCount++;
+      existingNfs.add(nf); // Evitar duplicação se houver itens duplicados no lote
     }
 
     setSyncing(false);
     if (successCount > 0) {
-      toast.success(`${successCount} operações novas sincronizadas! ${skippedCount > 0 ? `(${skippedCount} já existiam e foram ignoradas)` : ''}`);
+      toast.success(`${successCount} faturas sincronizadas com sucesso! ${skippedCount > 0 ? `(${skippedCount} já existiam e foram ignoradas)` : ''}`);
     } else if (skippedCount > 0) {
-      toast.info(`Nenhuma operação nova. ${skippedCount} operações já haviam sido importadas.`);
+      toast.info(`Nenhuma operação nova. ${skippedCount} já haviam sido importadas.`);
     } else {
-      toast.info("Nenhuma operação encontrada para importar.");
+      toast.info("Nenhuma fatura encontrada para importar.");
     }
-    setExternalData([]);
+    await fetchOperations();
   }
 
   useEffect(() => {
@@ -330,28 +488,27 @@ export function IntegrationManager() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1 space-y-6">
-          <div className="glass rounded-3xl p-8 border-2 border-red-500/20 bg-red-500/5 space-y-6">
-            <div className="flex items-center gap-3 text-red-400">
-              <ShieldAlert className="h-6 w-6" />
-              <h2 className="font-black uppercase tracking-widest text-sm text-white">Segurança RLS</h2>
-            </div>
-            <p className="text-[10px] leading-relaxed text-muted-foreground font-bold uppercase">
-              Rode este comando no SQL Editor do MykaCash:
-            </p>
-            <div className="bg-black/40 p-4 rounded-xl border border-white/10 font-mono text-[9px] text-accent lowercase">
-              ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;<br/>
-              ALTER TABLE clients ENABLE ROW LEVEL SECURITY;<br/>
-              CREATE POLICY "leitura_externa" ON invoices FOR SELECT USING (true);<br/>
-              CREATE POLICY "leitura_externa" ON clients FOR SELECT USING (true);<br/>
-              GRANT SELECT ON TABLE invoices TO anon;<br/>
-              GRANT SELECT ON TABLE clients TO anon;
-            </div>
+          <div className="glass rounded-3xl p-6 border-2 border-white/5 space-y-3">
+            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">
+              Mês de Referência
+            </label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full py-4 px-4 rounded-2xl bg-black/40 border-2 border-white/10 text-white font-bold text-sm focus:outline-none focus:border-accent/40 transition-all cursor-pointer"
+            >
+              {MONTH_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-neutral-900 text-white">
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <button 
             disabled={status !== "connected"}
             onClick={fetchOperations}
-            className="w-full py-6 rounded-2xl bg-white/5 border-2 border-white/10 hover:border-accent/40 hover:bg-accent/5 transition-all text-sm font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 disabled:opacity-30"
+            className="w-full py-6 rounded-2xl bg-white/5 border-2 border-white/10 hover:border-accent/40 hover:bg-accent/5 transition-all text-sm font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 disabled:opacity-30 cursor-pointer"
           >
             BUSCAR OPERAÇÕES <ChevronRight className="h-5 w-5" />
           </button>
@@ -440,6 +597,57 @@ export function IntegrationManager() {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Operações Já Sincronizadas */}
+          <div className="glass rounded-3xl border-2 border-white/5 overflow-hidden min-h-[300px] flex flex-col">
+            <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+              <h2 className="text-sm font-black uppercase tracking-widest flex items-center gap-3 text-emerald-400">
+                <CheckCircle2 className="h-5 w-5" /> Já Sincronizadas (MykaFlow)
+              </h2>
+              <span className="text-[10px] font-black bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/30">
+                {syncedData.length} REGISTROS
+              </span>
+            </div>
+
+            <div className="flex-1 overflow-auto p-4">
+              {syncedData.length > 0 ? (
+                <table className="w-full">
+                  <thead className="text-[10px] font-black text-muted-foreground uppercase border-b border-white/5">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Data Op.</th>
+                      <th className="px-4 py-3 text-left">Cliente / NF</th>
+                      <th className="px-4 py-3 text-right">Bruto</th>
+                      <th className="px-4 py-3 text-right">Custo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {syncedData.map((tx, i) => (
+                      <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
+                        <td className="px-4 py-4 text-[10px] font-bold text-white">
+                          {new Date(tx.operation_date + "T00:00:00").toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="px-4 py-4 text-xs font-black uppercase group-hover:text-emerald-400 transition-colors">
+                          <div className="truncate max-w-[150px]">{tx.client_name}</div>
+                          <div className="text-[9px] text-muted-foreground opacity-50">NF: {tx.invoice_number}</div>
+                        </td>
+                        <td className="px-4 py-4 text-[10px] font-bold text-right text-emerald-400">
+                          {Number(tx.gross_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </td>
+                        <td className="px-4 py-4 text-sm font-black text-right text-destructive tracking-tighter">
+                          - {Number(tx.discount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-30 py-16">
+                  <CheckCircle2 className="h-12 w-12" />
+                  <p className="text-xs font-black uppercase tracking-[0.2em]">Nenhuma operação sincronizada neste mês</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

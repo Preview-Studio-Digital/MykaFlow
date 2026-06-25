@@ -68,15 +68,45 @@ export function TransactionList({
   });
 
   const sortedRows = [...filteredRows].sort((a, b) => {
-    if (!sortConfig) return 0;
+    if (!sortConfig) {
+      // Ordenação padrão:
+      // 1. data (ocorrido em) decrescente (mais recente primeiro)
+      // 2. descrição crescente (agrupa descrições idênticas na mesma data)
+      // 3. tipo decrescente (coloca receita antes de despesa, pois 'income' > 'expense' alfabeticamente)
+      const dateA = new Date(a.occurred_on + "T00:00:00").getTime();
+      const dateB = new Date(b.occurred_on + "T00:00:00").getTime();
+
+      if (dateA !== dateB) {
+        return dateB - dateA;
+      }
+
+      const descA = (a.description || "").trim().toUpperCase();
+      const descB = (b.description || "").trim().toUpperCase();
+
+      if (descA !== descB) {
+        return descA.localeCompare(descB);
+      }
+
+      return b.type.localeCompare(a.type);
+    }
     
     const { key, direction } = sortConfig;
     let valA: any = a[key as keyof TxRow];
     let valB: any = b[key as keyof TxRow];
 
     if (key === "date") {
-      valA = new Date(a.occurred_on + "T00:00:00").getTime();
-      valB = new Date(b.occurred_on + "T00:00:00").getTime();
+      const timeA = new Date(a.occurred_on + "T00:00:00").getTime();
+      const timeB = new Date(b.occurred_on + "T00:00:00").getTime();
+      if (timeA !== timeB) {
+        return direction === "asc" ? timeA - timeB : timeB - timeA;
+      }
+      // Se a data for igual, ordena por descrição e depois coloca receita acima de despesa
+      const descA = (a.description || "").trim().toUpperCase();
+      const descB = (b.description || "").trim().toUpperCase();
+      if (descA !== descB) {
+        return descA.localeCompare(descB);
+      }
+      return b.type.localeCompare(a.type);
     } else if (key === "sub") {
       valA = getSubcategoryName(a);
       valB = getSubcategoryName(b);
@@ -93,6 +123,12 @@ export function TransactionList({
 
     if (valA < valB) return direction === "asc" ? -1 : 1;
     if (valA > valB) return direction === "asc" ? 1 : -1;
+    
+    // Fallback para valores iguais:
+    if (key === "desc" || key === "sub") {
+      return b.type.localeCompare(a.type); // Receita acima de despesa
+    }
+    
     return 0;
   });
 

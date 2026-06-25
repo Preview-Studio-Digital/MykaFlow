@@ -1258,8 +1258,8 @@ function Dashboard() {
           allProfiles={profiles}
           title={
             dashboardMode === "annual"
-              ? `Lançamentos de ${year}`
-              : `Lançamentos de ${MONTHS_PT[month]}`
+              ? `Lançamentos de ${year} (Agrupados)`
+              : `Lançamentos de ${MONTHS_PT[month]} (Agrupados)`
           }
         />
       </section>

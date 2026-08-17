@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { TransactionList, type TxRow } from "@/components/TransactionList";
@@ -44,6 +44,7 @@ function Dashboard() {
   const [month, setMonth] = useState(new Date().getMonth());
   const [aiAnalyses, setAiAnalyses] = useState<Record<string, { text: string; hash: string }>>({});
   const [isGeneratingAi, setIsGeneratingAi] = useState<Record<string, boolean>>({});
+  const processingAiRef = useRef<Set<string>>(new Set()); // controla quais hashes já estão sendo processados
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addType, setAddType] = useState<"income" | "expense">("expense");
@@ -246,6 +247,11 @@ function Dashboard() {
     const prevYear = prevMonthDate.getFullYear();
     const prevMonth = prevMonthDate.getMonth();
 
+    // Se o mês selecionado é o mês atual, limitar a comparação ao mesmo número de dias
+    const today = new Date();
+    const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
+    const currentDay = today.getDate(); // ex: 20
+
     const prevGroups: { [key: string]: number } = {};
     let totalIncomePrev = 0;
     let totalExpensePrev = 0;
@@ -253,6 +259,8 @@ function Dashboard() {
       if (!r.occurred_on) return;
       const d = new Date(r.occurred_on + "T00:00:00");
       if (d.getFullYear() === prevYear && d.getMonth() === prevMonth) {
+        // Se é mês atual, só considera dias do mês anterior até o mesmo dia de hoje
+        if (isCurrentMonth && d.getDate() > currentDay) return;
         const key = `${r.type}-${r.category.toUpperCase()}`;
         if (!prevGroups[key]) prevGroups[key] = 0;
         prevGroups[key] += Number(r.amount);
@@ -327,6 +335,8 @@ function Dashboard() {
             description: isAntecipacaoIncome || isAntecipacaoExpense ? undefined : (current.description || undefined),
             isPositive,
             analysis,
+            isCurrentMonth,
+            currentDay,
           });
         }
       }
@@ -336,22 +346,43 @@ function Dashboard() {
   }, [rows, month, year]);
 
   useEffect(() => {
+    // Limpar entradas de erro do cache do localStorage automaticamente
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('ai-')) {
+        const val = localStorage.getItem(key) || '';
+        if (val.includes('Não foi possível') || val.includes('Chave de API')) {
+          localStorage.removeItem(key);
+        }
+      }
+    }
+
     async function processAiAlerts() {
-      if (!import.meta.env.VITE_GEMINI_API_KEY) return;
+      if (!import.meta.env.VITE_GEMINI_API_KEY) {
+        console.warn('[IA] VITE_GEMINI_API_KEY não encontrada no ambiente.');
+        return;
+      }
+      console.log('[IA] Iniciando análises para', monthAlerts.length, 'alertas');
       
       const { generateAlertAnalysis } = await import("@/lib/ai-analysis");
       
       for (const alert of monthAlerts) {
-        const hash = `ai-v2-${alert.category}-${alert.type}-${alert.newAmount}-${alert.oldAmount}`;
+        const hash = `ai-v3-${alert.category}-${alert.type}-${Math.round(alert.newAmount)}-${Math.round(alert.oldAmount)}`;
         
-        if (aiAnalyses[alert.id] && aiAnalyses[alert.id].hash === hash) continue;
+        if (processingAiRef.current.has(hash)) {
+          console.log('[IA] Já processando:', alert.category);
+          continue;
+        }
+        processingAiRef.current.add(hash);
 
         const cached = localStorage.getItem(hash);
         if (cached) {
+          console.log('[IA] Cache encontrado para:', alert.category);
           setAiAnalyses(prev => ({ ...prev, [alert.id]: { text: cached, hash } }));
           continue;
         }
 
+        console.log('[IA] Chamando Gemini para:', alert.category);
         setIsGeneratingAi(prev => ({ ...prev, [alert.id]: true }));
         try {
           const text = await generateAlertAnalysis(
@@ -359,13 +390,20 @@ function Dashboard() {
             alert.type,
             alert.newAmount,
             alert.oldAmount,
-            alert.percentChange
+            alert.percentChange,
+            alert.isCurrentMonth ? alert.currentDay : undefined
           );
+          console.log('[IA] Resposta para', alert.category, ':', text);
           
-          if (!text.includes("Não foi possível")) {
+          if (!text.includes('Não foi possível')) {
             localStorage.setItem(hash, text);
+          } else {
+            processingAiRef.current.delete(hash);
           }
           setAiAnalyses(prev => ({ ...prev, [alert.id]: { text, hash } }));
+        } catch (err) {
+          console.error('[IA] Erro ao gerar análise para', alert.category, ':', err);
+          processingAiRef.current.delete(hash);
         } finally {
           setIsGeneratingAi(prev => ({ ...prev, [alert.id]: false }));
         }
@@ -373,7 +411,7 @@ function Dashboard() {
     }
     
     processAiAlerts();
-  }, [monthAlerts, aiAnalyses]);
+  }, [monthAlerts]);
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "transactions">("dashboard");
 

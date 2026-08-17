@@ -7,7 +7,8 @@ export async function generateAlertAnalysis(
   type: string, 
   currentAmount: number, 
   prevAmount: number,
-  percentDiff: number
+  percentDiff: number,
+  currentDay?: number  // Se informado, a comparação é proporcional (mesmo nº de dias do mês passado)
 ): Promise<string> {
   if (!API_KEY) {
     return "Chave de API do Gemini não configurada. Configure VITE_GEMINI_API_KEY no arquivo .env.";
@@ -31,6 +32,10 @@ export async function generateAlertAnalysis(
        specialContext = "Para despesas em geral, aumento é ruim (a menos que seja justificado por investimento) e queda é boa.";
     }
 
+    const periodContext = currentDay
+      ? `- Período comparado: dias 1 a ${currentDay} do mês atual vs. dias 1 a ${currentDay} do mês passado (comparação proporcional, não mês cheio)`
+      : `- Período comparado: mês completo vs. mês anterior completo`;
+
     const prompt = `Você é um Diretor Financeiro (CFO) experiente, analítico e muito direto.
 Sua tarefa é analisar a seguinte variação no fluxo de caixa da empresa e dar um alerta/conselho executivo.
 
@@ -39,6 +44,7 @@ DADOS:
 - Valor mês passado: R$ ${prevAmount.toFixed(2)}
 - Valor mês atual: R$ ${currentAmount.toFixed(2)}
 - Variação: ${direction} ${Math.abs(percentDiff).toFixed(1)}%
+- ${periodContext}
 
 REGRAS DE NEGÓCIO IMPORTANTES: 
 ${specialContext}

@@ -1,10 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminPanel } from "@/components/AdminPanel";
-import { listUsers, adminUpdateRole, adminDeleteUser, adminUpdateName } from "@/lib/admin.functions";
 import {
   ShieldCheck,
   ChevronLeft,
@@ -206,9 +204,6 @@ function UserList({
   loading: boolean;
   onRefresh: () => void;
 }) {
-  const delUser = useServerFn(adminDeleteUser);
-  const updateRole = useServerFn(adminUpdateRole);
-  const updateName = useServerFn(adminUpdateName);
   const { user: currentUser } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -217,12 +212,14 @@ function UserList({
     setBusy(targetUserId);
     try {
       const newRole = currentRole === "admin" ? "user" : "admin";
-      await updateRole({ data: { targetUserId, role: newRole } });
+      const { error } = await supabase
+        .from("user_roles")
+        .upsert({ user_id: targetUserId, role: newRole }, { onConflict: "user_id" });
+      if (error) throw error;
       toast.success(`Cargo alterado para ${newRole.toUpperCase()}`);
       onRefresh();
     } catch (err: any) {
-      const msg = err instanceof Response ? await err.text() : err.message || "Erro desconhecido";
-      toast.error(`Erro: ${msg}`);
+      toast.error(`Erro: ${err.message || "Erro desconhecido"}`);
     } finally {
       setBusy(null);
     }
@@ -233,12 +230,15 @@ function UserList({
     if (!newName || newName === currentName) return;
     setBusy(targetUserId);
     try {
-      await updateName({ data: { targetUserId, name: newName.trim() } });
+      const { error } = await supabase
+        .from("profiles")
+        .update({ display_name: newName.trim().toUpperCase() })
+        .eq("id", targetUserId);
+      if (error) throw error;
       toast.success("Nome atualizado!");
       onRefresh();
     } catch (err: any) {
-      const msg = err instanceof Response ? await err.text() : err.message || "Erro desconhecido";
-      toast.error(`Erro: ${msg}`);
+      toast.error(`Erro: ${err.message || "Erro desconhecido"}`);
     } finally {
       setBusy(null);
     }
@@ -248,12 +248,13 @@ function UserList({
     if (!confirm(`Tem certeza que deseja EXCLUIR DEFINITIVAMENTE o usuário ${userName.toUpperCase()}?`)) return;
     setBusy(targetUserId);
     try {
-      await delUser({ data: { targetUserId } });
+      const { error } = await supabase.from("profiles").delete().eq("id", targetUserId);
+      if (error) throw error;
+      await supabase.from("user_roles").delete().eq("user_id", targetUserId);
       toast.success(`Usuário ${userName.toUpperCase()} excluído com sucesso.`);
       onRefresh();
     } catch (err: any) {
-      const msg = err instanceof Response ? await err.text() : err.message || "Erro desconhecido";
-      toast.error(`Erro ao excluir: ${msg}`);
+      toast.error(`Erro ao excluir: ${err.message || "Erro desconhecido"}`);
     } finally {
       setBusy(null);
     }

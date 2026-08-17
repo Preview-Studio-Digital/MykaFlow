@@ -4,27 +4,26 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
-  HeadContent,
-  Scripts,
 } from "@tanstack/react-router";
-
-import appCss from "../styles.css?url";
+import { AuthProvider } from "@/lib/auth-context";
+import { Toaster } from "@/components/ui/sonner";
+import { useEffect, useRef } from "react";
 
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Página não encontrada</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          A página que você está procurando não existe ou foi movida.
         </p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            Voltar ao Início
           </Link>
         </div>
       </div>
@@ -40,10 +39,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+          Falha ao carregar a página
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          Ocorreu um erro inesperado. Tente recarregar ou voltar ao início.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -53,92 +52,19 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Try again
+            Tentar novamente
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            Go home
+            Voltar ao Início
           </a>
         </div>
       </div>
     </div>
   );
 }
-
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=1280" },
-      { title: "MykaFlow" },
-      { name: "description", content: "Sistema de controle de receitas e despesas." },
-      { name: "author", content: "MykaFlow" },
-      { property: "og:title", content: "MykaFlow" },
-      {
-        property: "og:description",
-        content: "MykaFlow: sistema de controle de receitas e despesas.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "MykaFlow" },
-      {
-        name: "twitter:description",
-        content: "MykaFlow: sistema de controle de receitas e despesas.",
-      },
-      {
-        property: "og:image",
-        content:
-          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/816e970f-80ec-4455-8ab2-2d003c0edc92",
-      },
-      {
-        name: "twitter:image",
-        content:
-          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/816e970f-80ec-4455-8ab2-2d003c0edc92",
-      },
-      { property: "og:description", content: "Sistema de controle de receitas e despesas." },
-      { name: "twitter:description", content: "Sistema de controle de receitas e despesas." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/009f4a99-c795-4399-a744-333451e54b55" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/009f4a99-c795-4399-a744-333451e54b55" },
-    ],
-    links: [
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap",
-      },
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
-  shellComponent: RootShell,
-  component: RootComponent,
-  notFoundComponent: NotFoundComponent,
-  errorComponent: ErrorComponent,
-});
-
-function RootShell({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  );
-}
-
-import { AuthProvider } from "@/lib/auth-context";
-import { Toaster } from "@/components/ui/sonner";
-import { useEffect, useRef } from "react";
 
 function ScrollDirectionListener() {
   const lastScrollY = useRef(0);
@@ -147,24 +73,24 @@ function ScrollDirectionListener() {
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      
+
       if (currentScrollY > lastScrollY.current) {
-        document.documentElement.setAttribute('data-scroll-dir', 'down');
+        document.documentElement.setAttribute("data-scroll-dir", "down");
       } else if (currentScrollY < lastScrollY.current) {
-        document.documentElement.setAttribute('data-scroll-dir', 'up');
+        document.documentElement.setAttribute("data-scroll-dir", "up");
       }
       lastScrollY.current = currentScrollY;
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
-        document.documentElement.setAttribute('data-scroll-dir', 'static');
+        document.documentElement.setAttribute("data-scroll-dir", "static");
       }, 200);
     };
 
-    document.documentElement.setAttribute('data-scroll-dir', 'static');
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    document.documentElement.setAttribute("data-scroll-dir", "static");
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
-      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener("scroll", handleScroll);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
@@ -185,3 +111,9 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
+
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  component: RootComponent,
+  notFoundComponent: NotFoundComponent,
+  errorComponent: ErrorComponent,
+});

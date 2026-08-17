@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
-import { useServerFn } from "@tanstack/react-start";
-import { forceCreateUser } from "@/lib/user.control";
-import { promoteToAdmin } from "@/lib/admin.functions";
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { ShieldCheck, Copy, RefreshCw, UserPlus, ShieldAlert, Users, Mail } from "lucide-react";
+import { ShieldCheck, RefreshCw, ShieldAlert } from "lucide-react";
 
 function genPassword(len = 14) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
@@ -18,9 +16,6 @@ function genPassword(len = 14) {
 export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
   const { user, role, fetchRole } = useAuth();
   const isAdmin = role === "admin";
-  const create = useServerFn(forceCreateUser) as any;
-  const promote = useServerFn(promoteToAdmin);
-  // Removendo listUsers daqui pois já temos a lista principal no AdminPage
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -29,13 +24,20 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
   const [lastCreated, setLastCreated] = useState<{ email: string; password: string } | null>(null);
 
   async function handlePromote() {
+    if (!user) return;
     setBusy(true);
     try {
-      await promote();
-      toast.success("Agora você é ADM! Reiniciando...");
+      const { error } = await supabase
+        .from("user_roles")
+        .upsert({ user_id: user.id, role: "admin" }, { onConflict: "user_id" });
+
+      if (error) throw error;
+
+      toast.success("Agora você é ADM! Atualizando...");
+      await fetchRole();
       setTimeout(() => window.location.reload(), 1500);
-    } catch (err) {
-      toast.error("Erro ao promover");
+    } catch (err: any) {
+      toast.error(`Erro ao promover: ${err.message || "Falha"}`);
     } finally {
       setBusy(false);
     }
@@ -45,22 +47,43 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
     e.preventDefault();
     setBusy(true);
     try {
-      // Corrigindo o envio: enviando os dados diretamente, sem o invólucro { data: ... }
-      const res = await create({ email, password, displayName: name });
-      toast.success(`[V7] RESPOSTA: ${JSON.stringify(res)}`);
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { display_name: name },
+        },
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        await supabase.from("profiles").upsert({
+          id: authData.user.id,
+          display_name: name.toUpperCase(),
+          email: email,
+        });
+
+        await supabase.from("user_roles").upsert(
+          {
+            user_id: authData.user.id,
+            role: "user",
+          },
+          { onConflict: "user_id" },
+        );
+      }
+
+      toast.success("Usuário criado com sucesso!");
       setLastCreated({ email, password });
       setEmail("");
       setName("");
       setPassword(genPassword());
       if (onSuccess) {
-        // Pequeno delay para garantir consistência no Supabase antes do refresh
         setTimeout(() => onSuccess(), 500);
       }
     } catch (err: any) {
       console.error("Erro ao criar:", err);
-      // Tenta extrair a mensagem do erro se for um Response
-      const msg = err instanceof Response ? await err.text() : err.message || "Falha na conexão";
-      toast.error(`Erro ao criar usuário: ${msg}`);
+      toast.error(`Erro ao criar usuário: ${err.message || "Falha na conexão"}`);
     } finally {
       setBusy(false);
     }
@@ -74,7 +97,13 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
             <ShieldCheck className="h-5 w-5" /> Painel ADM
           </div>
           <span
-            className={`text-[10px] px-2 py-0.5 rounded-full border ${isAdmin ? "border-accent text-accent" : role ? "border-red-500 text-red-500" : "border-white/20 text-muted-foreground"}`}
+            className={`text-[10px] px-2 py-0.5 rounded-full border ${
+              isAdmin
+                ? "border-accent text-accent"
+                : role
+                  ? "border-red-500 text-red-500"
+                  : "border-white/20 text-muted-foreground"
+            }`}
           >
             {role?.toUpperCase() || "CARREGANDO..."}
           </span>
@@ -99,8 +128,7 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
           </div>
         )}
 
-        {/* DIAGNÓSTICO: Forçando o formulário a ficar ativo */}
-        <form onSubmit={submit} className={`space-y-3`}>
+        <form onSubmit={submit} className="space-y-3">
           <input
             required
             placeholder="Nome"

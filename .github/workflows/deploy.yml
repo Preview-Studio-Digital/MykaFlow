@@ -33,13 +33,12 @@ jobs:
 
       - name: Build project
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://jjypxgsfqbpoiwhjaovo.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqeXB4Z3NmcWJwb2l3aGphb3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNDM5NTAsImV4cCI6MjA5MzkxOTk1MH0.nGTeFuZ6F6imqiQjUuv4hDw4uk4Dq1seFNHO20KTpaU' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqeXB4Z3NmcWJwb2l3aGphb3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNDM5NTAsImV4cCI6MjA5MzkxOTk1MH0.nGTeFuZ6F6imqiQjUuv4hDw4uk4Dq1seFNHO20KTpaU' }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'jjypxgsfqbpoiwhjaovo' }}
         run: |
           npm run build
-          # Garante que rotas SPA funcionem no GitHub Pages ao recarregar a página
           cp dist/index.html dist/404.html
 
       - name: Upload GitHub Pages artifact

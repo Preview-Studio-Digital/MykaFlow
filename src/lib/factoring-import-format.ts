@@ -3,16 +3,17 @@ export const FACTORING_IMPORT_DESCRIPTION_PREFIX = "SYNC: NF";
 /**
  * Regra explícita da sincronização de antecipação:
  * - subcategoria = nome do cliente
- * - descrição = somente "SYNC: NF <número da nota>"
+ * - descrição = "SYNC: NF <número da nota>" ou "SYNC: NF <número da nota> (OP. ADICIONAL)"
  */
 export function formatFactoringClientSubcategory(clientName: unknown) {
   const normalized = String(clientName || "CLIENTE DESCONHECIDO").trim().toUpperCase();
   return normalized || "CLIENTE DESCONHECIDO";
 }
 
-export function formatFactoringInvoiceDescription(invoiceNumber: unknown) {
+export function formatFactoringInvoiceDescription(invoiceNumber: unknown, isAdditional?: boolean) {
   const normalized = String(invoiceNumber || "S/N").trim().toUpperCase();
-  return `${FACTORING_IMPORT_DESCRIPTION_PREFIX} ${normalized || "S/N"}`;
+  const suffix = isAdditional ? " (OP. ADICIONAL)" : "";
+  return `${FACTORING_IMPORT_DESCRIPTION_PREFIX} ${normalized || "S/N"}${suffix}`;
 }
 
 export function stripLegacyClientFromFactoringDescription(description: string | null | undefined, subcategoryName?: string | null) {

@@ -424,7 +424,21 @@ export function EvolutionChart({
 
       <div className="h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+          <ComposedChart
+            data={chartData}
+            margin={{ top: 10, right: 0, left: 0, bottom: 0 }}
+            onClick={(e: any) => {
+              if (effectiveViewMode === "annual" && e && e.activePayload && e.activePayload.length > 0) {
+                const clickedIdx = e.activePayload[0].payload.idx;
+                if (typeof clickedIdx === "number") {
+                  onMonthChange?.(clickedIdx);
+                  if (onDashboardModeChange) {
+                    onDashboardModeChange("monthly");
+                  }
+                }
+              }
+            }}
+          >
             <defs>
               <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="oklch(0.8 0.16 150)" stopOpacity={0.6} />

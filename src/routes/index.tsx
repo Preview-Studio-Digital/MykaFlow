@@ -613,10 +613,6 @@ function Dashboard() {
 
   function shiftMonth(delta: number) {
     const next = getNextPeriod(month, year, delta);
-    const targetDate = new Date(next.y, next.m, 1);
-    const minBound = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    const maxBound = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
-    if (targetDate < minBound || targetDate > maxBound) return;
     setMonth(next.m);
     setYear(next.y);
   }
@@ -627,17 +623,8 @@ function Dashboard() {
     setYear(next.y);
   }
 
-  const canShiftPrev = useMemo(() => {
-    const prev = getNextPeriod(month, year, dashboardMode === "annual" ? -12 : -1);
-    const minB = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    return new Date(prev.y, prev.m, 1) >= minB;
-  }, [month, year, dashboardMode, minDate]);
-
-  const canShiftNext = useMemo(() => {
-    const next = getNextPeriod(month, year, dashboardMode === "annual" ? 12 : 1);
-    const maxB = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
-    return new Date(next.y, next.m, 1) <= maxB;
-  }, [month, year, dashboardMode, maxDate]);
+  const canShiftPrev = true;
+  const canShiftNext = true;
 
   if (loading || !user) {
     return (

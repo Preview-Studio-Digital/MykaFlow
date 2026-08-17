@@ -109,16 +109,48 @@ const calculateFactoring = (input: CalcInput) => {
   };
 };
 
-const MONTH_OPTIONS = [
-  { value: "2026-03", label: "Março 2026" },
-  { value: "2026-04", label: "Abril 2026" },
-  { value: "2026-05", label: "Maio 2026" },
-  { value: "2026-06", label: "Junho 2026" },
-];
+import { MONTHS_PT } from "@/lib/finance-constants";
+
+const generateMonthOptions = () => {
+  const options: { value: string; label: string }[] = [];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0 a 11
+
+  // Inclui meses a partir do ano anterior até o mês atual
+  for (let y = currentYear - 1; y <= currentYear; y++) {
+    const maxMonth = y === currentYear ? currentMonth : 11;
+    for (let m = 0; m <= maxMonth; m++) {
+      const monthNum = String(m + 1).padStart(2, "0");
+      const value = `${y}-${monthNum}`;
+      const label = `${MONTHS_PT[m]} ${y}`;
+      options.push({ value, label });
+    }
+  }
+  return options;
+};
+
+const MONTH_OPTIONS = generateMonthOptions();
+
+const getDefaultMonth = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+
+function getFactoringEffectiveDate(inv: any): string {
+  if (inv.is_additional) {
+    const settled = Array.isArray(inv.settled_installments) && inv.settled_installments[0];
+    const settledDate = settled?.date || (settled?.settled_at ? String(settled.settled_at).split("T")[0] : null);
+    const inst = Array.isArray(inv.installments) && inv.installments[0];
+    const dueDate = inst?.dueDate;
+    return settledDate || dueDate || inv.operation_date;
+  }
+  return inv.operation_date;
+}
 
 export function IntegrationManager() {
   const [status, setStatus] = useState<"idle" | "loading" | "connected" | "error">("idle");
-  const [selectedMonth, setSelectedMonth] = useState<string>("2026-03");
+  const [selectedMonth, setSelectedMonth] = useState<string>(getDefaultMonth);
   const [externalData, setExternalData] = useState<any[]>([]);
   const [syncedData, setSyncedData] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -205,7 +237,7 @@ export function IntegrationManager() {
       // Buscar transações locais para evitar duplicados e carregar o histórico sincronizado do mês
       const { data: auth } = await localSupabase.auth.getUser();
       const uid = auth.user?.id;
-      const existingNfs = new Set<string>();
+      const existingOpKeys = new Set<string>();
       const syncedMap = new Map<string, any>();
 
       if (uid) {
@@ -223,13 +255,16 @@ export function IntegrationManager() {
         
         existingTx?.forEach(t => {
           const desc = t.description || "";
+          const isAdd = desc.toUpperCase().includes("ADICIONAL");
           const match = desc.match(/NF\s*:?\s*(\w+)/i);
           if (match) {
             const nf = match[match.length - 1].trim().toUpperCase();
-            existingNfs.add(nf);
+            const opKey = `${nf}_${t.occurred_on}_${isAdd ? 'ADD' : 'MAIN'}`;
+            existingOpKeys.add(opKey);
 
-            const existing = syncedMap.get(nf) || {
+            const existing = syncedMap.get(opKey) || {
               invoice_number: nf,
+              is_additional: isAdd,
               client_name: t.financial_subcategories?.name || "Cliente Desconhecido",
               gross_value: 0,
               discount: 0,
@@ -242,7 +277,7 @@ export function IntegrationManager() {
               existing.discount = t.amount;
             }
 
-            syncedMap.set(nf, existing);
+            syncedMap.set(opKey, existing);
           }
         });
       }
@@ -251,16 +286,19 @@ export function IntegrationManager() {
       
       const enrichedData = (invRes.data || [])
         .filter(inv => {
-          // 1. Filtrar pelo mês selecionado
-          if (!inv.operation_date || !inv.operation_date.startsWith(selectedMonth)) {
+          // 1. Filtrar pelo mês da competência do caixa (para operações adicionais, usa data de liquidação/vencimento)
+          const effectiveDate = getFactoringEffectiveDate(inv);
+          if (!effectiveDate || !effectiveDate.startsWith(selectedMonth)) {
             return false;
           }
-          // 2. Filtrar notas já importadas
+          // 2. Filtrar notas já importadas (considerando operação principal vs adicional e data efetiva de saída)
           const nf = String(inv.invoice_number || "").trim().toUpperCase();
-          return !existingNfs.has(nf);
+          const opKey = `${nf}_${effectiveDate}_${inv.is_additional ? 'ADD' : 'MAIN'}`;
+          return !existingOpKeys.has(opKey);
         })
         .map(inv => {
           const installments = Array.isArray(inv.installments) ? inv.installments : [];
+          const effectiveDate = getFactoringEffectiveDate(inv);
           
           // Calcular desconto e valor líquido usando juros compostos oficial do MykaCash
           const calc = calculateFactoring({
@@ -279,6 +317,7 @@ export function IntegrationManager() {
 
           return {
             ...inv,
+            effective_date: effectiveDate,
             client_name: clientsMap.get(inv.client_id) || "Cliente Desconhecido",
             gross_value: grossValue,
             net_value: netValue,
@@ -341,16 +380,18 @@ export function IntegrationManager() {
     // Buscar transações locais de última hora para evitar duplicados caso o botão seja clicado rapidamente
     const { data: existingTx } = await localSupabase
       .from("transactions")
-      .select("description")
+      .select("description, occurred_on")
       .eq("user_id", user.id)
       .like("description", "%SYNC%");
     
-    const existingNfs = new Set<string>();
+    const existingOpKeys = new Set<string>();
     existingTx?.forEach(t => {
       const desc = t.description || "";
+      const isAdd = desc.toUpperCase().includes("ADICIONAL");
       const match = desc.match(/NF\s*:?\s*(\w+)/i);
       if (match) {
-        existingNfs.add(match[match.length - 1].trim().toUpperCase());
+        const nf = match[match.length - 1].trim().toUpperCase();
+        existingOpKeys.add(`${nf}_${t.occurred_on}_${isAdd ? 'ADD' : 'MAIN'}`);
       }
     });
 
@@ -376,10 +417,12 @@ export function IntegrationManager() {
 
     for (const item of itemsWithAdjustedCost) {
       const clientName = formatFactoringClientSubcategory(item.client_name);
-      const baseDesc = formatFactoringInvoiceDescription(item.invoice_number);
+      const baseDesc = formatFactoringInvoiceDescription(item.invoice_number, item.is_additional);
       const nf = String(item.invoice_number || "").trim().toUpperCase();
+      const occurredOn = getFactoringEffectiveDate(item) || item.operation_date || new Date().toISOString().split('T')[0];
+      const opKey = `${nf}_${occurredOn}_${item.is_additional ? 'ADD' : 'MAIN'}`;
 
-      if (existingNfs.has(nf)) {
+      if (existingOpKeys.has(opKey)) {
         skippedCount++;
         continue;
       }
@@ -397,28 +440,28 @@ export function IntegrationManager() {
         }
       }
 
-      const occurredOn = item.operation_date || new Date().toISOString().split('T')[0];
+      // 3. Inserir Receita APENAS para operações principais (operações adicionais/prorrogações não movimentam novo capital)
+      if (!item.is_additional) {
+        const { error: err1 } = await localSupabase.from("transactions").insert({
+          user_id: user.id,
+          type: "income",
+          nature: "variable",
+          category: "ANTECIPAÇÃO DE NOTAS",
+          category_id_v2: catDataInc?.id || null,
+          subcategory_id_v2: subId || null,
+          description: baseDesc,
+          amount: item.adjustedGross || 0,
+          occurred_on: occurredOn,
+        });
 
-      // 3. Inserir Receita
-      const { error: err1 } = await localSupabase.from("transactions").insert({
-        user_id: user.id,
-        type: "income",
-        nature: "variable",
-        category: "ANTECIPAÇÃO DE NOTAS",
-        category_id_v2: catDataInc?.id || null,
-        subcategory_id_v2: subId || null,
-        description: baseDesc,
-        amount: item.adjustedGross || 0,
-        occurred_on: occurredOn,
-      });
-
-      if (err1) {
-        console.error("Erro ao inserir receita:", err1);
-        toast.error(`Erro na receita ${item.invoice_number || "S/N"}: ${err1.message}`);
-        continue;
+        if (err1) {
+          console.error("Erro ao inserir receita:", err1);
+          toast.error(`Erro na receita ${item.invoice_number || "S/N"}: ${err1.message}`);
+          continue;
+        }
       }
 
-      // 4. Inserir Despesa
+      // 4. Inserir Despesa (Custo da Operação / Juros Adicionais da Prorrogação)
       const { error: err2 } = await localSupabase.from("transactions").insert({
         user_id: user.id,
         type: "expense",
@@ -437,7 +480,7 @@ export function IntegrationManager() {
       }
 
       successCount++;
-      existingNfs.add(nf); // Evitar duplicação se houver itens duplicados no lote
+      existingOpKeys.add(opKey);
     }
 
     setSyncing(false);
@@ -556,18 +599,56 @@ export function IntegrationManager() {
                     {externalData.map((tx, i) => (
                       <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
                         <td className="px-4 py-4 text-[10px] font-bold text-muted-foreground">
-                          <div className="text-white">{new Date(tx.operation_date).toLocaleDateString('pt-BR')}</div>
-                          <div className="opacity-50">{new Date(tx.due_date).toLocaleDateString('pt-BR')}</div>
+                          {tx.is_additional ? (
+                            <div>
+                              <div className="text-amber-400 font-bold">
+                                {new Date(tx.effective_date + "T00:00:00").toLocaleDateString('pt-BR')}
+                              </div>
+                              <div className="opacity-40 text-[9px]">
+                                Abertura: {new Date(tx.operation_date + "T00:00:00").toLocaleDateString('pt-BR')}
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="text-white">
+                                {new Date(tx.operation_date + "T00:00:00").toLocaleDateString('pt-BR')}
+                              </div>
+                              <div className="opacity-50">
+                                {new Date(tx.due_date + "T00:00:00").toLocaleDateString('pt-BR')}
+                              </div>
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-xs font-black uppercase group-hover:text-accent transition-colors">
-                          <div className="truncate max-w-[150px]">{tx.client_name}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="truncate max-w-[150px]">{tx.client_name}</div>
+                            {tx.is_additional && (
+                              <span className="text-[8px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-black border border-amber-500/30">
+                                ADICIONAL
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[9px] text-muted-foreground opacity-50">NF: {tx.invoice_number}</div>
                         </td>
-                        <td className="px-4 py-4 text-[10px] font-bold text-right text-muted-foreground line-through opacity-30">
-                          {Number(tx.gross_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        <td className="px-4 py-4 text-[10px] font-bold text-right text-muted-foreground">
+                          {tx.is_additional ? (
+                            <span className="opacity-40 font-mono">---</span>
+                          ) : (
+                            <span className="line-through opacity-30">
+                              {Number(tx.gross_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          )}
                         </td>
-                        <td className="px-4 py-4 text-sm font-black text-right text-accent tracking-tighter shadow-glow-sm">
-                          {Number(tx.net_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        <td className="px-4 py-4 text-sm font-black text-right tracking-tighter">
+                          {tx.is_additional ? (
+                            <span className="text-destructive font-mono">
+                              - {Number(tx.discount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          ) : (
+                            <span className="text-accent shadow-glow-sm">
+                              {Number(tx.net_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -628,11 +709,22 @@ export function IntegrationManager() {
                           {new Date(tx.operation_date + "T00:00:00").toLocaleDateString('pt-BR')}
                         </td>
                         <td className="px-4 py-4 text-xs font-black uppercase group-hover:text-emerald-400 transition-colors">
-                          <div className="truncate max-w-[150px]">{tx.client_name}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="truncate max-w-[150px]">{tx.client_name}</div>
+                            {tx.is_additional && (
+                              <span className="text-[8px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-black border border-amber-500/30">
+                                ADICIONAL
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[9px] text-muted-foreground opacity-50">NF: {tx.invoice_number}</div>
                         </td>
                         <td className="px-4 py-4 text-[10px] font-bold text-right text-emerald-400">
-                          {Number(tx.gross_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          {tx.is_additional ? (
+                            <span className="opacity-40 font-mono text-muted-foreground">---</span>
+                          ) : (
+                            Number(tx.gross_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                          )}
                         </td>
                         <td className="px-4 py-4 text-sm font-black text-right text-destructive tracking-tighter">
                           - {Number(tx.discount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}

@@ -16,6 +16,11 @@ export default defineConfig({
     tsconfigPaths(),
   ],
   base: "./",
+  server: {
+    hmr: {
+      overlay: false,
+    },
+  },
   build: {
     outDir: "dist",
   },

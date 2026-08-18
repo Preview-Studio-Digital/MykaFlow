@@ -19,6 +19,7 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [roleOption, setRoleOption] = useState<"admin" | "financeiro" | "crm">("crm");
   const [password, setPassword] = useState(genPassword());
   const [busy, setBusy] = useState(false);
   const [lastCreated, setLastCreated] = useState<{ email: string; password: string } | null>(null);
@@ -67,7 +68,7 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
         await supabase.from("user_roles").upsert(
           {
             user_id: authData.user.id,
-            role: "user",
+            role: roleOption,
           },
           { onConflict: "user_id" },
         );
@@ -131,19 +132,34 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
         <form onSubmit={submit} className="space-y-3">
           <input
             required
-            placeholder="Nome"
+            placeholder="Nome Completo"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="input-futuristic w-full rounded-lg px-3 py-2 outline-none"
+            className="input-futuristic w-full rounded-lg px-3 py-2 outline-none uppercase font-bold"
           />
           <input
             required
             type="email"
-            placeholder="E-mail"
+            placeholder="E-mail de Acesso"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="input-futuristic w-full rounded-lg px-3 py-2 outline-none"
+            className="input-futuristic w-full rounded-lg px-3 py-2 outline-none font-mono"
           />
+          <select
+            value={roleOption}
+            onChange={(e) => setRoleOption(e.target.value as any)}
+            className="input-futuristic w-full rounded-lg px-3 py-2 outline-none bg-black/80 font-bold uppercase text-xs cursor-pointer"
+          >
+            <option value="admin" className="bg-slate-900 font-bold text-accent">
+              ADMINISTRADOR
+            </option>
+            <option value="financeiro" className="bg-slate-900 font-bold text-emerald-400">
+              FINANCEIRO
+            </option>
+            <option value="crm" className="bg-slate-900 font-bold text-sky-400">
+              CRM
+            </option>
+          </select>
           <div className="flex gap-2">
             <input
               value={password}

@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { AdminPanel } from "@/components/AdminPanel";
 import {
   ShieldCheck,
   ChevronLeft,
@@ -17,9 +16,15 @@ import {
   TrendingDown,
   User as UserIcon,
   Link2,
+  PieChart as PieChartIcon,
+  Bell as BellIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationManager } from "@/components/IntegrationManager";
+import { CrmAnalytics } from "@/components/CrmAnalytics";
+import { AdminAlertsManager } from "@/components/AdminAlertsManager";
+import { EditMemberDialog, type MemberProfile } from "@/components/EditMemberDialog";
+import { Wallet } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -35,7 +40,7 @@ interface Category {
 
 function AdminPage() {
   const { user, role, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"users" | "categories" | "integration">("users");
+  const [activeTab, setActiveTab] = useState<"analytics" | "alerts" | "users" | "categories" | "integration">("analytics");
 
   const [profiles, setProfiles] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -127,62 +132,112 @@ function AdminPage() {
   }
 
   return (
-    <div className="relative z-10 min-h-screen px-4 py-8 md:px-8">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-10 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-          <div className="flex items-center gap-4">
+    <div className="relative z-10 min-h-screen lg:h-screen lg:overflow-hidden px-4 py-3 md:px-8 flex flex-col justify-start">
+      <div className="mx-auto max-w-7xl w-full flex-1 flex flex-col min-h-0">
+        <header className="mb-3 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3.5">
             <Link
               to="/"
-              className="group flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 transition-all hover:bg-primary/20 hover:border-primary/30"
+              className="group flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5 border border-white/10 transition-all hover:bg-primary/20 hover:border-primary/30 shrink-0"
+              title="Voltar ao Início"
             >
-              <ChevronLeft className="h-6 w-6 text-muted-foreground transition-colors group-hover:text-white" />
+              <ChevronLeft className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-white" />
             </Link>
-            <div>
-              <h1 className="text-4xl font-black tracking-widest text-gradient uppercase leading-none mb-1">
-                Central ADM
-              </h1>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground font-black opacity-60">
-                Gestão de Equipe e Configurações
-              </p>
+            <div className="flex flex-col justify-center">
+              <svg
+                viewBox="0 0 280 42"
+                className="w-[230px] sm:w-[270px] h-[40px] overflow-visible select-none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <text
+                  x="0"
+                  y="22"
+                  className="font-saira-stencil"
+                  fontSize="22"
+                  fill="#22d3ee"
+                  textLength="280"
+                  lengthAdjust="spacing"
+                  style={{ filter: "drop-shadow(0px 0px 14px rgba(34, 211, 238, 0.45))" }}
+                >
+                  ADMINISTRAÇÃO
+                </text>
+                <text
+                  x="0"
+                  y="38"
+                  fontSize="8.5"
+                  fontWeight="700"
+                  fill="#94a3b8"
+                  textLength="280"
+                  lengthAdjust="spacing"
+                  fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+                  opacity="0.8"
+                >
+                  GESTÃO DE EQUIPE, ANÁLISES E CONFIGURAÇÕES
+                </text>
+              </svg>
             </div>
           </div>
 
-          <nav className="flex gap-2 p-1 rounded-2xl bg-white/5 border border-white/10">
+          <nav className="flex items-center gap-1.5 p-1 rounded-2xl bg-white/5 border border-white/10 overflow-x-auto max-w-full no-scrollbar shrink-0">
+            <button
+              onClick={() => setActiveTab("analytics")}
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "analytics"
+                  ? "bg-sky-500 text-white shadow-lg shadow-sky-500/25"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <PieChartIcon className="h-3.5 w-3.5" /> Atividades & Gráficos
+            </button>
+            <button
+              onClick={() => setActiveTab("alerts")}
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "alerts"
+                  ? "bg-amber-500 text-black font-black shadow-lg shadow-amber-500/25"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <BellIcon className="h-3.5 w-3.5" /> Alertas & Auditoria
+            </button>
             <button
               onClick={() => setActiveTab("users")}
-              className={`flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === "users"
                   ? "bg-primary text-white shadow-lg shadow-primary/20"
                   : "text-muted-foreground hover:bg-white/5 hover:text-white"
               }`}
             >
-              <Users className="h-4 w-4" /> Equipe
+              <Users className="h-3.5 w-3.5" /> Equipe
             </button>
             <button
               onClick={() => setActiveTab("categories")}
-              className={`flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === "categories"
                   ? "bg-primary text-white shadow-lg shadow-primary/20"
                   : "text-muted-foreground hover:bg-white/5 hover:text-white"
               }`}
             >
-              <FolderTree className="h-4 w-4" /> Categorias
+              <FolderTree className="h-3.5 w-3.5" /> Categorias
             </button>
             <button
               onClick={() => setActiveTab("integration")}
-              className={`flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === "integration"
                   ? "bg-accent text-white shadow-lg shadow-accent/20"
                   : "text-muted-foreground hover:bg-white/5 hover:text-white"
               }`}
             >
-              <Link2 className="h-4 w-4" /> Integração
+              <Link2 className="h-3.5 w-3.5" /> Integração
             </button>
           </nav>
         </header>
 
-        <div className="float-up">
-          {activeTab === "users" ? (
+        <div className="float-up flex-1 min-h-0 flex flex-col overflow-y-auto lg:overflow-hidden">
+          {activeTab === "analytics" ? (
+            <CrmAnalytics />
+          ) : activeTab === "alerts" ? (
+            <AdminAlertsManager />
+          ) : activeTab === "users" ? (
             <UserList profiles={profiles} loading={usersLoading} onRefresh={fetchUsers} />
           ) : activeTab === "categories" ? (
             <CategoryManager />
@@ -207,42 +262,7 @@ function UserList({
   const { user: currentUser } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-
-  async function toggleRole(targetUserId: string, currentRole: string) {
-    setBusy(targetUserId);
-    try {
-      const newRole = currentRole === "admin" ? "user" : "admin";
-      const { error } = await supabase
-        .from("user_roles")
-        .upsert({ user_id: targetUserId, role: newRole }, { onConflict: "user_id" });
-      if (error) throw error;
-      toast.success(`Cargo alterado para ${newRole.toUpperCase()}`);
-      onRefresh();
-    } catch (err: any) {
-      toast.error(`Erro: ${err.message || "Erro desconhecido"}`);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function handleEditName(targetUserId: string, currentName: string) {
-    const newName = prompt(`NOVO NOME PARA ${currentName.toUpperCase()}:`, currentName);
-    if (!newName || newName === currentName) return;
-    setBusy(targetUserId);
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ display_name: newName.trim().toUpperCase() })
-        .eq("id", targetUserId);
-      if (error) throw error;
-      toast.success("Nome atualizado!");
-      onRefresh();
-    } catch (err: any) {
-      toast.error(`Erro: ${err.message || "Erro desconhecido"}`);
-    } finally {
-      setBusy(null);
-    }
-  }
+  const [selectedUserToEdit, setSelectedUserToEdit] = useState<MemberProfile | null>(null);
 
   async function handleDeleteUser(targetUserId: string, userName: string) {
     if (!confirm(`Tem certeza que deseja EXCLUIR DEFINITIVAMENTE o usuário ${userName.toUpperCase()}?`)) return;
@@ -271,7 +291,7 @@ function UserList({
     <div className="glass rounded-2xl p-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 border-b border-white/5 pb-4">
         <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase">
-          <Users className="h-5 w-5 text-accent" /> Equipe Registrada
+          <Users className="h-5 w-5 text-accent" /> Gestão de Equipe & Permissões
         </h3>
         <div className="flex items-center gap-4">
           <span className="text-[10px] uppercase tracking-widest opacity-50 font-black">
@@ -279,7 +299,7 @@ function UserList({
           </span>
           <button
             onClick={() => setShowAdminPanel(!showAdminPanel)}
-            className="btn-futuristic py-2 px-4 text-[10px] rounded-lg"
+            className="btn-futuristic py-2 px-4 text-[10px] rounded-lg cursor-pointer"
           >
             {showAdminPanel ? "FECHAR" : "CRIAR ACESSO"}
           </button>
@@ -293,65 +313,100 @@ function UserList({
       )}
 
       <div className="space-y-3">
-        {profiles.map((p) => (
-          <div
-            key={p.id}
-            className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all group"
-          >
-            <div className="flex items-center gap-4">
-              <div
-                className={`p-3 rounded-xl transition-all ${p.role === "admin" ? "bg-accent/20 text-accent glow-sm" : "bg-white/5 text-muted-foreground"}`}
-              >
-                {p.role === "admin" ? (
-                  <ShieldCheck className="h-5 w-5" />
-                ) : (
-                  <UserIcon className="h-5 w-5" />
-                )}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-bold text-sm uppercase tracking-widest">{p.name}</p>
-                  {p.id === currentUser?.id && (
-                    <span className="text-[8px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-md font-black">
-                      VOCÊ
-                    </span>
+        {profiles.map((p) => {
+          const isCurrentUser = p.id === currentUser?.id;
+          const userRole = p.role || "user";
+          const isAdmin = userRole === "admin";
+          const isFinance = userRole === "financeiro";
+
+          return (
+            <div
+              key={p.id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all gap-4 group"
+            >
+              <div className="flex items-center gap-4 min-w-0">
+                <div
+                  className={`p-3 rounded-2xl transition-all shrink-0 ${
+                    isAdmin
+                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                      : isFinance
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
+                      : "bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.25)]"
+                  }`}
+                >
+                  {isAdmin ? (
+                    <ShieldCheck className="h-5 w-5" />
+                  ) : isFinance ? (
+                    <Wallet className="h-5 w-5" />
+                  ) : (
+                    <Users className="h-5 w-5" />
                   )}
                 </div>
-                <p className="text-[10px] text-muted-foreground font-mono opacity-60 mt-0.5">
-                  {p.email}
-                </p>
-              </div>
-            </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-bold text-sm uppercase tracking-widest text-white truncate">
+                      {p.name}
+                    </p>
+                    {isCurrentUser && (
+                      <span className="text-[8px] bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.5 rounded-md font-black">
+                        VOCÊ
+                      </span>
+                    )}
 
-            <div className="flex items-center gap-2">
-              {p.id !== currentUser?.id && (
-                <>
-                  <button
-                    onClick={() => handleEditName(p.id, p.name)}
-                    className="p-2 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-lg transition-all"
-                    title="Editar Nome"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => toggleRole(p.id, p.role)}
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${p.role === "admin" ? "border-accent/40 text-accent bg-accent/5" : "border-white/10 text-muted-foreground hover:border-white/40"}`}
-                  >
-                    {busy === p.id ? "..." : p.role === "admin" ? "Rebaixar" : "Tornar ADM"}
-                  </button>
+                    {/* Role Badge */}
+                    <span
+                      className={`text-[9px] font-mono font-black px-2 py-0.5 rounded-lg border uppercase tracking-wider ${
+                        isAdmin
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                          : isFinance
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                          : "bg-sky-500/20 text-sky-300 border-sky-500/40"
+                      }`}
+                    >
+                      {isAdmin ? "🛡️ ADM" : isFinance ? "💵 FINANCEIRO" : "👥 CRM"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground font-mono opacity-70 mt-0.5 truncate">
+                    {p.email}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <button
+                  onClick={() => setSelectedUserToEdit(p)}
+                  className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-cyan-300 border-cyan-500/30 flex items-center gap-1.5 hover:bg-cyan-500/10 cursor-pointer"
+                  title="Editar dados e direitos de acesso"
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                  <span>Editar Direitos</span>
+                </button>
+
+                {!isCurrentUser && (
                   <button
                     onClick={() => handleDeleteUser(p.id, p.name)}
-                    className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all ml-1"
+                    className="p-2 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-500/30"
                     title="Excluir Usuário"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
-                </>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* Modal de Edição de Dados e Direitos (ADM, Financeiro, CRM) */}
+      <EditMemberDialog
+        isOpen={Boolean(selectedUserToEdit)}
+        onClose={() => setSelectedUserToEdit(null)}
+        targetUser={selectedUserToEdit}
+        onSuccess={() => {
+          setSelectedUserToEdit(null);
+          onRefresh();
+        }}
+      />
     </div>
   );
 }

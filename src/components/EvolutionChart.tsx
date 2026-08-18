@@ -290,7 +290,7 @@ export function EvolutionChart({
         currentSaldo < 0
           ? "bg-red-500/10 border-red-500/30 shadow-[inset_0_0_50px_rgba(239,68,68,0.1)]"
           : "bg-cyan-500/10 border-cyan-500/30 shadow-[inset_0_0_50px_rgba(34,211,238,0.1)]"
-      } backdrop-blur-md p-3`}
+      } backdrop-blur-md p-3 h-full flex flex-col justify-between`}
     >
       <div className="relative flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-4 pl-[58px] flex-wrap">
@@ -422,7 +422,7 @@ export function EvolutionChart({
         </div>
       </div>
 
-      <div className="h-[320px]">
+      <div className="flex-1 min-h-[160px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={chartData}

@@ -124,7 +124,7 @@ export function CategoryPie({
   };
 
   return (
-    <div className="glass rounded-2xl h-[250px] min-h-[250px] relative overflow-hidden">
+    <div className="glass rounded-2xl h-[220px] min-h-[220px] relative overflow-hidden">
       {/* Header Area - Absolute to not affect vertical centering of the Pie */}
       <div
         className={`absolute top-4 left-4 right-4 z-20 flex items-start justify-between gap-4 pointer-events-none ${alignTitle === "right" ? "flex-row-reverse" : ""}`}

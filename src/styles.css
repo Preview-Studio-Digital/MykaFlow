@@ -281,6 +281,15 @@ html[data-scroll-dir="down"] ::-webkit-scrollbar-thumb {
   border: 2.5px solid oklch(0.12 0.04 255);
 }
 
+/* Utilitário para Ocultar Barra de Rolagem Mantendo Rolagem Natural e Touch */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
 /* Recharts Overrides */
 .recharts-pie-sector, .recharts-sector, .recharts-surface {
   outline: none !important;
@@ -292,4 +301,42 @@ html[data-scroll-dir="down"] ::-webkit-scrollbar-thumb {
   overflow: visible !important;
 }
 
-/* Force desktop view on all devices (disable responsive variations) */
+/* Hover no Card CRM: Oculta o número de registro e exibe o status de prazo/atividade */
+.crm-center-overlay {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: scale(0.95);
+  transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out, visibility 0.15s ease-in-out;
+}
+
+.crm-hover-update-overlay {
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.crm-card:hover .crm-hover-update-overlay,
+.group:hover .crm-hover-update-overlay {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Animação suave e destaque ao passar o mouse pelas Colunas do Quadro */
+.crm-kanban-column {
+  transition: box-shadow 0.25s ease,
+              border-color 0.25s ease,
+              background-color 0.25s ease;
+  position: relative;
+}
+
+.crm-kanban-column:hover {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(10, 15, 25, 0.6) !important;
+}
+
+/* Saira Stencil One font utility */
+.font-saira-stencil {
+  font-family: "Saira Stencil One", cursive, sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}

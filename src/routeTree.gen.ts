@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IntegrationRouteImport } from './routes/integration'
+import { Route as FinanceiroRouteImport } from './routes/financeiro'
+import { Route as CrmRouteImport } from './routes/crm'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicMykacashAuthRouteImport } from './routes/api/public/mykacash-auth'
@@ -23,6 +25,16 @@ const LoginRoute = LoginRouteImport.update({
 const IntegrationRoute = IntegrationRouteImport.update({
   id: '/integration',
   path: '/integration',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinanceiroRoute = FinanceiroRouteImport.update({
+  id: '/financeiro',
+  path: '/financeiro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmRoute = CrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -44,6 +56,8 @@ const ApiPublicMykacashAuthRoute = ApiPublicMykacashAuthRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/crm': typeof CrmRoute
+  '/financeiro': typeof FinanceiroRoute
   '/integration': typeof IntegrationRoute
   '/login': typeof LoginRoute
   '/api/public/mykacash-auth': typeof ApiPublicMykacashAuthRoute
@@ -51,6 +65,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/crm': typeof CrmRoute
+  '/financeiro': typeof FinanceiroRoute
   '/integration': typeof IntegrationRoute
   '/login': typeof LoginRoute
   '/api/public/mykacash-auth': typeof ApiPublicMykacashAuthRoute
@@ -59,6 +75,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/crm': typeof CrmRoute
+  '/financeiro': typeof FinanceiroRoute
   '/integration': typeof IntegrationRoute
   '/login': typeof LoginRoute
   '/api/public/mykacash-auth': typeof ApiPublicMykacashAuthRoute
@@ -68,15 +86,26 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/crm'
+    | '/financeiro'
     | '/integration'
     | '/login'
     | '/api/public/mykacash-auth'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/integration' | '/login' | '/api/public/mykacash-auth'
+  to:
+    | '/'
+    | '/admin'
+    | '/crm'
+    | '/financeiro'
+    | '/integration'
+    | '/login'
+    | '/api/public/mykacash-auth'
   id:
     | '__root__'
     | '/'
     | '/admin'
+    | '/crm'
+    | '/financeiro'
     | '/integration'
     | '/login'
     | '/api/public/mykacash-auth'
@@ -85,6 +114,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  CrmRoute: typeof CrmRoute
+  FinanceiroRoute: typeof FinanceiroRoute
   IntegrationRoute: typeof IntegrationRoute
   LoginRoute: typeof LoginRoute
   ApiPublicMykacashAuthRoute: typeof ApiPublicMykacashAuthRoute
@@ -104,6 +135,20 @@ declare module '@tanstack/react-router' {
       path: '/integration'
       fullPath: '/integration'
       preLoaderRoute: typeof IntegrationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/financeiro': {
+      id: '/financeiro'
+      path: '/financeiro'
+      fullPath: '/financeiro'
+      preLoaderRoute: typeof FinanceiroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm': {
+      id: '/crm'
+      path: '/crm'
+      fullPath: '/crm'
+      preLoaderRoute: typeof CrmRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -133,6 +178,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  CrmRoute: CrmRoute,
+  FinanceiroRoute: FinanceiroRoute,
   IntegrationRoute: IntegrationRoute,
   LoginRoute: LoginRoute,
   ApiPublicMykacashAuthRoute: ApiPublicMykacashAuthRoute,

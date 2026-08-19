@@ -160,7 +160,7 @@ export function AdminAlertsManager() {
     now.setHours(0, 0, 0, 0);
 
     return deals.filter((d) => {
-      if (!d.expected_close_date || d.stage === "won" || d.stage === "lost" || d.stage === "archived") {
+      if (!d.expected_close_date || d.stage === "won" || d.stage === "lost" || d.stage === "archived" || d.stage === "completed") {
         return false;
       }
       const deadDate = new Date(d.expected_close_date + "T00:00:00");
@@ -180,7 +180,8 @@ export function AdminAlertsManager() {
           (d.user_id && d.assigned_user_id === d.user_id && d.notes?.includes("[DEVOLVIDA]"))) &&
         d.stage !== "won" &&
         d.stage !== "lost" &&
-        d.stage !== "archived"
+        d.stage !== "archived" &&
+        d.stage !== "completed"
     );
   }, [deals, historyList]);
 

@@ -96,6 +96,14 @@ const STAGES_CONFIG: Record<
     border: "border-rose-500/30",
     glow: "shadow-[0_0_20px_rgba(248,113,113,0.25)]",
   },
+  completed: {
+    title: "CONCLUÍDAS",
+    color: "#c084fc", // Purple / Violet
+    hoverColor: "#9333ea",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    glow: "shadow-[0_0_20px_rgba(192,132,252,0.25)]",
+  },
 };
 
 const USER_PALETTE = [
@@ -165,7 +173,7 @@ export function CrmAnalytics() {
     now.setHours(0, 0, 0, 0);
 
     return deals.filter((d) => {
-      if (!d.expected_close_date || d.stage === "won" || d.stage === "lost" || d.stage === "archived") {
+      if (!d.expected_close_date || d.stage === "won" || d.stage === "lost" || d.stage === "archived" || d.stage === "completed") {
         return false;
       }
       const deadDate = new Date(d.expected_close_date + "T00:00:00");
@@ -183,7 +191,8 @@ export function CrmAnalytics() {
           (d.user_id && d.assigned_user_id === d.user_id && d.notes?.includes("[DEVOLVIDA]"))) &&
         d.stage !== "won" &&
         d.stage !== "lost" &&
-        d.stage !== "archived"
+        d.stage !== "archived" &&
+        d.stage !== "completed"
     );
   }, [deals, returnedHistoryList]);
 

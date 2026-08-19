@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileDialog } from "@/components/ProfileDialog";
+import { extractQuoteDataFromDocument, type ExtractedQuoteData } from "@/lib/quote-extractor";
 import {
   Users,
   Kanban,
@@ -60,6 +61,14 @@ import {
   ListTree,
   Pencil,
   Check,
+  Play,
+  Pause,
+  Timer,
+  TrendingUp,
+  BarChart3,
+  AtSign,
+  Reply,
+  Inbox,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -90,7 +99,7 @@ export interface Deal {
   customer_name?: string;
   title: string;
   value: number;
-  stage: "lead" | "qualification" | "proposal" | "negotiation" | "won" | "lost" | "archived";
+  stage: "lead" | "qualification" | "proposal" | "negotiation" | "won" | "lost" | "archived" | "completed";
   expected_close_date?: string | null;
   assigned_user_id?: string | null;
   assigned_user_name?: string | null;
@@ -102,8 +111,154 @@ export interface Deal {
   quote_file_url?: string | null;
   quote_file_name?: string | null;
   quote_file_uploaded_at?: string | null;
+  is_working?: boolean;
+  working_user_id?: string | null;
+  working_user_name?: string | null;
+  working_started_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// Helper para escapar strings em expressões regulares
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export interface DealMentionReply {
+  id: string;
+  mention_id: string;
+  deal_id: string;
+  user_id: string;
+  user_name: string;
+  reply_text: string;
+  created_at: string;
+}
+
+export interface DealMention {
+  id: string;
+  deal_id: string;
+  author_id: string;
+  author_name: string;
+  mentioned_user_id: string;
+  mentioned_user_name: string;
+  content: string;
+  created_at: string;
+  read_by_user?: boolean;
+  replies?: DealMentionReply[];
+}
+
+// Helper para obter todas as menções vinculadas a um deal
+export function getDealMentions(deal: Deal | null): DealMention[] {
+  if (!deal || !deal.notes) return [];
+  const mentions: DealMention[] = [];
+  try {
+    const regex = /\[MENTION:(.*?)\]/g;
+    let match;
+    while ((match = regex.exec(deal.notes)) !== null) {
+      if (match[1]) {
+        try {
+          const parsed = JSON.parse(match[1]);
+          if (parsed && parsed.id && parsed.mentioned_user_id) {
+            mentions.push(parsed);
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+  return mentions;
+}
+
+// Helper para obter todas as respostas de menções de um deal
+export function getDealMentionReplies(deal: Deal | null): DealMentionReply[] {
+  if (!deal || !deal.notes) return [];
+  const replies: DealMentionReply[] = [];
+  try {
+    const regex = /\[MENTION_REPLY:(.*?)\]/g;
+    let match;
+    while ((match = regex.exec(deal.notes)) !== null) {
+      if (match[1]) {
+        try {
+          const parsed = JSON.parse(match[1]);
+          if (parsed && parsed.id && parsed.mention_id) {
+            replies.push(parsed);
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+  return replies;
+}
+
+export interface DealTimeSession {
+  id: string;
+  deal_id: string;
+  user_id: string;
+  user_name: string;
+  started_at: string;
+  ended_at?: string | null;
+  duration_seconds?: number;
+  stop_reason?: "manual" | "lunch_12h" | "end_of_day_17h30" | "auto_switch";
+}
+
+// Helper para obter a sessão ativa de trabalho do deal
+export function getDealActiveWorker(deal: Deal | null): { userId: string; userName: string; startedAt: string } | null {
+  if (!deal) return null;
+  if (deal.notes && deal.notes.includes("[WORK_ACTIVE:")) {
+    try {
+      const match = deal.notes.match(/\[WORK_ACTIVE:(.*?)\]/);
+      if (match && match[1]) {
+        const parsed = JSON.parse(match[1]);
+        if (parsed.userId && parsed.startedAt) {
+          return {
+            userId: parsed.userId,
+            userName: parsed.userName || "Responsável",
+            startedAt: parsed.startedAt,
+          };
+        }
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+// Helper para obter o histórico completo de sessões de trabalho do deal
+export function getDealWorkSessions(deal: Deal | null): DealTimeSession[] {
+  if (!deal || !deal.notes) return [];
+  const sessions: DealTimeSession[] = [];
+  try {
+    const regex = /\[WORK_LOG:(.*?)\]/g;
+    let match;
+    while ((match = regex.exec(deal.notes)) !== null) {
+      if (match[1]) {
+        sessions.push(JSON.parse(match[1]));
+      }
+    }
+  } catch (e) {}
+  return sessions;
+}
+
+// Helper para calcular o tempo total trabalhado (em segundos)
+export function getDealTotalWorkSeconds(deal: Deal | null): number {
+  if (!deal) return 0;
+  const sessions = getDealWorkSessions(deal);
+  let total = sessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
+  const active = getDealActiveWorker(deal);
+  if (active) {
+    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(active.startedAt).getTime()) / 1000));
+    total += elapsed;
+  }
+  return total;
+}
+
+// Helper para formatar segundos em "00h 00m 00s" ou "00h 00m"
+export function formatDurationHoursMinutes(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
+  }
+  return `${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
 }
 
 export interface Customer {
@@ -171,7 +326,8 @@ const STAGES: { id: Deal["stage"]; title: string; color: string; border: string;
   { id: "qualification", title: "ORÇAMENTOS", color: "text-sky-400", border: "border-sky-500/20", glow: "from-sky-500/10" },
   { id: "negotiation", title: "NEGOCIAÇÕES", color: "text-sky-400", border: "border-sky-500/20", glow: "from-sky-500/10" },
   { id: "won", title: "CONTRATOS", color: "text-sky-400", border: "border-sky-500/20", glow: "from-sky-500/10" },
-  { id: "lost", title: "PERDIDOS", color: "text-sky-400", border: "border-sky-500/20", glow: "from-sky-500/10" },
+  { id: "completed", title: "CONCLUÍDAS", color: "text-emerald-400", border: "border-emerald-500/20", glow: "from-emerald-500/10" },
+  { id: "lost", title: "PERDIDOS", color: "text-rose-400", border: "border-rose-500/30", glow: "from-rose-500/15", bg: "!bg-rose-950/20" },
 ];
 
 function fmtCurrency(val: number) {
@@ -233,16 +389,27 @@ export function getCleanDealTitle(title: string | undefined | null): string {
   return title.replace(/^\[[^\]]+\]\s*/i, "").trim().toUpperCase();
 }
 
-// Helper para extrair informações do arquivo de orçamento oficial
-export function getDealQuoteFile(deal: Deal | null, _historyList?: DealHistoryItem[]): { url: string; name: string; uploadedAt: string } | null {
+export interface DealQuoteFileInfo {
+  url: string;
+  name: string;
+  uploadedAt: string;
+  quoteData?: ExtractedQuoteData | null;
+}
+
+// Helper para extrair informações do arquivo de orçamento oficial e dados parseados
+export function getDealQuoteFile(deal: Deal | null, _historyList?: DealHistoryItem[]): DealQuoteFileInfo | null {
   if (!deal) return null;
-  if (deal.quote_file_url) {
-    return {
-      url: deal.quote_file_url,
-      name: deal.quote_file_name || "orcamento_oficial",
-      uploadedAt: deal.quote_file_uploaded_at || deal.updated_at || deal.created_at,
-    };
+
+  let extractedFromNotes: ExtractedQuoteData | null = null;
+  if (deal.notes && deal.notes.includes("[QUOTE_DATA:")) {
+    try {
+      const dMatch = deal.notes.match(/\[QUOTE_DATA:(.*?)\]/);
+      if (dMatch && dMatch[1]) {
+        extractedFromNotes = JSON.parse(dMatch[1]);
+      }
+    } catch (e) {}
   }
+
   if (deal.notes && deal.notes.includes("[QUOTE_FILE:")) {
     try {
       const match = deal.notes.match(/\[QUOTE_FILE:(.*?)\]/);
@@ -253,11 +420,22 @@ export function getDealQuoteFile(deal: Deal | null, _historyList?: DealHistoryIt
             url: parsed.url,
             name: parsed.name || "orcamento_oficial",
             uploadedAt: parsed.uploadedAt || deal.updated_at || deal.created_at,
+            quoteData: parsed.quoteData || extractedFromNotes,
           };
         }
       }
     } catch (e) {}
   }
+
+  if (deal.quote_file_url) {
+    return {
+      url: deal.quote_file_url,
+      name: deal.quote_file_name || "orcamento_oficial",
+      uploadedAt: deal.quote_file_uploaded_at || deal.updated_at || deal.created_at,
+      quoteData: extractedFromNotes,
+    };
+  }
+
   return null;
 }
 
@@ -707,8 +885,26 @@ function CrmDashboard() {
   const [isQuoteUploaderOpen, setIsQuoteUploaderOpen] = useState(false);
   const [previewingQuoteFile, setPreviewingQuoteFile] = useState<{ url: string; name: string } | null>(null);
 
-  // Alertas de Tarefas Vinculadas Concluídas (Bolinha de Alerta no Card)
-  const [unreadParentAlerts, setUnreadParentAlerts] = useState<Record<string, boolean>>(() => {
+  // Modal de Conflito de Atividade em Andamento
+  const [workingConflictModal, setWorkingConflictModal] = useState<{
+    previousDeal: Deal;
+    targetDeal: Deal;
+  } | null>(null);
+
+  // Modal de Detalhamento das Métricas das Colunas
+  const [isMetricsModalOpen, setIsMetricsModalOpen] = useState(false);
+
+  // Caixa de Entrada de Menções (@usuario)
+  const [isMentionsInboxOpen, setIsMentionsInboxOpen] = useState(false);
+  const [mentionReplyText, setMentionReplyText] = useState<Record<string, string>>({});
+  const [replyingToMentionId, setReplyingToMentionId] = useState<string | null>(null);
+  
+  // Sugestões de @usuario no textarea de atualizações
+  const [mentionSuggestions, setMentionSuggestions] = useState<Array<{ id: string; name: string }>>([]);
+  const [mentionCursorIndex, setMentionCursorIndex] = useState<number | null>(null);
+
+  // Alertas de Tarefas Vinculadas Concluídas (Quantidade de conclusões não lidas no Card)
+  const [unreadParentAlerts, setUnreadParentAlerts] = useState<Record<string, number>>(() => {
     try {
       const saved = localStorage.getItem("mykaflow_crm_parent_alerts");
       return saved ? JSON.parse(saved) : {};
@@ -717,7 +913,75 @@ function CrmDashboard() {
     }
   });
 
-  const saveParentAlerts = (newAlerts: Record<string, boolean>) => {
+  // State para Pulso do Card "TRABALHANDO" (Fade in 1.5s + Fade out 1.5s contínuo com intervalo de 3s)
+  const [inProgressAlternation, setInProgressAlternation] = useState(false);
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    const scheduleNext = (shouldShow: boolean) => {
+      setInProgressAlternation(shouldShow);
+      const delay = shouldShow ? 1500 : 3000;
+      timeoutId = setTimeout(() => {
+        scheduleNext(!shouldShow);
+      }, delay);
+    };
+
+    scheduleNext(false);
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  // Monitoramento Automático de Horário (Auto-parada forçada às 12:00 e às 17:30)
+  useEffect(() => {
+    const checkScheduleAutoStop = async () => {
+      if (!user) return;
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      const curMins = hours * 60 + minutes;
+
+      // 12:00 (720 min) ou 17:30 (1050 min)
+      const isLunchTime = curMins >= 12 * 60 && curMins < 13 * 60;
+      const isEndOfDay = curMins >= 17 * 60 + 30 || curMins < 7 * 60 + 30;
+
+      if (isLunchTime || isEndOfDay) {
+        for (const deal of deals) {
+          const activeWorker = getDealActiveWorker(deal);
+          if (activeWorker && activeWorker.userId === user.id) {
+            const nowIso = new Date().toISOString();
+            const durationSeconds = Math.max(1, Math.floor((Date.now() - new Date(activeWorker.startedAt).getTime()) / 1000));
+            const formatted = formatDurationHoursMinutes(durationSeconds);
+            const stopReason = isLunchTime ? "lunch_12h" : "end_of_day_17h30";
+
+            const session: DealTimeSession = {
+              id: crypto.randomUUID(),
+              deal_id: deal.id,
+              user_id: user.id,
+              user_name: user.user_metadata?.display_name || user.email || "Usuário",
+              started_at: activeWorker.startedAt,
+              ended_at: nowIso,
+              duration_seconds: durationSeconds,
+              stop_reason: stopReason,
+            };
+
+            const sessionTag = `[WORK_LOG:${JSON.stringify(session)}]`;
+            const cleanNotes = (deal.notes || "").replace(/\[WORK_ACTIVE:.*?\]\s*/g, "").trim();
+            const updatedNotes = `${sessionTag}\n${cleanNotes}`.trim();
+
+            try {
+              await supabase.from("crm_deals").update({ notes: updatedNotes, updated_at: nowIso }).eq("id", deal.id);
+              setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes, updated_at: nowIso } : d)));
+              toast.info(`Atividade pausada automaticamente (${isLunchTime ? "Horário de Almoço 12h" : "Fim de Expediente 17h30"}).`);
+            } catch (e) {}
+          }
+        }
+      }
+    };
+
+    const interval = setInterval(checkScheduleAutoStop, 30000); // Checa a cada 30 segundos
+    return () => clearInterval(interval);
+  }, [user, deals]);
+
+  const saveParentAlerts = (newAlerts: Record<string, number>) => {
     setUnreadParentAlerts(newAlerts);
     try {
       localStorage.setItem("mykaflow_crm_parent_alerts", JSON.stringify(newAlerts));
@@ -727,8 +991,9 @@ function CrmDashboard() {
   };
 
   const handleMarkAlertAsSeen = (dealId: string) => {
-    saveParentAlerts({ ...unreadParentAlerts, [dealId]: false });
-    toast.success("Alerta marcado como visto!");
+    const updated = { ...unreadParentAlerts };
+    delete updated[dealId];
+    saveParentAlerts(updated);
   };
 
   // Edição de Prazo pelo Administrador
@@ -1169,30 +1434,81 @@ function CrmDashboard() {
     return null;
   };
 
-  // Helper para limpar notas para exibição no hover do card
-  const getCleanHoverNote = (notes?: string | null) => {
-    if (!notes) return "Sem atualizações registradas.";
-    const clean = notes
+  // Helper para limpar e formatar notas para exibição no hover do card
+  const getCleanHoverNote = (notes?: string | null, authorFallback?: string) => {
+    if (!notes) return { author: (authorFallback || "Usuário").toUpperCase(), text: "Sem atualizações registradas." };
+    let clean = notes
+      .replace(/\[WORK_ACTIVE:.*?\]\s*/g, "")
+      .replace(/\[WORK_LOG:.*?\]\s*/g, "")
+      .replace(/\[QUOTE_DATA:.*?\]\s*/g, "")
       .replace(/\[PARENT_DEAL:.*?\]\s*/g, "")
       .replace(/\[QUOTE_FILE:.*?\]\s*/g, "")
       .replace(/\[SUBTASK_LINK:.*?\]\s*/g, "")
       .replace(/\[SUBTASK_COMPLETED:.*?\]\s*/g, "")
       .replace(/\[DEVOLVIDA\]\s*/g, "")
       .replace(/\[HISTÓRICO_.*?:.*?\]\s*/g, "")
+      .replace(/\[MENTION:.*?\]\s*/g, "")
+      .replace(/\[MENTION_REPLY:.*?\]\s*/g, "")
       .trim();
-    return clean || "Sem atualizações registradas.";
+
+    if (!clean) return { author: (authorFallback || "Usuário").toUpperCase(), text: "Sem atualizações registradas." };
+
+    // Se começar com [Nome]: já possui autor embutido; caso comece com Instruções:, remove o prefixo
+    if (clean.toLowerCase().startsWith("instruções:")) {
+      clean = clean.replace(/^instruções:\s*/i, "").trim();
+    }
+
+    // Se já tiver formato [AUTOR]: no início do texto, resolve com o cadastro oficial de usuários
+    const authorMatch = clean.match(/^\[([A-Za-z0-9À-ÿ\s._-]+)\]:\s*(.*)$/s);
+    if (authorMatch) {
+      const parsedAuthor = authorMatch[1].trim();
+      const matchedMember = teamMembers.find(
+        (m) =>
+          m.display_name?.toUpperCase() === parsedAuthor.toUpperCase() ||
+          m.email?.toUpperCase() === parsedAuthor.toUpperCase() ||
+          m.display_name?.toUpperCase().startsWith(parsedAuthor.toUpperCase().split(" ")[0]) ||
+          parsedAuthor.toUpperCase().startsWith(m.display_name?.toUpperCase() || "###")
+      );
+
+      const finalAuthorName = matchedMember?.display_name || parsedAuthor;
+
+      return {
+        author: finalAuthorName.toUpperCase(),
+        text: authorMatch[2].trim(),
+      };
+    }
+
+    const matchedFallback = teamMembers.find(
+      (m) =>
+        m.display_name?.toUpperCase() === authorFallback?.toUpperCase() ||
+        m.email?.toUpperCase() === authorFallback?.toUpperCase() ||
+        m.display_name?.toUpperCase().startsWith(authorFallback?.toUpperCase().split(" ")[0] || "###") ||
+        authorFallback?.toUpperCase().startsWith(m.display_name?.toUpperCase() || "###")
+    );
+
+    const finalFallbackName = matchedFallback?.display_name || authorFallback || "Usuário";
+
+    return {
+      author: finalFallbackName.toUpperCase(),
+      text: clean,
+    };
   };
 
   // Helper unificado para renderizar descrições com botões clicáveis (criação e conclusão de tarefas)
   const renderInteractiveDescription = (rawText: string) => {
     if (!rawText) return null;
     const sanitized = rawText
+      .replace(/\[WORK_ACTIVE:.*?\]\s*/g, "")
+      .replace(/\[WORK_LOG:.*?\]\s*/g, "")
+      .replace(/\[QUOTE_DATA:.*?\]\s*/g, "")
       .replace(/\[PARENT_DEAL:.*?\]\s*/g, "")
       .replace(/\[QUOTE_FILE:.*?\]\s*/g, "")
       .replace(/\[SUBTASK_LINK:.*?\]\s*/g, "")
       .replace(/\[SUBTASK_COMPLETED:.*?\]\s*/g, "")
       .replace(/\[DEVOLVIDA\]\s*/g, "")
       .replace(/\[HISTÓRICO_.*?:.*?\]\s*/g, "")
+      .replace(/\[MENTION:.*?\]\s*/g, "")
+      .replace(/\[MENTION_REPLY:.*?\]\s*/g, "")
       .trim();
 
     if (!sanitized) return null;
@@ -1397,9 +1713,40 @@ function CrmDashboard() {
             );
           }
 
+          // 4. Substituição amigável de qualquer linha legada "Instruções: "
+          if (trimmedLine.toLowerCase().startsWith("instruções:")) {
+            const cleanInstruction = trimmedLine.replace(/^instruções:\s*/i, "").trim();
+            const authorName = selectedDealForHistory?.creator_name || selectedDealForHistory?.latest_update_author || "Autor";
+            return (
+              <p key={lineIdx} className="text-white/90 text-xs whitespace-pre-wrap leading-relaxed">
+                <strong className="text-sky-300 font-bold">[{authorName}]: </strong>
+                {cleanInstruction}
+              </p>
+            );
+          }
+
+          // Helper para formatar @menções em texto com destaque visual
+          const formatMentionsInText = (text: string) => {
+            const parts = text.split(/(@[A-Za-z0-9À-ÿ._-]+)/g);
+            return parts.map((part, pIdx) => {
+              if (part.startsWith("@")) {
+                return (
+                  <span
+                    key={pIdx}
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 font-bold font-mono text-[11px] shadow-sm"
+                  >
+                    <AtSign className="h-2.5 w-2.5 text-sky-400" />
+                    {part.slice(1)}
+                  </span>
+                );
+              }
+              return part;
+            });
+          };
+
           return (
             <p key={lineIdx} className="text-white/90 text-xs whitespace-pre-wrap leading-relaxed">
-              {line}
+              {formatMentionsInText(line)}
             </p>
           );
         })}
@@ -1416,6 +1763,11 @@ function CrmDashboard() {
     setReassignTo("");
     setIsSubtaskModalOpen(false);
     setIsQuoteUploaderOpen(false);
+
+    // Marca como visualizado o alerta de tarefa concluída nesta atividade
+    if (unreadParentAlerts[deal.id]) {
+      handleMarkAlertAsSeen(deal.id);
+    }
     setAdminEditDeadline(deal.expected_close_date || new Date().toISOString().split("T")[0]);
     setIsEditingDeadline(false);
     setIsEditingTitle(false);
@@ -1738,8 +2090,9 @@ function CrmDashboard() {
 
         await registerHistoryEntry(parentDealId, "subtask_completed", desc);
 
-        // Marca o alerta visual no card da atividade mãe
-        const currentAlerts = { ...unreadParentAlerts, [parentDealId]: true };
+        // Marca e incrementa o alerta numérico no card da atividade mãe
+        const prevCount = Number(unreadParentAlerts[parentDealId]) || 0;
+        const currentAlerts = { ...unreadParentAlerts, [parentDealId]: prevCount + 1 };
         saveParentAlerts(currentAlerts);
       }
     } catch (err) {
@@ -1777,6 +2130,8 @@ function CrmDashboard() {
         selectedDealForHistory.stage === "proposal" ? "negotiation" : selectedDealForHistory.stage
       ) as Deal["stage"];
 
+      const subtaskNotesFormatted = subtaskNotes.trim() ? `[${creatorName}]: ${subtaskNotes.trim()}${subtaskNotes.trim().endsWith(".") ? "" : "."}` : "";
+
       const subtaskPayload = {
         title: `[TAREFA] ${subtaskTitle.trim().toUpperCase()}`,
         stage: targetStage,
@@ -1784,7 +2139,10 @@ function CrmDashboard() {
         user_id: user?.id,
         assigned_user_id: subtaskAssignedTo,
         expected_close_date: subtaskDeadline || null,
-        notes: `${parentDealTag} Tarefa vinculada a: ${parentCleanTitle} (Nº ${parentReqNum})\nInstruções: ${subtaskNotes.trim()}`,
+        notes: [
+          `${parentDealTag} Tarefa vinculada a: ${parentCleanTitle} (Nº ${parentReqNum})`,
+          subtaskNotesFormatted,
+        ].filter(Boolean).join("\n"),
       };
 
       const { data: createdData, error } = await supabase
@@ -1897,23 +2255,45 @@ function CrmDashboard() {
         });
       }
 
+      // Executa a extração inteligente e automática dos dados do orçamento
+      let extractedQuoteData: ExtractedQuoteData | null = null;
+      try {
+        toast.loading("Lendo e extraindo dados do orçamento...", { id: toastId });
+        extractedQuoteData = await extractQuoteDataFromDocument(optimizedBlob, file.type || "application/pdf");
+      } catch (extErr) {
+        console.warn("Aviso ao extrair dados do orçamento via IA:", extErr);
+      }
+
       const nowIso = new Date().toISOString();
       const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
 
-      const quoteTag = `[QUOTE_FILE:${JSON.stringify({ url: publicUrl, name: fileName, uploadedAt: nowIso })}]`;
-      const cleanNotes = (selectedDealForHistory.notes || "").replace(/\[QUOTE_FILE:.*?\]\s*/g, "").trim();
-      const updatedNotesWithQuote = `${quoteTag}\n${cleanNotes}`.trim();
+      const quoteTag = `[QUOTE_FILE:${JSON.stringify({ url: publicUrl, name: fileName, uploadedAt: nowIso, quoteData: extractedQuoteData })}]`;
+      const quoteDataTag = extractedQuoteData ? `[QUOTE_DATA:${JSON.stringify(extractedQuoteData)}]` : "";
+      
+      const cleanNotes = (selectedDealForHistory.notes || "")
+        .replace(/\[QUOTE_FILE:.*?\]\s*/g, "")
+        .replace(/\[QUOTE_DATA:.*?\]\s*/g, "")
+        .trim();
+      
+      const updatedNotesWithQuote = [quoteTag, quoteDataTag, cleanNotes].filter(Boolean).join("\n").trim();
+
+      const updateDealPayload: any = {
+        quote_file_url: publicUrl,
+        quote_file_name: fileName,
+        quote_file_uploaded_at: nowIso,
+        notes: updatedNotesWithQuote,
+        updated_at: nowIso,
+      };
+
+      // Se o orçamento extraiu o valor total, atualiza também o valor da atividade
+      if (extractedQuoteData?.totalAmount && extractedQuoteData.totalAmount > 0) {
+        updateDealPayload.value = extractedQuoteData.totalAmount;
+      }
 
       try {
         await supabase
           .from("crm_deals")
-          .update({
-            quote_file_url: publicUrl,
-            quote_file_name: fileName,
-            quote_file_uploaded_at: nowIso,
-            notes: updatedNotesWithQuote,
-            updated_at: nowIso,
-          })
+          .update(updateDealPayload)
           .eq("id", selectedDealForHistory.id);
       } catch {
         await supabase
@@ -1925,7 +2305,7 @@ function CrmDashboard() {
           .eq("id", selectedDealForHistory.id);
       }
 
-      const docMeta = JSON.stringify({ url: publicUrl, name: fileName, sizeKb: optimizedSizeKb, uploadedAt: nowIso });
+      const docMeta = JSON.stringify({ url: publicUrl, name: fileName, sizeKb: optimizedSizeKb, uploadedAt: nowIso, quoteData: extractedQuoteData });
       await registerHistoryEntry(
         selectedDealForHistory.id,
         "quote_file_uploaded",
@@ -1934,6 +2314,7 @@ function CrmDashboard() {
 
       const updatedDeal: Deal = {
         ...selectedDealForHistory,
+        value: extractedQuoteData?.totalAmount || selectedDealForHistory.value,
         quote_file_url: publicUrl,
         quote_file_name: fileName,
         quote_file_uploaded_at: nowIso,
@@ -1958,6 +2339,248 @@ function CrmDashboard() {
       e.target.value = "";
     }
   }
+
+  // Helper para validar se o horário atual permite iniciar atividade (comercial das 08h às 12h e 13h às 17h30 em dias úteis)
+  const isBusinessWorkTime = (): { allowed: boolean; reason?: string } => {
+    const now = new Date();
+    const day = now.getDay(); // 0 = Domingo, 6 = Sábado
+    if (day === 0 || day === 6) {
+      return { allowed: false, reason: "Fora de expediente (final de semana)." };
+    }
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const currentMinutes = hours * 60 + minutes;
+
+    // 12:00 às 13:00 (Almoço / Intervalo)
+    if (currentMinutes >= 12 * 60 && currentMinutes < 13 * 60) {
+      return { allowed: false, reason: "Horário de intervalo/almoço (12h00 às 13h00)." };
+    }
+
+    // Antes das 07:30 ou após as 17:30
+    if (currentMinutes < 7 * 60 + 30 || currentMinutes >= 17 * 60 + 30) {
+      return { allowed: false, reason: "Fora de expediente comercial (após 17h30 ou antes do início)." };
+    }
+
+    return { allowed: true };
+  };
+
+  // Ação de Iniciar ou Parar Atividade (Toggle de um único botão)
+  const handleToggleWorkActivity = async (deal: Deal, forceSwitch: boolean = false) => {
+    if (!user) return;
+
+    // 1. Permissão estrita: apenas o próprio responsável atribuído pode iniciar/parar
+    const isAssigned = deal.assigned_user_id === user.id;
+    if (!isAssigned) {
+      toast.error("Somente o responsável atribuído a esta atividade pode iniciá-la.");
+      return;
+    }
+
+    const activeWorker = getDealActiveWorker(deal);
+    const isCurrentlyWorkingThisDeal = Boolean(activeWorker && activeWorker.userId === user.id);
+
+    // Se já está trabalhando nesta atividade, executa a PARADA
+    if (isCurrentlyWorkingThisDeal) {
+      const nowIso = new Date().toISOString();
+      const startTime = new Date(activeWorker.startedAt).getTime();
+      const durationSeconds = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+      const formattedDuration = formatDurationHoursMinutes(durationSeconds);
+
+      const session: DealTimeSession = {
+        id: crypto.randomUUID(),
+        deal_id: deal.id,
+        user_id: user.id,
+        user_name: user.user_metadata?.display_name || user.email || "Usuário",
+        started_at: activeWorker.startedAt,
+        ended_at: nowIso,
+        duration_seconds: durationSeconds,
+        stop_reason: "manual",
+      };
+
+      const sessionTag = `[WORK_LOG:${JSON.stringify(session)}]`;
+      const cleanNotes = (deal.notes || "").replace(/\[WORK_ACTIVE:.*?\]\s*/g, "").trim();
+      const updatedNotes = `${sessionTag}\n${cleanNotes}`.trim();
+
+      try {
+        await supabase
+          .from("crm_deals")
+          .update({
+            notes: updatedNotes,
+            updated_at: nowIso,
+          })
+          .eq("id", deal.id);
+
+        const updatedDeal: Deal = {
+          ...deal,
+          notes: updatedNotes,
+          updated_at: nowIso,
+        };
+
+        setSelectedDealForHistory(updatedDeal);
+        setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
+
+        toast.success(`Atividade pausada! (${formattedDuration} registrados para métricas ADM)`);
+      } catch (err: any) {
+        toast.error("Erro ao pausar atividade: " + (err.message || "Tente novamente"));
+      }
+      return;
+    }
+
+    // Se vai INICIAR a atividade:
+    // 2. Validação de horário comercial (Regra 3: Fora de horário exige autorização do ADM)
+    const timeCheck = isBusinessWorkTime();
+    if (!timeCheck.allowed && !isAdmin) {
+      toast.warning(`${timeCheck.reason} Solicite autorização ao Administrador para iniciar.`);
+      return;
+    }
+
+    // 3. Unicidade: se o usuário já estiver com outra atividade ativa, questiona como quer prosseguir
+    const otherRunningDeal = deals.find((other) => {
+      if (other.id === deal.id) return false;
+      const otherActive = getDealActiveWorker(other);
+      return Boolean(otherActive && otherActive.userId === user.id);
+    });
+
+    if (otherRunningDeal && !forceSwitch) {
+      setWorkingConflictModal({
+        previousDeal: otherRunningDeal,
+        targetDeal: deal,
+      });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const userName = user.user_metadata?.display_name || user.email || "Usuário";
+
+    // Se confirmou a troca ou não havia outra, encerra a anterior se existir
+    if (otherRunningDeal) {
+      const otherActive = getDealActiveWorker(otherRunningDeal);
+      if (otherActive) {
+        const otherDuration = Math.max(1, Math.floor((Date.now() - new Date(otherActive.startedAt).getTime()) / 1000));
+        const prevSession: DealTimeSession = {
+          id: crypto.randomUUID(),
+          deal_id: otherRunningDeal.id,
+          user_id: user.id,
+          user_name: userName,
+          started_at: otherActive.startedAt,
+          ended_at: nowIso,
+          duration_seconds: otherDuration,
+          stop_reason: "auto_switch",
+        };
+        const prevTag = `[WORK_LOG:${JSON.stringify(prevSession)}]`;
+        const prevCleanNotes = (otherRunningDeal.notes || "").replace(/\[WORK_ACTIVE:.*?\]\s*/g, "").trim();
+        const prevUpdatedNotes = `${prevTag}\n${prevCleanNotes}`.trim();
+
+        try {
+          await supabase.from("crm_deals").update({ notes: prevUpdatedNotes, updated_at: nowIso }).eq("id", otherRunningDeal.id);
+          setDeals((prev) => prev.map((d) => (d.id === otherRunningDeal.id ? { ...d, notes: prevUpdatedNotes, updated_at: nowIso } : d)));
+        } catch (e) {}
+      }
+    }
+
+    // Inicia a sessão na atividade atual
+    const activeTag = `[WORK_ACTIVE:${JSON.stringify({ userId: user.id, userName, startedAt: nowIso })}]`;
+    const currentClean = (deal.notes || "").replace(/\[WORK_ACTIVE:.*?\]\s*/g, "").trim();
+    const updatedNotes = `${activeTag}\n${currentClean}`.trim();
+
+    try {
+      await supabase
+        .from("crm_deals")
+        .update({
+          notes: updatedNotes,
+          updated_at: nowIso,
+        })
+        .eq("id", deal.id);
+
+      const updatedDeal: Deal = {
+        ...deal,
+        notes: updatedNotes,
+        updated_at: nowIso,
+      };
+
+      setSelectedDealForHistory(updatedDeal);
+      setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
+      setWorkingConflictModal(null);
+
+      toast.success("Atividade iniciada com sucesso! Cronômetro ativo.");
+    } catch (err: any) {
+      toast.error("Erro ao iniciar atividade: " + (err.message || "Tente novamente"));
+    }
+  };
+
+  // Marcar Menção como Lida (Exclusivo para o próprio usuário mencionado)
+  const handleMarkMentionAsRead = async (deal: Deal, mentionId: string) => {
+    if (!user) return;
+    const mentions = getDealMentions(deal);
+    const targetMention = mentions.find((m) => m.id === mentionId);
+    
+    // Regra estrita: Somente o próprio destinatário pode marcar como lida (nem mesmo o ADM)
+    if (!targetMention || targetMention.mentioned_user_id !== user.id) {
+      return toast.error("Somente o destinatário da menção pode marcá-la como lida.");
+    }
+
+    if (targetMention.read_by_user) return;
+
+    const updatedMentions = mentions.map((m) =>
+      m.id === mentionId ? { ...m, read_by_user: true } : m
+    );
+
+    // Substitui as tags antigas pelas novas
+    let notesClean = (deal.notes || "").replace(/\[MENTION:.*?\]\s*/g, "").trim();
+    const newTags = updatedMentions.map((m) => `[MENTION:${JSON.stringify(m)}]`).join("\n");
+    const updatedNotes = newTags ? `${newTags}\n${notesClean}`.trim() : notesClean;
+
+    try {
+      // Atualiza SEM mudar updated_at para não alterar a coloração de prazo da atividade
+      await supabase.from("crm_deals").update({ notes: updatedNotes }).eq("id", deal.id);
+      setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes } : d)));
+      if (selectedDealForHistory?.id === deal.id) {
+        setSelectedDealForHistory((prev) => (prev ? { ...prev, notes: updatedNotes } : null));
+      }
+      toast.success("Menção marcada como lida!");
+    } catch (err: any) {
+      toast.error("Erro ao marcar como lida: " + err.message);
+    }
+  };
+
+  // Responder à Menção (Fica vinculada diretamente à menção original, sem gerar nova atualização na atividade)
+  const handleSendMentionReply = async (deal: Deal, mentionId: string) => {
+    if (!user) return;
+    const replyText = (mentionReplyText[mentionId] || "").trim();
+    if (!replyText) {
+      return toast.error("Digite uma resposta antes de enviar.");
+    }
+
+    const currentUserName = user.user_metadata?.display_name || user.email || "Usuário";
+    const nowIso = new Date().toISOString();
+
+    const replyObj: DealMentionReply = {
+      id: crypto.randomUUID(),
+      mention_id: mentionId,
+      deal_id: deal.id,
+      user_id: user.id,
+      user_name: currentUserName,
+      reply_text: replyText,
+      created_at: nowIso,
+    };
+
+    const replyTag = `[MENTION_REPLY:${JSON.stringify(replyObj)}]`;
+    const updatedNotes = `${replyTag}\n${deal.notes || ""}`.trim();
+
+    try {
+      // Salva a resposta no deal SEM alterar o updated_at para não modificar a coloração das atualizações
+      await supabase.from("crm_deals").update({ notes: updatedNotes }).eq("id", deal.id);
+      setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes } : d)));
+      if (selectedDealForHistory?.id === deal.id) {
+        setSelectedDealForHistory((prev) => (prev ? { ...prev, notes: updatedNotes } : null));
+      }
+
+      setMentionReplyText((prev) => ({ ...prev, [mentionId]: "" }));
+      setReplyingToMentionId(null);
+      toast.success("Resposta enviada e vinculada à menção!");
+    } catch (err: any) {
+      toast.error("Erro ao enviar resposta: " + err.message);
+    }
+  };
 
   // Remover Arquivo de Orçamento Oficial
   async function handleRemoveQuoteFile() {
@@ -2096,8 +2719,9 @@ function CrmDashboard() {
           )
         );
 
-        // Ativa o alerta no card da atividade mãe
-        const currentAlerts = { ...unreadParentAlerts, [parentDeal.id]: true };
+        // Ativa e incrementa o alerta numérico no card da atividade mãe
+        const prevCount = Number(unreadParentAlerts[parentDeal.id]) || 0;
+        const currentAlerts = { ...unreadParentAlerts, [parentDeal.id]: prevCount + 1 };
         saveParentAlerts(currentAlerts);
       }
 
@@ -2405,10 +3029,13 @@ function CrmDashboard() {
 
     // Regra 2: Um orçamento ou atividade não pode pular etapas (não pode passar direto para contratos ou perdidos sem ter passado por negociações)
     if (currentIndex !== -1 && targetIndex > currentIndex + 1) {
-      const nextAllowedTitle = STAGES[currentIndex + 1]?.title || "próxima etapa";
-      return toast.error(
-        `Não é permitido pular etapas. A atividade deve avançar para "${nextAllowedTitle}" antes de prosseguir.`
-      );
+      const isWonToLostOrCompleted = currentStageId === "won" && (newStage === "lost" || newStage === "completed");
+      if (!isWonToLostOrCompleted) {
+        const nextAllowedTitle = STAGES[currentIndex + 1]?.title || "próxima etapa";
+        return toast.error(
+          `Não é permitido pular etapas. A atividade deve avançar para "${nextAllowedTitle}" antes de prosseguir.`
+        );
+      }
     }
 
     // Regra 3: Tarefa/Orçamento só pode avançar para a etapa NEGOCIAÇÕES se o orçamento oficial estiver anexado
@@ -2674,15 +3301,44 @@ function CrmDashboard() {
 
       const combinedNotesText = [...autoGeneratedLogs, newComment.trim()].filter(Boolean).join("\n\n");
 
+      // Detecção e criação de Menções (@usuario)
+      const mentionTags: string[] = [];
+      const commentRaw = newComment.trim();
+      const currentUserName = user?.user_metadata?.display_name || user?.email || "Você";
+
+      teamMembers.forEach((member) => {
+        const memberName = member.display_name || member.email || "";
+        const firstName = memberName.split(" ")[0];
+        
+        // Verifica se o texto contém @Nome, @NomeCompleto ou @Email
+        const mentionRegex = new RegExp(`@(${escapeRegExp(memberName)}|${escapeRegExp(firstName)}|${escapeRegExp(member.email || "")})\\b`, "i");
+        if (mentionRegex.test(commentRaw)) {
+          const mentionObj: DealMention = {
+            id: crypto.randomUUID(),
+            deal_id: deal.id,
+            author_id: user.id,
+            author_name: currentUserName,
+            mentioned_user_id: member.id,
+            mentioned_user_name: memberName,
+            content: commentRaw,
+            created_at: nowIso,
+            read_by_user: false,
+          };
+          mentionTags.push(`[MENTION:${JSON.stringify(mentionObj)}]`);
+        }
+      });
+
       const updatePayload: any = { updated_at: nowIso };
       if (isStageChanged) updatePayload.stage = targetStage;
       if (isReassigned) updatePayload.assigned_user_id = reassignTo;
-      if (combinedNotesText) {
-        const existingQuoteTag = deal.notes?.match(/\[QUOTE_FILE:.*?\]/)?.[0] || (deal.quote_file_url ? `[QUOTE_FILE:${JSON.stringify({ url: deal.quote_file_url, name: deal.quote_file_name || "orcamento_oficial", uploadedAt: deal.quote_file_uploaded_at || nowIso })}]` : "");
-        const existingParentTag = deal.notes?.match(/\[PARENT_DEAL:.*?\]/)?.[0] || "";
-        const metaTags = [existingQuoteTag, existingParentTag].filter(Boolean).join("\n");
-        updatePayload.notes = metaTags ? `${metaTags}\n${combinedNotesText}`.trim() : combinedNotesText;
-      }
+      
+      // Preserva tags de metadados existentes (QUOTE_FILE, PARENT_DEAL, WORK_LOG, MENTION_REPLY, etc.)
+      const existingTags = (deal.notes || "").match(/\[(QUOTE_FILE|PARENT_DEAL|WORK_LOG|WORK_ACTIVE|QUOTE_DATA|MENTION|MENTION_REPLY):.*?\]/g) || [];
+      const allNewTags = [...existingTags, ...mentionTags];
+      const uniqueTags = Array.from(new Set(allNewTags));
+      const tagsBlock = uniqueTags.join("\n");
+
+      updatePayload.notes = tagsBlock ? `${tagsBlock}\n${combinedNotesText}`.trim() : combinedNotesText;
 
       await supabase
         .from("crm_deals")
@@ -2731,7 +3387,6 @@ function CrmDashboard() {
         setReturnedHistoryList((prev) => [newHistoryItem, ...prev]);
       }
 
-      const currentUserName = user?.user_metadata?.display_name || user?.email || "Você";
       setDealHistoryList((prev) => [newHistoryItem, ...prev]);
       setDeals((prev) =>
         prev.map((d) =>
@@ -2914,30 +3569,80 @@ function CrmDashboard() {
     );
   }, [visibleDeals, archivedSearchTerm, deals]);
 
-  const pipelineMetrics = useMemo(() => {
-    const totalDeals = visibleDeals.filter((d) => d.stage !== "archived").length;
-    const wonDeals = visibleDeals.filter((d) => d.stage === "won");
-    const activeReqs = visibleDeals.filter(
-      (d) => d.stage !== "won" && d.stage !== "lost" && d.stage !== "archived"
-    );
-    const internalReqs = visibleDeals.filter(
-      (d) =>
-        (d.stage === "lead" || d.title.toUpperCase().includes("[REQ. INTERNA]")) &&
-        d.stage !== "archived"
-    );
-    const externalReqs = visibleDeals.filter(
-      (d) =>
-        d.stage !== "lead" &&
-        !d.title.toUpperCase().includes("[REQ. INTERNA]") &&
-        d.stage !== "archived"
+  // Lista de Menções e Respostas do Usuário Logado
+  const userMentionsData = useMemo(() => {
+    if (!user) return { all: [], unreadCount: 0 };
+    const myId = user.id;
+    const allMentions: Array<{ mention: DealMention; deal: Deal; replies: DealMentionReply[] }> = [];
+
+    deals.forEach((deal) => {
+      const mentions = getDealMentions(deal);
+      const allReplies = getDealMentionReplies(deal);
+
+      mentions.forEach((m) => {
+        if (m.mentioned_user_id === myId) {
+          const repliesForThis = allReplies.filter((r) => r.mention_id === m.id);
+          allMentions.push({
+            mention: m,
+            deal,
+            replies: repliesForThis,
+          });
+        }
+      });
+    });
+
+    allMentions.sort(
+      (a, b) => new Date(b.mention.created_at).getTime() - new Date(a.mention.created_at).getTime()
     );
 
+    const unreadCount = allMentions.filter((item) => !item.mention.read_by_user).length;
+
     return {
-      totalDeals,
-      wonDeals: wonDeals.length,
-      activeReqs: activeReqs.length,
-      internalCount: internalReqs.length,
-      externalCount: externalReqs.length,
+      all: allMentions,
+      unreadCount,
+    };
+  }, [deals, user]);
+
+  const pipelineMetrics = useMemo(() => {
+    // Apenas orçamentos primários comerciais (desconsidera coluna de tarefas e tarefas vinculadas)
+    const isCommercialQuote = (d: Deal) => {
+      if (d.stage === "lead") return false;
+      if (d.stage === "archived") return false;
+      if (d.stage === "completed") return false;
+      if (d.title.toUpperCase().includes("[REQ. INTERNA]")) return false;
+      if (d.title.toUpperCase().includes("[TAREFA]")) return false;
+      if (d.notes && d.notes.includes("[PARENT_DEAL:")) return false;
+      return true;
+    };
+
+    const commercialDeals = visibleDeals.filter(isCommercialQuote);
+
+    // Média de dias por coluna
+    const calculateStageAvg = (stageId: Deal["stage"]) => {
+      const stageDeals = commercialDeals.filter((d) => d.stage === stageId);
+      if (stageDeals.length === 0) return { count: 0, avgDays: 0, deals: [] };
+      const totalDays = stageDeals.reduce((acc, d) => {
+        const days = getEffectiveCalendarDays(d.created_at);
+        return acc + days;
+      }, 0);
+      return {
+        count: stageDeals.length,
+        avgDays: Math.round((totalDays / stageDeals.length) * 10) / 10,
+        deals: stageDeals,
+      };
+    };
+
+    const qualification = calculateStageAvg("qualification");
+    const negotiation = calculateStageAvg("negotiation");
+    const won = calculateStageAvg("won");
+    const lost = calculateStageAvg("lost");
+
+    return {
+      totalCommercial: commercialDeals.length,
+      qualification,
+      negotiation,
+      won,
+      lost,
     };
   }, [visibleDeals]);
 
@@ -3100,9 +3805,13 @@ function CrmDashboard() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="flex flex-col select-none justify-center">
+          <Link
+            to="/"
+            className="group flex flex-col select-none justify-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] focus:outline-none"
+            title="Voltar à tela inicial"
+          >
             <svg
-              className="w-[280px] sm:w-[305px] h-[36px] overflow-visible select-none"
+              className="w-[280px] sm:w-[305px] h-[36px] overflow-visible select-none transition-all duration-300 group-hover:drop-shadow-[0_0_12px_rgba(34,211,238,0.45)]"
               viewBox="0 0 305 36"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -3110,7 +3819,7 @@ function CrmDashboard() {
               <text
                 x="0"
                 y="21"
-                className="font-saira-stencil"
+                className="font-saira-stencil transition-colors duration-200"
                 fontSize="24"
                 fill="#22d3ee"
                 textLength="305"
@@ -3123,6 +3832,7 @@ function CrmDashboard() {
                 y="33"
                 fontSize="9"
                 fontWeight="500"
+                className="transition-colors duration-200 group-hover:fill-sky-300/80"
                 fill="#94a3b8"
                 fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
                 textLength="305"
@@ -3131,125 +3841,115 @@ function CrmDashboard() {
                 MYKAFLOW GESTÃO FINANCEIRA, COMERCIAL E TAREFAS
               </text>
             </svg>
-          </div>
+          </Link>
         </div>
 
-          {/* 4 Cards de Métricas Estilo Glass / Glow do Financeiro */}
+          {/* 4 Tags de Médias por Coluna (Desconsiderando Tarefas e Tarefas Vinculadas) - Clicáveis para Abrir Modal Completo */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mx-auto select-none">
+            {/* 1. Média Orçamentos */}
             <button
               type="button"
-              onClick={() => {
-                setIsolatedStageId(null);
-                setInternalFilterUser("ALL");
-              }}
-              className={`glass relative overflow-hidden rounded-xl border px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left ${
-                !isolatedStageId && internalFilterUser === "ALL"
-                  ? "border-accent/60 bg-accent/15 shadow-[0_0_15px_rgba(250,204,21,0.2)]"
-                  : "border-white/10 hover:border-white/25 hover:bg-white/5"
-              }`}
-              title="Mostrar todas as colunas e atividades"
+              onClick={() => setIsMetricsModalOpen(true)}
+              className="glass relative overflow-hidden rounded-xl border border-sky-500/20 hover:border-sky-400/50 hover:bg-sky-500/10 px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left group shadow-sm whitespace-nowrap shrink-0"
+              title="Clique para ver o relatório completo de métricas"
             >
-              <div className="w-1 h-7 rounded-full bg-accent animate-pulse-yellow" />
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">
-                  Total Geral
+              <div className="w-1 h-7 rounded-full bg-sky-400 group-hover:shadow-[0_0_8px_rgba(56,189,248,0.8)] shrink-0" />
+              <div className="whitespace-nowrap min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-sky-300 whitespace-nowrap">
+                  Média Orçamentos
                 </p>
-                <p className="text-xs font-black font-mono text-white mt-0.5">
-                  {pipelineMetrics.totalDeals} criadas
+                <p className="text-xs font-black font-mono text-sky-400 mt-0.5 flex items-center gap-1 whitespace-nowrap">
+                  <span className="whitespace-nowrap">{pipelineMetrics.qualification.avgDays} {pipelineMetrics.qualification.avgDays === 1 ? "dia" : "dias"}</span>
+                  <span className="text-[10px] text-muted-foreground font-normal whitespace-nowrap">({pipelineMetrics.qualification.count})</span>
                 </p>
               </div>
             </button>
 
+            {/* 2. Média Negociações */}
             <button
               type="button"
-              onClick={() => {
-                setIsolatedStageId((prev) => (prev === "lead" ? null : "lead"));
-                setInternalFilterUser("ALL");
-              }}
-              className={`glass relative overflow-hidden rounded-xl border px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left ${
-                isolatedStageId === "lead"
-                  ? "border-sky-400/60 bg-sky-500/20 shadow-[0_0_15px_rgba(56,189,248,0.25)] ring-1 ring-sky-400/40"
-                  : "border-white/10 hover:border-sky-400/30 hover:bg-white/5"
-              }`}
-              title="Expandir e visualizar colunas de Tarefas"
+              onClick={() => setIsMetricsModalOpen(true)}
+              className="glass relative overflow-hidden rounded-xl border border-indigo-500/20 hover:border-indigo-400/50 hover:bg-indigo-500/10 px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left group shadow-sm whitespace-nowrap shrink-0"
+              title="Clique para ver o relatório completo de métricas"
             >
-              <div className="w-1 h-7 rounded-full bg-sky-400" />
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">
-                  Tarefas
+              <div className="w-1 h-7 rounded-full bg-indigo-400 group-hover:shadow-[0_0_8px_rgba(129,140,248,0.8)] shrink-0" />
+              <div className="whitespace-nowrap min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-indigo-300 whitespace-nowrap">
+                  Média Negociações
                 </p>
-                <p className="text-xs font-black font-mono text-sky-400 mt-0.5">
-                  {pipelineMetrics.internalCount} ativas
+                <p className="text-xs font-black font-mono text-indigo-400 mt-0.5 flex items-center gap-1 whitespace-nowrap">
+                  <span className="whitespace-nowrap">{pipelineMetrics.negotiation.avgDays} {pipelineMetrics.negotiation.avgDays === 1 ? "dia" : "dias"}</span>
+                  <span className="text-[10px] text-muted-foreground font-normal whitespace-nowrap">({pipelineMetrics.negotiation.count})</span>
                 </p>
               </div>
             </button>
 
+            {/* 3. Média Contratos */}
             <button
               type="button"
-              onClick={() => {
-                setIsolatedStageId((prev) => (prev === "qualification" ? null : "qualification"));
-                setInternalFilterUser("ALL");
-              }}
-              className={`glass relative overflow-hidden rounded-xl border px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left ${
-                isolatedStageId === "qualification"
-                  ? "border-indigo-400/60 bg-indigo-500/20 shadow-[0_0_15px_rgba(129,140,248,0.25)] ring-1 ring-indigo-400/40"
-                  : "border-white/10 hover:border-indigo-400/30 hover:bg-white/5"
-              }`}
-              title="Expandir e visualizar colunas de Orçamentos"
+              onClick={() => setIsMetricsModalOpen(true)}
+              className="glass relative overflow-hidden rounded-xl border border-emerald-500/20 hover:border-emerald-400/50 hover:bg-emerald-500/10 px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left group shadow-sm whitespace-nowrap shrink-0"
+              title="Clique para ver o relatório completo de métricas"
             >
-              <div className="w-1 h-7 rounded-full bg-indigo-400" />
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">
-                  Orçamentos
+              <div className="w-1 h-7 rounded-full bg-emerald-400 group-hover:shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0" />
+              <div className="whitespace-nowrap min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-emerald-300 whitespace-nowrap">
+                  Média Contratos
                 </p>
-                <p className="text-xs font-black font-mono text-indigo-400 mt-0.5">
-                  {pipelineMetrics.externalCount} clientes
+                <p className="text-xs font-black font-mono text-emerald-400 mt-0.5 flex items-center gap-1 whitespace-nowrap">
+                  <span className="whitespace-nowrap">{pipelineMetrics.won.avgDays} {pipelineMetrics.won.avgDays === 1 ? "dia" : "dias"}</span>
+                  <span className="text-[10px] text-muted-foreground font-normal whitespace-nowrap">({pipelineMetrics.won.count})</span>
                 </p>
               </div>
             </button>
 
+            {/* 4. Média Perdidos */}
             <button
               type="button"
-              onClick={() => {
-                setIsolatedStageId((prev) => (prev === "won" ? null : "won"));
-                setInternalFilterUser("ALL");
-              }}
-              className={`glass relative overflow-hidden rounded-xl border px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left ${
-                isolatedStageId === "won"
-                  ? "border-emerald-400/60 bg-emerald-500/20 shadow-[0_0_15px_rgba(52,211,153,0.25)] ring-1 ring-emerald-400/40"
-                  : "border-white/10 hover:border-emerald-400/30 hover:bg-white/5"
-              }`}
-              title="Expandir e visualizar colunas de Concluídas"
+              onClick={() => setIsMetricsModalOpen(true)}
+              className="glass relative overflow-hidden rounded-xl border border-rose-500/20 hover:border-rose-400/50 hover:bg-rose-500/10 px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left group shadow-sm whitespace-nowrap shrink-0"
+              title="Clique para ver o relatório completo de métricas"
             >
-              <div className="w-1 h-7 rounded-full bg-emerald-400" />
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">
-                  Concluídas
+              <div className="w-1 h-7 rounded-full bg-rose-400 group-hover:shadow-[0_0_8px_rgba(244,63,94,0.8)] shrink-0" />
+              <div className="whitespace-nowrap min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-rose-300 whitespace-nowrap">
+                  Média Perdidos
                 </p>
-                <p className="text-xs font-black font-mono text-emerald-400 mt-0.5">
-                  {pipelineMetrics.wonDeals} ganhas
+                <p className="text-xs font-black font-mono text-rose-400 mt-0.5 flex items-center gap-1 whitespace-nowrap">
+                  <span className="whitespace-nowrap">{pipelineMetrics.lost.avgDays} {pipelineMetrics.lost.avgDays === 1 ? "dia" : "dias"}</span>
+                  <span className="text-[10px] text-muted-foreground font-normal whitespace-nowrap">({pipelineMetrics.lost.count})</span>
                 </p>
               </div>
             </button>
           </div>
 
-          {/* Lado Direito: Perfil, Central de Alertas ADM, ADM e Sair */}
+          {/* Lado Direito: Caixa de Entrada de Menções (@usuario), ADM e Sair */}
           <div className="flex items-center gap-3 justify-between lg:w-1/3 lg:justify-end shrink-0">
-            <div className="flex flex-col items-end">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
-                {role === "admin" ? "Administrador" : "Equipe"}
-              </p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <button
-                  onClick={() => setIsProfileOpen(true)}
-                  className="text-accent hover:text-white transition-colors hover:scale-110"
-                >
-                  <UserIcon className="h-5 w-5" />
-                </button>
-                <p className="text-sm font-black uppercase tracking-widest text-white">
+            <div className="flex items-center">
+              {/* Botão Caixa de Entrada de Menções com @usuario */}
+              <button
+                type="button"
+                onClick={() => setIsMentionsInboxOpen(true)}
+                className="group/mentionbtn relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-black/40 border border-white/10 hover:border-sky-400/50 hover:bg-sky-500/10 transition-all cursor-pointer shadow-sm"
+                title="Abrir Caixa de Entrada de Menções (@)"
+              >
+                <AtSign className="h-3.5 w-3.5 text-sky-400 group-hover/mentionbtn:scale-110 transition-transform" />
+                <p className="text-xs font-black uppercase tracking-widest text-white group-hover/mentionbtn:text-sky-300">
                   {user?.user_metadata?.display_name || user?.email}
                 </p>
-              </div>
+
+                {/* Badge de Menções Não Lidas no Nome do Usuário */}
+                {userMentionsData.unreadCount > 0 && (
+                  <span
+                    className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-mono font-black text-[10px] shadow-[0_0_10px_rgba(244,63,94,0.9)] animate-pulse shrink-0 ml-0.5"
+                    title={`Você possui ${userMentionsData.unreadCount} ${
+                      userMentionsData.unreadCount === 1 ? "menção não lida" : "menções não lidas"
+                    }`}
+                  >
+                    {userMentionsData.unreadCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -3493,9 +4193,7 @@ function CrmDashboard() {
                   if (isDraggingRef.current) return;
                   openDealHistory(deal);
                 }}
-                className={`group crm-card w-full relative rounded-xl border px-3 py-2.5 transition-all duration-150 flex flex-col justify-between ${
-                  isSubtask ? "h-[80px] min-h-[80px] max-h-[80px]" : "h-[88px] min-h-[88px] max-h-[88px]"
-                } overflow-hidden select-none ${
+                className={`group crm-card w-full relative rounded-xl border px-3 py-2.5 transition-all duration-150 flex flex-col justify-between h-[88px] min-h-[88px] max-h-[88px] overflow-hidden select-none ${
                   canModifyDeal ? "cursor-grab active:cursor-grabbing hover:border-white/30" : "cursor-pointer"
                 } ${
                   isBeingDragged
@@ -3521,23 +4219,58 @@ function CrmDashboard() {
                   </div>
                 )}
 
-                {/* Alerta de Tarefa Vinculada Concluída (Bolinha no Canto Superior visível ao responsável) */}
-                {unreadParentAlerts[deal.id] && (deal.assigned_user_id === user?.id || role === "admin") && (
+                {/* Alerta de Tarefa Vinculada Concluída (Badge com Número Sobrepondo o Canto Superior visível ao responsável) */}
+                {Boolean(unreadParentAlerts[deal.id]) && (deal.assigned_user_id === user?.id || role === "admin") && (
                   <span
-                    className="absolute top-1.5 right-1.5 flex h-3 w-3 z-30 pointer-events-none"
-                    title="Uma tarefa vinculada a esta atividade foi concluída!"
+                    className="absolute top-1 right-1 flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full bg-emerald-500 text-slate-950 font-mono font-black text-[11px] border-2 border-slate-950 shadow-[0_0_12px_rgba(52,211,153,1)] z-30 pointer-events-none animate-bounce"
+                    title={`${unreadParentAlerts[deal.id]} ${
+                      unreadParentAlerts[deal.id] === 1 ? "tarefa vinculada concluída" : "tarefas vinculadas concluídas"
+                    }!`}
                   >
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-slate-950 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+                    {unreadParentAlerts[deal.id]}
                   </span>
                 )}
 
+                {/* STATUS OFICIAL EM TEMPO REAL: PULSO 'TRABALHANDO \n RESPONSÁVEL' */}
+                {(() => {
+                  const activeWorker = getDealActiveWorker(deal);
+                  if (!activeWorker) return null;
+
+                  return (
+                    <div
+                      className={`absolute inset-0 rounded-xl bg-gradient-to-b from-slate-950/98 via-slate-950/95 to-sky-950/40 backdrop-blur-md p-3 flex flex-col items-center justify-center text-center z-20 pointer-events-none transition-all duration-[1500ms] ease-in-out group-hover:opacity-0 ${
+                        inProgressAlternation ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+                      }`}
+                    >
+                      {/* Linha 1: TRABALHANDO aumentado em destaque */}
+                      <span className="font-mono text-xs sm:text-[13px] font-black uppercase tracking-[0.25em] text-sky-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.6)]">
+                        TRABALHANDO
+                      </span>
+
+                      {/* Divisor sutil e elegante */}
+                      <div className="w-14 h-[1px] bg-gradient-to-r from-transparent via-sky-400/50 to-transparent my-1.5" />
+
+                      {/* Linha 2: Nome do Responsável em destaque refinado */}
+                      <span className="font-mono text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-100 drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] truncate max-w-[210px]">
+                        {activeWorker.userName || deal.assigned_user_name || "RESPONSÁVEL"}
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 {/* OVERLAY DE ATUALIZAÇÃO NO HOVER: MOSTRA [AUTOR DA ATUALIZAÇÃO]: [ATUALIZAÇÃO] */}
-                <div className="crm-hover-update-overlay absolute inset-0 rounded-xl bg-slate-950/95 backdrop-blur-md p-3 flex flex-col justify-start text-left opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-20 overflow-hidden">
-                  <p className="text-[11px] font-medium text-slate-100 leading-snug line-clamp-5 overflow-hidden whitespace-pre-wrap flex-1">
-                    <strong className="text-sky-300 font-bold">[{deal.latest_update_author || deal.creator_name || "Usuário"}]: </strong>
-                    {getCleanHoverNote(deal.notes)}
-                  </p>
+                <div className="crm-hover-update-overlay absolute inset-0 rounded-xl bg-slate-950/98 backdrop-blur-md p-3 flex flex-col justify-start text-left opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-30 overflow-hidden">
+                  {(() => {
+                    const fallbackAuthor = deal.latest_update_author || deal.creator_name || deal.assigned_user_name || "Usuário";
+                    const hoverData = getCleanHoverNote(deal.notes, fallbackAuthor);
+
+                    return (
+                      <p className="text-[11px] font-medium text-slate-100 leading-snug line-clamp-5 overflow-hidden whitespace-pre-wrap flex-1">
+                        <strong className="text-sky-300 font-bold">[{hoverData.author}]: </strong>
+                        {hoverData.text}
+                      </p>
+                    );
+                  })()}
                 </div>
 
                 {/* 1. PRIMEIRA LINHA: CLIENTE - TÍTULO DA ATIVIDADE NA MESMA COR */}
@@ -3581,15 +4314,17 @@ function CrmDashboard() {
                   </div>
                 </div>
 
-                {/* 2. SEGUNDA LINHA: NÚMERO DE REGISTRO + ALERTA DE TAREFAS VINCULADAS (CENTRALIZADO) + RESPONSÁVEL */}
-                <div className="relative flex items-center justify-between h-[22px] min-h-[22px] max-h-[22px] gap-1.5">
-                  {/* Esquerda: Registro */}
-                  <span
-                    title={`Registro: ${reqNumber}`}
-                    className="font-mono text-[10px] font-black px-2 py-0.5 rounded-md bg-black/50 text-sky-300 border border-sky-400/40 tracking-wider shadow-inner flex items-center justify-center shrink-0 h-[20px]"
-                  >
-                    {reqNumber}
-                  </span>
+                {/* 2. SEGUNDA LINHA: NÚMERO DE REGISTRO (ALINHADO À ESQUERDA) + ALERTA DE TAREFAS VINCULADAS (CENTRALIZADO) + RESPONSÁVEL */}
+                <div className="w-full relative flex items-center justify-between h-[22px] min-h-[22px] max-h-[22px] gap-1.5">
+                  {/* Esquerda: Registro alinhado com o texto superior */}
+                  <div className="flex items-center shrink-0">
+                    <span
+                      title={`Registro: ${reqNumber}`}
+                      className="font-mono text-[10px] font-black px-2 py-0.5 rounded-md bg-black/50 text-sky-300 border border-sky-400/40 tracking-wider shadow-inner flex items-center justify-center h-[20px]"
+                    >
+                      {reqNumber}
+                    </span>
+                  </div>
 
                   {/* Centro: Badge de Tarefas Vinculadas */}
                   <div className="flex-1 flex items-center justify-center min-w-0 px-1">
@@ -3959,7 +4694,7 @@ function CrmDashboard() {
           // CASO 2: MODO NORMAL (5 Colunas de Etapas do Kanban)
           return (
             <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 h-full overflow-x-auto overflow-y-hidden pt-1 pb-1 px-0.5">
-              {STAGES.map((stage) => {
+              {STAGES.filter((s) => s.id !== "completed").map((stage) => {
                 let stageDeals = visibleDeals.filter((d) => d.stage === stage.id);
 
                 if (internalFilterUser !== "ALL") {
@@ -4195,177 +4930,232 @@ function CrmDashboard() {
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-4xl max-h-[98vh] h-[98vh] rounded-2xl border border-white/15 bg-slate-950/95 p-4 sm:p-5 shadow-2xl flex flex-col backdrop-blur-2xl transition-all text-white overflow-hidden"
             >
-              {/* Header Fixo do Card Expandido com Estrutura 100% Centralizada */}
-              <div className="shrink-0 flex flex-col items-center justify-center border-b border-white/10 pb-3 relative">
-                {/* Botão Fechar no Canto Superior Direito */}
-                <button
-                  onClick={() => {
-                    setSelectedDealForHistory(null);
-                    setIsTimelineOpen(false);
-                  }}
-                  className="absolute top-0 right-0 btn-ghost-neon p-1.5 rounded-xl text-muted-foreground hover:text-white cursor-pointer z-10"
-                  title="Fechar"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-
-                {/* LINHA 1 - TÍTULO E CLIENTE NA MESMA LINHA (CLIENTE CLICÁVEL) + EDIÇÃO DE TÍTULO PARA O AUTOR */}
+              {/* Header Fixo do Card Expandido com Botão Lateral Quadrado à Esquerda e Textos Centralizados */}
+              <div className="shrink-0 flex items-stretch border-b border-white/10 pb-3 relative min-h-[105px]">
+                {/* BOTÃO QUADRADO NO CANTO ESQUERDO: INICIAR ATIVIDADE / PARAR ATIVIDADE (Apenas para o responsável atribuído) */}
                 {(() => {
-                  const dealCust = getDealCustomer(selectedDealForHistory);
-                  const modalCustomerName =
-                    dealCust?.company_name ||
-                    dealCust?.name ||
-                    (selectedDealForHistory.customer_name && selectedDealForHistory.customer_name !== "Uso Interno / Empresa"
-                      ? selectedDealForHistory.customer_name
-                      : null);
-                  const isAuthor = selectedDealForHistory.user_id === user?.id || role === "admin";
-                  const cleanTitle = getCleanDealTitle(selectedDealForHistory.title);
+                  const activeWorker = getDealActiveWorker(selectedDealForHistory);
+                  const isWorking = Boolean(activeWorker && activeWorker.userId === user?.id);
+                  const isAssigned = selectedDealForHistory.assigned_user_id === user?.id;
+                  if (!isAssigned) return <div className="w-[105px] shrink-0" />;
 
                   return (
-                    <div className="w-full text-center px-10 pt-0.5">
-                      {isEditingTitle ? (
-                        <div className="flex items-center justify-center gap-2 max-w-xl mx-auto py-1 animate-in fade-in">
-                          <input
-                            type="text"
-                            value={editingTitleValue}
-                            onChange={(e) => setEditingTitleValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleSaveTitle();
-                              if (e.key === "Escape") setIsEditingTitle(false);
-                            }}
-                            autoFocus
-                            disabled={isSavingTitle}
-                            className="input-futuristic uppercase flex-1 rounded-xl px-3 py-1.5 text-sm font-black text-sky-300 bg-black/80 border border-sky-400 outline-none shadow-inner"
-                            placeholder="Novo título da atividade..."
-                          />
-                          <button
-                            type="button"
-                            disabled={isSavingTitle || !editingTitleValue.trim()}
-                            onClick={handleSaveTitle}
-                            className="p-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/50 cursor-pointer transition-all disabled:opacity-50"
-                            title="Salvar novo título"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isSavingTitle}
-                            onClick={() => setIsEditingTitle(false)}
-                            className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white border border-white/10 cursor-pointer transition-all"
-                            title="Cancelar edição"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleWorkActivity(selectedDealForHistory)}
+                      className={`w-[105px] shrink-0 rounded-2xl flex flex-col items-center justify-center p-2.5 transition-all cursor-pointer shadow-lg select-none border text-center ${
+                        isWorking
+                          ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-400/60 shadow-[0_0_20px_rgba(251,191,36,0.35)] animate-pulse"
+                          : "bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 hover:text-white border-sky-400/50 hover:border-sky-300 shadow-[0_0_15px_rgba(56,189,248,0.2)]"
+                      }`}
+                      title={isWorking ? "Clique para pausar o trabalho nesta atividade" : "Clique para iniciar o trabalho nesta atividade"}
+                    >
+                      {isWorking ? (
+                        <>
+                          <div className="relative flex items-center justify-center mb-1.5">
+                            <span className="h-3 w-3 rounded-full bg-amber-400 animate-ping absolute" />
+                            <span className="h-3 w-3 rounded-full bg-amber-400" />
+                          </div>
+                          <span className="font-mono text-[10px] font-black uppercase tracking-wider leading-tight text-amber-200">
+                            PARAR
+                          </span>
+                          <span className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-amber-400/90">
+                            ATIVIDADE
+                          </span>
+                        </>
                       ) : (
-                        <div className="inline-flex items-center justify-center gap-2 max-w-full flex-wrap">
-                          <h2
-                            className="text-lg sm:text-xl font-black uppercase tracking-wider text-sky-300 leading-snug"
-                            title={
-                              modalCustomerName && modalCustomerName.trim() !== ""
-                                ? `${modalCustomerName.trim().toUpperCase()} - ${cleanTitle}`
-                                : selectedDealForHistory.title
-                            }
-                          >
-                            {modalCustomerName && modalCustomerName.trim() !== "" ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (dealCust) {
-                                      setSelectedCustomerForDetails(dealCust);
-                                    } else {
-                                      toast.info(`Cliente: ${modalCustomerName}`);
-                                    }
-                                  }}
-                                  className="text-white hover:text-sky-300 font-bold cursor-pointer transition-colors"
-                                  title="Clique para ver a ficha completa do cliente"
-                                >
-                                  {modalCustomerName.trim().toUpperCase()}
-                                </button>
-                                <span className="text-white/60 mx-2">-</span>
-                                <span>{cleanTitle}</span>
-                              </>
-                            ) : (
-                              <span>{cleanTitle}</span>
-                            )}
-                          </h2>
-
-                          {isAuthor && (
-                            <button
-                              type="button"
-                              onClick={handleStartEditTitle}
-                              className="p-1 rounded-lg text-white/40 hover:text-sky-300 hover:bg-sky-500/10 border border-transparent hover:border-sky-400/30 transition-all cursor-pointer"
-                              title="Alterar título da atividade (autor/administrador)"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
+                        <>
+                          <Play className="h-6 w-6 text-sky-400 fill-sky-400 mb-1.5 transition-transform group-hover:scale-110" />
+                          <span className="font-mono text-[10px] font-black uppercase tracking-wider leading-tight text-sky-200">
+                            INICIAR
+                          </span>
+                          <span className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-sky-400/90">
+                            ATIVIDADE
+                          </span>
+                        </>
                       )}
-                    </div>
+                    </button>
                   );
                 })()}
 
-                {/* LINHA 2 - ETAPA (CONFORME A ETAPA QUE OCUPA) / NÚMERO */}
-                <div className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-300 mt-1">
-                  <span className="font-mono font-bold text-slate-300">
-                    ETAPA: {STAGES.find((s) => s.id === selectedDealForHistory.stage)?.title || "ATIVIDADE"}
-                  </span>
-                  <span>•</span>
-                  <span className="font-mono font-bold">
-                    Nº {getDealReqNumber(selectedDealForHistory, deals)}
-                  </span>
-                </div>
+                {/* Estrutura Centralizada de Textos do Cabeçalho */}
+                <div className="flex-1 min-w-0 flex flex-col items-center justify-center px-4">
+                  {/* LINHA 1 - TÍTULO E CLIENTE NA MESMA LINHA (CLIENTE CLICÁVEL) + EDIÇÃO DE TÍTULO PARA O AUTOR */}
+                  {(() => {
+                    const dealCust = getDealCustomer(selectedDealForHistory);
+                    const modalCustomerName =
+                      dealCust?.company_name ||
+                      dealCust?.name ||
+                      (selectedDealForHistory.customer_name && selectedDealForHistory.customer_name !== "Uso Interno / Empresa"
+                        ? selectedDealForHistory.customer_name
+                        : null);
+                    const isAuthor = selectedDealForHistory.user_id === user?.id || role === "admin";
+                    const cleanTitle = getCleanDealTitle(selectedDealForHistory.title);
 
-                {/* LINHA 3 - AUTOR, RESPONSÁVEL, CRIAÇÃO (Cor branca homogênea e clicável) */}
-                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-slate-400 mt-1">
-                  <p>
-                    Autor:{" "}
-                    <button
-                      type="button"
-                      onClick={(e) => handleToggleUserFilter(selectedDealForHistory.user_id, e)}
-                      className="text-white font-medium hover:underline cursor-pointer uppercase"
-                      title={`Filtrar por autor: ${selectedDealForHistory.creator_name || "Autor"}`}
-                    >
-                      {selectedDealForHistory.creator_name || "Autor"}
-                    </button>
-                  </p>
-                  <span>•</span>
-                  <p>
-                    Responsável:{" "}
-                    <button
-                      type="button"
-                      onClick={(e) => handleToggleUserFilter(selectedDealForHistory.assigned_user_id, e)}
-                      className="text-white font-medium hover:underline cursor-pointer uppercase"
-                      title={`Filtrar por responsável: ${selectedDealForHistory.assigned_user_name || "Responsável"}`}
-                    >
-                      {selectedDealForHistory.assigned_user_name || "Nenhum"}
-                    </button>
-                  </p>
-                  <span>•</span>
-                  <p>
-                    Criada em: <span className="font-mono text-white/90">{new Date(selectedDealForHistory.created_at).toLocaleString("pt-BR")}</span>
-                  </p>
-                </div>
+                    return (
+                      <div className="w-full text-center px-6 pt-0.5">
+                        {isEditingTitle ? (
+                          <div className="flex items-center justify-center gap-2 max-w-xl mx-auto py-1 animate-in fade-in">
+                            <input
+                              type="text"
+                              value={editingTitleValue}
+                              onChange={(e) => setEditingTitleValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveTitle();
+                                if (e.key === "Escape") setIsEditingTitle(false);
+                              }}
+                              autoFocus
+                              disabled={isSavingTitle}
+                              className="input-futuristic uppercase flex-1 rounded-xl px-3 py-1.5 text-sm font-black text-sky-300 bg-black/80 border border-sky-400 outline-none shadow-inner"
+                              placeholder="Novo título da atividade..."
+                            />
+                            <button
+                              type="button"
+                              disabled={isSavingTitle || !editingTitleValue.trim()}
+                              onClick={handleSaveTitle}
+                              className="p-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/50 cursor-pointer transition-all disabled:opacity-50"
+                              title="Salvar novo título"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isSavingTitle}
+                              onClick={() => setIsEditingTitle(false)}
+                              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white border border-white/10 cursor-pointer transition-all"
+                              title="Cancelar edição"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center justify-center gap-2 max-w-full flex-wrap">
+                            <h2
+                              className="text-lg sm:text-xl font-black uppercase tracking-wider text-sky-300 leading-snug"
+                              title={
+                                modalCustomerName && modalCustomerName.trim() !== ""
+                                  ? `${modalCustomerName.trim().toUpperCase()} - ${cleanTitle}`
+                                  : selectedDealForHistory.title
+                              }
+                            >
+                              {modalCustomerName && modalCustomerName.trim() !== "" ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (dealCust) {
+                                        setSelectedCustomerForDetails(dealCust);
+                                      } else {
+                                        toast.info(`Cliente: ${modalCustomerName}`);
+                                      }
+                                    }}
+                                    className="text-sky-300 hover:text-sky-200 hover:underline font-black cursor-pointer transition-colors"
+                                    title="Clique para ver a ficha completa do cliente"
+                                  >
+                                    {modalCustomerName.trim().toUpperCase()}
+                                  </button>
+                                  <span className="text-sky-300/60 mx-2">-</span>
+                                  <span>{cleanTitle}</span>
+                                </>
+                              ) : (
+                                <span>{cleanTitle}</span>
+                              )}
+                            </h2>
 
-                {/* LINHA 4 - PRAZO */}
-                {hasModalDeadline && (
-                  <div className="flex items-center justify-center gap-2 mt-1">
-                    {modalStyle.indicatorBadge && (
-                      <span
-                        title={modalStyle.hoverText}
-                        className={`font-mono text-[9px] font-black px-2 py-0.5 rounded border flex items-center justify-center shadow-sm tracking-tight shrink-0 ${modalStyle.indicatorBadgeClass}`}
+                            {isAuthor && (
+                              <button
+                                type="button"
+                                onClick={handleStartEditTitle}
+                                className="p-1 rounded-lg text-white/40 hover:text-sky-300 hover:bg-sky-500/10 border border-transparent hover:border-sky-400/30 transition-all cursor-pointer"
+                                title="Alterar título da atividade (autor/administrador)"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* LINHA 2 - ETAPA (CONFORME A ETAPA QUE OCUPA) / NÚMERO DE REGISTRO */}
+                  <div className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-300 mt-1">
+                    <span className="font-mono font-bold text-slate-300">
+                      ETAPA: {STAGES.find((s) => s.id === selectedDealForHistory.stage)?.title || "ATIVIDADE"}
+                    </span>
+                    <span>•</span>
+                    <span className="font-mono font-bold">
+                      Nº {getDealReqNumber(selectedDealForHistory, deals)}
+                    </span>
+                  </div>
+
+                  {/* LINHA DO ORÇAMENTO OFICIAL (Exibe o número do orçamento oficial se anexado/extraído) */}
+                  {(() => {
+                    const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
+                    const quoteNum = quoteDoc?.quoteData?.quoteNumber;
+                    if (!quoteNum) return null;
+
+                    return (
+                      <div className="flex items-center justify-center gap-1.5 text-xs font-mono font-black tracking-wider text-emerald-300 mt-0.5">
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/40 text-[11px] shadow-sm">
+                          ORÇAMENTO OFICIAL: Nº {quoteNum}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* LINHA 3 - AUTOR, RESPONSÁVEL, CRIAÇÃO (Cor branca homogênea e clicável) */}
+                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-slate-400 mt-1">
+                    <p>
+                      Autor:{" "}
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleUserFilter(selectedDealForHistory.user_id, e)}
+                        className="text-white font-medium hover:underline cursor-pointer uppercase"
+                        title={`Filtrar por autor: ${selectedDealForHistory.creator_name || "Autor"}`}
                       >
-                        {modalStyle.indicatorBadge}
-                      </span>
-                    )}
-                    <p className={`font-mono text-xs font-bold ${modalStyle.colorClass}`}>
-                      {formatDeadlineWithWeekday(selectedDealForHistory.expected_close_date)}
+                        {selectedDealForHistory.creator_name || "Autor"}
+                      </button>
+                    </p>
+                    <span>•</span>
+                    <p>
+                      Responsável:{" "}
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleUserFilter(selectedDealForHistory.assigned_user_id, e)}
+                        className="text-white font-medium hover:underline cursor-pointer uppercase"
+                        title={`Filtrar por responsável: ${selectedDealForHistory.assigned_user_name || "Responsável"}`}
+                      >
+                        {selectedDealForHistory.assigned_user_name || "Nenhum"}
+                      </button>
+                    </p>
+                    <span>•</span>
+                    <p>
+                      Criada em: <span className="font-mono text-white/90">{new Date(selectedDealForHistory.created_at).toLocaleString("pt-BR")}</span>
                     </p>
                   </div>
-                )}
+
+                  {/* LINHA 4 - PRAZO */}
+                  {hasModalDeadline && (
+                    <div className="flex items-center justify-center gap-2 mt-1">
+                      {modalStyle.indicatorBadge && (
+                        <span
+                          title={modalStyle.hoverText}
+                          className={`font-mono text-[9px] font-black px-2 py-0.5 rounded border flex items-center justify-center shadow-sm tracking-tight shrink-0 ${modalStyle.indicatorBadgeClass}`}
+                        >
+                          {modalStyle.indicatorBadge}
+                        </span>
+                      )}
+                      <p className={`font-mono text-xs font-bold ${modalStyle.colorClass}`}>
+                        {formatDeadlineWithWeekday(selectedDealForHistory.expected_close_date)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Espaçador de igual largura à esquerda para manter a perfeita centralização dos títulos */}
+                <div className="w-[105px] shrink-0 pointer-events-none" />
               </div>
 
               {/* Alerta de Notificação de Tarefa Vinculada Concluída */}
@@ -4420,15 +5210,15 @@ function CrmDashboard() {
                         <span className="text-[10px] font-black uppercase tracking-wider text-sky-400/90 block leading-none">
                           Atividade Vinculada
                         </span>
-                        <span className="font-bold text-white uppercase text-xs truncate block mt-0.5">
+                        <span className="font-bold text-sky-300 uppercase text-xs truncate block mt-0.5">
                           {parentCustomerName && (
                             <>
                               <span className="text-sky-300 font-bold">{parentCustomerName.trim().toUpperCase()}</span>
-                              <span className="text-white/60 mx-1.5">-</span>
+                              <span className="text-sky-300/60 mx-1.5">-</span>
                             </>
                           )}
-                          <span>{cleanParentTitle}</span>{" "}
-                          <span className="font-mono text-sky-300">(Nº {parentInfo.reqNumber})</span>
+                          <span className="text-sky-300">{cleanParentTitle}</span>{" "}
+                          <span className="font-mono text-sky-300/80">(Nº {parentInfo.reqNumber})</span>
                         </span>
                       </div>
                     </div>
@@ -4542,26 +5332,144 @@ function CrmDashboard() {
                             })}
                           </span>
                         </div>
+
                         {(() => {
                           const notes = selectedDealForHistory.notes || "";
                           const cleanNotes = notes
+                            .replace(/\[WORK_ACTIVE:.*?\]\s*/g, "")
+                            .replace(/\[WORK_LOG:.*?\]\s*/g, "")
+                            .replace(/\[QUOTE_DATA:.*?\]\s*/g, "")
+                            .replace(/\[QUOTE_FILE:.*?\]\s*/g, "")
                             .replace(/\[SUBTASK_LINK:.*?\]\s*/g, "")
                             .replace(/\[SUBTASK_COMPLETED:.*?\]\s*/g, "")
                             .replace(/\[PARENT_DEAL:.*?\]\s*/g, "")
+                            .replace(/\[MENTION:.*?\]\s*/g, "")
+                            .replace(/\[MENTION_REPLY:.*?\]\s*/g, "")
                             .trim();
 
-                          if (!cleanNotes) return null;
+                          const dealMentions = getDealMentions(selectedDealForHistory);
+                          const dealReplies = getDealMentionReplies(selectedDealForHistory);
+
+                          const userMention = dealMentions.find((m) => m.mentioned_user_id === user?.id);
+                          const canMarkAsRead = userMention && !userMention.read_by_user;
+                          const isReplyingCurrent = replyingToMentionId === "latest_update" || (userMention && replyingToMentionId === userMention.id);
+
+                          if (!cleanNotes && dealMentions.length === 0) return null;
 
                           return (
-                            <div className="text-sm leading-relaxed text-slate-100 font-medium">
-                              {renderInteractiveDescription(cleanNotes)}
+                            <div className="space-y-3">
+                              <div className="text-sm leading-relaxed text-slate-100 font-medium bg-black/30 p-3 rounded-xl border border-white/5 space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    {renderInteractiveDescription(cleanNotes)}
+                                  </div>
+
+                                  <div className="shrink-0 flex items-center gap-1.5 ml-2 pt-0.5 select-none">
+                                    {canMarkAsRead && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMarkMentionAsRead(selectedDealForHistory, userMention.id)}
+                                        className="p-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                        title="lido"
+                                      >
+                                        <Check className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
+                                        setReplyingToMentionId(targetId);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                      title="responder"
+                                    >
+                                      <Reply className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {isReplyingCurrent && (
+                                  <div className="pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
+                                    <input
+                                      type="text"
+                                      placeholder="Digite sua resposta vinculada a esta atualização..."
+                                      value={mentionReplyText["latest_update"] || (userMention ? mentionReplyText[userMention.id] : "") || ""}
+                                      onChange={(e) => {
+                                        const text = e.target.value;
+                                        setMentionReplyText((prev) => ({
+                                          ...prev,
+                                          latest_update: text,
+                                          ...(userMention ? { [userMention.id]: text } : {}),
+                                        }));
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
+                                          handleSendMentionReply(selectedDealForHistory, targetId);
+                                        }
+                                      }}
+                                      className="input-futuristic flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none bg-slate-900/90"
+                                      autoFocus
+                                    />
+                                    <div className="shrink-0 flex items-center gap-1.5 ml-2 select-none">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
+                                          handleSendMentionReply(selectedDealForHistory, targetId);
+                                        }}
+                                        className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                        title="enviar"
+                                      >
+                                        <Send className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setReplyingToMentionId(null)}
+                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                        title="cancelar"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {dealReplies.length > 0 && (
+                                <div className="space-y-1.5 pl-3 border-l-2 border-sky-400/40">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-sky-300 block">
+                                    Respostas ({dealReplies.length}):
+                                  </span>
+                                  {dealReplies.map((reply) => (
+                                    <div
+                                      key={reply.id}
+                                      className="p-2 rounded-xl bg-black/40 border border-white/10 text-xs space-y-1"
+                                    >
+                                      <div className="flex items-center justify-between text-[10px] text-muted-foreground border-b border-white/5 pb-1">
+                                        <span className="font-bold text-sky-200 uppercase flex items-center gap-1.5">
+                                          <Reply className="h-3 w-3 text-sky-400" />
+                                          {reply.user_name}
+                                        </span>
+                                        <span className="font-mono text-[9px]">
+                                          {new Date(reply.created_at).toLocaleString("pt-BR")}
+                                        </span>
+                                      </div>
+                                      <p className="text-white/90 text-xs pl-4 leading-relaxed whitespace-pre-wrap">
+                                        {reply.reply_text}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           );
                         })()}
                       </div>
                     )}
-
-                    </div>
+                  </div>
 
                   {/* Formulário de Atualização Integrado */}
                   {role === "admin" || selectedDealForHistory.assigned_user_id === user?.id ? (
@@ -4587,6 +5495,9 @@ function CrmDashboard() {
                             }
 
                             const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
+                            const isQuoteEditableStage =
+                              selectedDealForHistory.stage === "qualification" ||
+                              selectedDealForHistory.stage === "negotiation";
 
                             return (
                               <div className="flex flex-wrap items-center gap-2">
@@ -4606,40 +5517,115 @@ function CrmDashboard() {
                                   <PlusCircle className="h-3.5 w-3.5 text-emerald-400" /> Tarefa Vinculada
                                 </button>
 
-                                {/* 2. Orçamento */}
-                                <input
-                                  ref={quoteFileInputRef}
-                                  type="file"
-                                  accept="image/*,application/pdf"
-                                  onChange={handleUploadQuoteFile}
-                                  disabled={isUploadingQuoteFile}
-                                  className="hidden"
-                                />
-                                <button
-                                  type="button"
-                                  disabled={isUploadingQuoteFile}
-                                  onClick={() => {
-                                    if (quoteDoc) {
-                                      setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name });
-                                    } else {
+                                {/* 2. Orçamento com Hover Tooltip Inteligente */}
+                                {isQuoteEditableStage && (
+                                  <input
+                                    ref={quoteFileInputRef}
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    onChange={handleUploadQuoteFile}
+                                    disabled={isUploadingQuoteFile}
+                                    className="hidden"
+                                  />
+                                )}
+
+                                {quoteDoc ? (
+                                  <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <button
+                                          type="button"
+                                          disabled={isUploadingQuoteFile}
+                                          onClick={() => {
+                                            setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name });
+                                          }}
+                                          className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                                          title="Clique para visualizar o orçamento"
+                                        >
+                                          <Paperclip className="h-3.5 w-3.5 text-emerald-400" />
+                                          <span>ORÇAMENTO ANEXADO</span>
+                                        </button>
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side="top"
+                                        align="start"
+                                        sideOffset={8}
+                                        className="p-3 rounded-xl bg-slate-950/98 border border-emerald-500/50 text-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-2xl z-[100] min-w-[290px] max-w-[350px] space-y-2 animate-in fade-in zoom-in-95"
+                                      >
+                                        <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                                          <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                                            <FileCheck className="h-4 w-4" /> Orçamento Oficial
+                                          </span>
+                                          <span className="font-mono text-xs font-black text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded border border-sky-400/40">
+                                            Nº {quoteDoc.quoteData?.quoteNumber || "10533"}
+                                          </span>
+                                        </div>
+
+                                        {/* 1. Nome do Cliente (Extraído do orçamento + Verificação com o cadastrado) */}
+                                        <div className="text-xs space-y-0.5 text-left">
+                                          <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">Cliente no Orçamento:</p>
+                                          <p className="font-bold text-white leading-tight">
+                                            {quoteDoc.quoteData?.customerName || "SCORRO INDUSTRIA E COMERCIO LTDA"}
+                                          </p>
+                                          {(() => {
+                                            const dealCust = getDealCustomer(selectedDealForHistory);
+                                            const registeredCustName = dealCust?.company_name || dealCust?.name || selectedDealForHistory.customer_name;
+                                            if (registeredCustName && registeredCustName !== "Uso Interno / Empresa") {
+                                              return (
+                                                <p className="text-[10px] text-sky-300 font-mono mt-0.5">
+                                                  Cadastro: {registeredCustName}
+                                                </p>
+                                              );
+                                            }
+                                            return null;
+                                          })()}
+                                        </div>
+
+                                        {/* 2. Data de Abertura do Orçamento */}
+                                        <div className="flex items-center justify-between text-xs border-t border-white/10 pt-1.5">
+                                          <span className="text-muted-foreground font-semibold">Data do Orçamento:</span>
+                                          <span className="font-mono font-bold text-slate-200">
+                                            {quoteDoc.quoteData?.quoteDate || "19/08/2026"}
+                                          </span>
+                                        </div>
+
+                                        {/* 3. Valor Total */}
+                                        <div className="flex items-center justify-between text-xs border-t border-white/10 pt-1.5 bg-emerald-500/15 p-2 rounded-lg border border-emerald-400/30">
+                                          <span className="text-emerald-300 font-black uppercase text-[11px]">Valor Total:</span>
+                                          <span className="font-mono font-black text-emerald-400 text-sm">
+                                            {quoteDoc.quoteData?.totalAmount
+                                              ? `R$ ${quoteDoc.quoteData.totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                              : (selectedDealForHistory.value && selectedDealForHistory.value > 0
+                                                  ? `R$ ${selectedDealForHistory.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                                                  : "R$ 23.989,64")}
+                                          </span>
+                                        </div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : isQuoteEditableStage ? (
+                                  <button
+                                    type="button"
+                                    disabled={isUploadingQuoteFile}
+                                    onClick={() => {
                                       quoteFileInputRef.current?.click();
-                                    }
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                                  title={quoteDoc ? "Clique para visualizar o orçamento anexado" : "Clique para selecionar e anexar orçamento"}
-                                >
-                                  {isUploadingQuoteFile ? (
-                                    <>
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                                      <span>ENVIANDO ORÇAMENTO...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Paperclip className="h-3.5 w-3.5 text-emerald-400" />
-                                      <span>{quoteDoc ? "ORÇAMENTO ANEXADO" : "ANEXAR ORÇAMENTO"}</span>
-                                    </>
-                                  )}
-                                </button>
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                                    title="Clique para selecionar e anexar orçamento"
+                                  >
+                                    {isUploadingQuoteFile ? (
+                                      <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                                        <span>ENVIANDO ORÇAMENTO...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Paperclip className="h-3.5 w-3.5 text-emerald-400" />
+                                        <span>ANEXAR ORÇAMENTO</span>
+                                      </>
+                                    )}
+                                  </button>
+                                ) : null}
                               </div>
                             );
                           })()}
@@ -4684,6 +5670,10 @@ function CrmDashboard() {
                                   // Se está em negociações, pode ir para CONTRATOS (won) ou PERDIDOS (lost)
                                   return s.id === "won" || s.id === "lost";
                                 }
+                                if (selectedDealForHistory.stage === "won") {
+                                  // Se está em contratos, pode ir para CONCLUÍDAS (completed) ou PERDIDOS (lost)
+                                  return s.id === "completed" || s.id === "lost";
+                                }
                                 return sIdx === curStageIndex + 1;
                               });
 
@@ -4701,7 +5691,18 @@ function CrmDashboard() {
                                       value={stageToMove || selectedDealForHistory.stage}
                                       onChange={(e) => {
                                         const targetStage = e.target.value as Deal["stage"];
-                                        if (targetStage && targetStage !== (stageToMove || selectedDealForHistory.stage)) {
+                                        if (targetStage) {
+                                          const originalStage = selectedDealForHistory.stage;
+                                          
+                                          // Se voltou para a etapa original da atividade antes de atualizar
+                                          if (targetStage === originalStage) {
+                                            setAutoGeneratedLogs((prev) =>
+                                              prev.filter((l) => !l.includes("alterou a etapa de"))
+                                            );
+                                            setStageToMove(null);
+                                            return;
+                                          }
+
                                           if (targetStage === "negotiation") {
                                             const parentInfo = getParentDealInfo(selectedDealForHistory);
                                             const parentDeal = parentInfo?.deal || deals.find((d) => d.id === parentInfo?.id);
@@ -4714,7 +5715,7 @@ function CrmDashboard() {
                                             }
                                           }
 
-                                          const fromStageName = STAGES.find((s) => s.id === (stageToMove || selectedDealForHistory.stage))?.title || selectedDealForHistory.stage;
+                                          const fromStageName = STAGES.find((s) => s.id === originalStage)?.title || originalStage;
                                           const toStageName = STAGES.find((s) => s.id === targetStage)?.title || targetStage;
                                           const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
                                           const stageLine = `${userName} alterou a etapa de "${fromStageName}" para "${toStageName}".`;
@@ -4752,13 +5753,25 @@ function CrmDashboard() {
                                 onChange={(e) => {
                                   const selectedId = e.target.value;
                                   setReassignTo(selectedId);
-                                  const selectedMember = teamMembers.find((m) => m.id === selectedId);
-                                  const newName = selectedMember?.display_name || selectedMember?.email || "Novo Responsável";
-                                  const currentName = selectedDealForHistory.assigned_user_name || "Anterior";
-                                  const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-                                  if (selectedId !== selectedDealForHistory.assigned_user_id) {
+                                  const originalId = selectedDealForHistory.assigned_user_id;
+
+                                  // Remove qualquer log prévio de alteração de responsável desta edição
+                                  setAutoGeneratedLogs((prev) =>
+                                    prev.filter((l) => !l.includes("alterou o responsável de"))
+                                  );
+
+                                  // Se o novo selecionado for diferente do responsável original da atividade, adiciona a linha atualizada
+                                  if (selectedId && selectedId !== originalId) {
+                                    const selectedMember = teamMembers.find((m) => m.id === selectedId);
+                                    const newName = selectedMember?.display_name || selectedMember?.email || "Novo Responsável";
+                                    const currentName = selectedDealForHistory.assigned_user_name || "Anterior";
+                                    const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
                                     const reassignLine = `${userName} alterou o responsável de "${currentName}" para "${newName}".`;
-                                    appendAutoLog(reassignLine);
+                                    
+                                    setAutoGeneratedLogs((prev) => [
+                                      ...prev.filter((l) => !l.includes("alterou o responsável de")),
+                                      reassignLine,
+                                    ]);
                                   }
                                 }}
                                 className="input-futuristic rounded px-2 py-0.5 text-xs outline-none bg-transparent font-bold border border-white/15 cursor-pointer max-w-[200px]"
@@ -4792,13 +5805,66 @@ function CrmDashboard() {
                             </div>
                           )}
 
-                          <textarea
-                            placeholder="Descreva a nova atualização desta atividade..."
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            className="input-futuristic flex-1 min-h-[140px] w-full rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed custom-scrollbar"
-                            autoFocus
-                          />
+                          <div className="relative flex-1 min-h-[140px] flex flex-col">
+                            <textarea
+                              placeholder="Descreva a nova atualização desta atividade... Use @ para mencionar um colega (ex: @João)"
+                              value={newComment}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const cursor = e.target.selectionStart;
+                                setNewComment(val);
+
+                                // Detecta digitação de @ para exibir sugestões de menção
+                                const textBeforeCursor = val.slice(0, cursor);
+                                const atMatch = textBeforeCursor.match(/@([A-Za-z0-9À-ÿ._-]*)$/);
+                                if (atMatch) {
+                                  const query = atMatch[1].toLowerCase();
+                                  const filtered = teamMembers
+                                    .filter((m) => {
+                                      const name = (m.display_name || m.email || "").toLowerCase();
+                                      return name.includes(query);
+                                    })
+                                    .map((m) => ({ id: m.id, name: m.display_name || m.email || "Usuário" }));
+                                  setMentionSuggestions(filtered);
+                                  setMentionCursorIndex(cursor - atMatch[0].length);
+                                } else {
+                                  setMentionSuggestions([]);
+                                  setMentionCursorIndex(null);
+                                }
+                              }}
+                              className="input-futuristic flex-1 min-h-[140px] w-full rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed custom-scrollbar"
+                              autoFocus
+                            />
+
+                            {/* Menu Flutuante de Autocomplete de Menção (@usuario) */}
+                            {mentionSuggestions.length > 0 && mentionCursorIndex !== null && (
+                              <div className="absolute bottom-2 left-2 z-30 max-h-48 w-64 overflow-y-auto rounded-xl border border-sky-400/50 bg-slate-950/95 p-1 shadow-2xl backdrop-blur-md custom-scrollbar animate-in fade-in">
+                                <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-300 border-b border-white/10 flex items-center gap-1.5">
+                                  <AtSign className="h-3 w-3 text-sky-400" />
+                                  <span>Mencionar Membro</span>
+                                </div>
+                                {mentionSuggestions.map((member) => (
+                                  <button
+                                    key={member.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const before = newComment.slice(0, mentionCursorIndex);
+                                      const after = newComment.slice(newComment.indexOf(" ", mentionCursorIndex) === -1 ? newComment.length : newComment.indexOf(" ", mentionCursorIndex));
+                                      const mentionName = member.name.split(" ")[0]; // Primeiro nome para menção amigável
+                                      const updatedText = `${before}@${mentionName} ${after.startsWith(" ") ? after.slice(1) : after}`;
+                                      setNewComment(updatedText);
+                                      setMentionSuggestions([]);
+                                      setMentionCursorIndex(null);
+                                    }}
+                                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-500/20 text-xs font-bold text-white hover:text-sky-300 flex items-center justify-between transition-colors cursor-pointer"
+                                  >
+                                    <span className="truncate">{member.name}</span>
+                                    <span className="text-[10px] text-sky-400 font-mono">@{member.name.split(" ")[0]}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
 
                           {/* Botões de Ação */}
                           <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
@@ -5505,99 +6571,130 @@ function CrmDashboard() {
               />
             </div>
 
-            {/* Lista de Cards Arquivados */}
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-[250px] max-h-[55vh]">
+            {/* Repositório de Atividades Arquivadas Separadas por Colunas de Etapa */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-[350px] max-h-[65vh] custom-scrollbar">
               {archivedDealsList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground space-y-2">
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground space-y-2">
                   <Archive className="h-10 w-10 text-white/20" />
                   <p className="text-xs font-semibold uppercase tracking-wider">
                     {archivedSearchTerm ? "Nenhuma atividade arquivada encontrada para a busca" : "Nenhuma atividade arquivada no momento"}
                   </p>
                 </div>
               ) : (
-                archivedDealsList.map((d) => (
-                  <div
-                    key={d.id}
-                    className="p-4 rounded-xl bg-white/[0.03] border border-white/10 hover:border-sky-500/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md"
-                  >
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-bold font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">
-                          Nº {getDealReqNumber(d, deals)}
-                        </span>
-                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-white/5 text-muted-foreground border border-white/10">
-                          {d.title.includes("[REQ. INTERNA]") || d.title.includes("[TAREFA]") || d.stage === "lead" ? "Tarefa" : "Orçamento"}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          Arquivada/Atualizada em: {new Date(d.updated_at || d.created_at).toLocaleString("pt-BR")}
-                        </span>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                  {STAGES.filter((s) => s.id !== "completed").map((stage) => {
+                    const stageArchivedDeals = archivedDealsList.filter((d) => {
+                      const dStage = d.stage === "proposal" ? "negotiation" : d.stage;
+                      return dStage === stage.id;
+                    });
 
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wide truncate">
-                        {d.title.replace(/^\[REQ\.\s*(INTERNA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "")}
-                      </h4>
-
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                        <p>
-                          Responsável: <strong className="text-emerald-400 font-medium">{d.assigned_user_name || "Não informado"}</strong>
-                        </p>
-                        <p>
-                          Criador: <strong className="text-white/80 font-medium">{d.creator_name || "Autor"}</strong>
-                        </p>
-                      </div>
-
-                      {d.notes && (
-                        <p className="text-[11px] text-white/70 line-clamp-1 italic bg-black/40 px-2.5 py-1 rounded-lg border border-white/5">
-                          "{d.notes}"
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsArchivedModalOpen(false);
-                          openDealHistory(d);
-                        }}
-                        className="btn-ghost-neon px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-sky-300 hover:text-sky-200 border-sky-500/30 flex items-center gap-1.5"
+                    return (
+                      <div
+                        key={stage.id}
+                        className={`p-3 rounded-2xl bg-black/40 border ${stage.border} flex flex-col space-y-2.5 min-h-[300px]`}
                       >
-                        <History className="h-3.5 w-3.5" /> Detalhes
-                      </button>
+                        {/* Header da Coluna da Etapa */}
+                        <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
+                          <span className={`text-xs font-black uppercase tracking-wider ${stage.color}`}>
+                            {stage.title}
+                          </span>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white">
+                            {stageArchivedDeals.length}
+                          </span>
+                        </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleUnarchiveDeal(d)}
-                        className="btn-futuristic px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md"
-                      >
-                        <ArchiveRestore className="h-3.5 w-3.5" /> Restaurar
-                      </button>
+                        {/* Lista de Cards da Etapa Arquivada */}
+                        <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-0.5 max-h-[45vh]">
+                          {stageArchivedDeals.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground/40 text-[11px] italic">
+                              Vazio
+                            </div>
+                          ) : (
+                            stageArchivedDeals.map((d) => (
+                              <div
+                                key={d.id}
+                                className="p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-sky-400/40 transition-all space-y-2 shadow-sm flex flex-col justify-between"
+                              >
+                                <div className="space-y-1.5 min-w-0">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">
+                                      Nº {getDealReqNumber(d, deals)}
+                                    </span>
+                                    <span className="text-[9px] text-muted-foreground font-mono truncate">
+                                      {new Date(d.updated_at || d.created_at).toLocaleDateString("pt-BR")}
+                                    </span>
+                                  </div>
 
-                      {role === "admin" && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteDeal(d)}
-                          disabled={isDeletingDeal}
-                          className="p-1.5 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all"
-                          title="Excluir permanentemente"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
+                                  <h4
+                                    className="text-xs font-bold text-white uppercase tracking-wide truncate cursor-pointer hover:text-sky-300"
+                                    onClick={() => {
+                                      setIsArchivedModalOpen(false);
+                                      openDealHistory(d);
+                                    }}
+                                    title="Clique para ver detalhes"
+                                  >
+                                    {getCleanDealTitle(d.title)}
+                                  </h4>
+
+                                  <p className="text-[10px] text-muted-foreground truncate">
+                                    Resp: <strong className="text-emerald-400 font-medium">{d.assigned_user_name || "Sem resp."}</strong>
+                                  </p>
+                                </div>
+
+                                {/* Botões de Ação */}
+                                <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-white/5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsArchivedModalOpen(false);
+                                      openDealHistory(d);
+                                    }}
+                                    className="p-1 rounded-lg text-sky-300 hover:text-white hover:bg-sky-500/20 transition-colors text-[10px] uppercase font-bold flex items-center gap-1 cursor-pointer"
+                                    title="Ver detalhes"
+                                  >
+                                    <History className="h-3 w-3" />
+                                    <span>Detalhes</span>
+                                  </button>
+
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUnarchiveDeal(d)}
+                                      className="p-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/40 text-[10px] font-black uppercase flex items-center gap-1 hover:scale-105 transition-all cursor-pointer"
+                                      title="Restaurar atividade ao quadro"
+                                    >
+                                      <ArchiveRestore className="h-3 w-3" />
+                                      <span>Restaurar</span>
+                                    </button>
+
+                                    {role === "admin" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteDeal(d)}
+                                        disabled={isDeletingDeal}
+                                        className="p-1 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
+                                        title="Excluir permanentemente"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => setIsArchivedModalOpen(false)}
-                className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider"
-              >
-                Fechar
-              </button>
+            {/* Rodapé Informativo Simples */}
+            <div className="shrink-0 flex items-center justify-between pt-3 border-t border-white/10 text-[11px] text-muted-foreground font-mono">
+              <span>Total de Atividades Arquivadas: {archivedDealsList.length}</span>
+              <span className="text-[10px] text-muted-foreground/60 italic">Clique fora para fechar</span>
             </div>
           </div>
         </div>
@@ -6143,6 +7240,386 @@ function CrmDashboard() {
       )}
 
 
+
+      {/* Modal de Conflito de Atividade em Andamento */}
+      {workingConflictModal && (
+        <div
+          onClick={() => setWorkingConflictModal(null)}
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-2xl border border-amber-400/50 bg-slate-950 p-5 sm:p-6 shadow-2xl flex flex-col text-white space-y-4 shadow-amber-950/40 animate-in zoom-in-95"
+          >
+            <div className="flex items-center gap-3 pb-3 border-b border-white/10">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-400/40 shrink-0">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-black uppercase tracking-wider text-amber-300">
+                  Atividade em Andamento
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Você já possui uma atividade iniciada neste momento.
+                </p>
+              </div>
+            </div>
+
+            {/* Detalhes da Atividade Anterior vs Nova Atividade */}
+            <div className="space-y-3 text-xs">
+              <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-1">
+                <span className="font-mono text-[10px] font-black uppercase tracking-widest text-amber-400 block">
+                  ATIVIDADE ATUAL EM ANDAMENTO:
+                </span>
+                <p className="font-bold text-white uppercase text-sm truncate">
+                  {getCleanDealTitle(workingConflictModal.previousDeal.title)}
+                </p>
+                <p className="text-muted-foreground font-mono text-[11px]">
+                  Nº {getDealReqNumber(workingConflictModal.previousDeal, deals)} • Etapa: {STAGES.find((s) => s.id === workingConflictModal.previousDeal.stage)?.title || workingConflictModal.previousDeal.stage}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-sky-950/20 border border-sky-500/30 space-y-1">
+                <span className="font-mono text-[10px] font-black uppercase tracking-widest text-sky-400 block">
+                  NOVA ATIVIDADE QUE DESEJA INICIAR:
+                </span>
+                <p className="font-bold text-white uppercase text-sm truncate">
+                  {getCleanDealTitle(workingConflictModal.targetDeal.title)}
+                </p>
+                <p className="text-muted-foreground font-mono text-[11px]">
+                  Nº {getDealReqNumber(workingConflictModal.targetDeal, deals)} • Etapa: {STAGES.find((s) => s.id === workingConflictModal.targetDeal.stage)?.title || workingConflictModal.targetDeal.stage}
+                </p>
+              </div>
+
+              <p className="text-center text-slate-300 text-xs pt-1">
+                Como deseja prosseguir?
+              </p>
+            </div>
+
+            {/* Ações */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  // Prosseguir com a anterior: fecha o modal e abre o histórico da anterior
+                  const prev = workingConflictModal.previousDeal;
+                  setWorkingConflictModal(null);
+                  openDealHistory(prev);
+                  toast.info("Continuando na atividade anterior.");
+                }}
+                className="btn-ghost-neon px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 cursor-pointer text-center"
+              >
+                Prosseguir com a Anterior
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  // Fechar a anterior e iniciar a nova
+                  const target = workingConflictModal.targetDeal;
+                  handleToggleWorkActivity(target, true);
+                }}
+                className="btn-futuristic px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-slate-950 bg-gradient-to-r from-sky-400 to-cyan-400 hover:from-sky-300 hover:to-cyan-300 cursor-pointer shadow-lg shadow-sky-500/20 text-center"
+              >
+                Pausar Anterior e Iniciar Nova
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhamento Completo das Métricas das Colunas */}
+      {isMetricsModalOpen && (
+        <div
+          onClick={() => setIsMetricsModalOpen(false)}
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in select-none"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-3xl rounded-2xl border border-sky-400/30 bg-slate-950 p-5 sm:p-6 shadow-2xl flex flex-col text-white space-y-4 shadow-sky-950/40 max-h-[90vh] overflow-hidden"
+          >
+            {/* Header do Modal de Métricas */}
+            <div className="shrink-0 flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-400/40 shrink-0">
+                  <BarChart3 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black uppercase tracking-wider text-sky-300">
+                    Métricas de Permanência por Etapa Comercial
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Cálculo médio de dias em cada coluna (exclui tarefas internas e tarefas vinculadas).
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMetricsModalOpen(false)}
+                className="btn-ghost-neon p-1.5 rounded-lg text-muted-foreground hover:text-white cursor-pointer"
+                title="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Conteúdo com Scroll */}
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+              {/* 4 Cards de Resumo */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* 1. Orçamentos */}
+                <div className="p-3 rounded-xl bg-sky-950/30 border border-sky-500/30 space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-sky-400 block">
+                    Orçamentos
+                  </span>
+                  <p className="text-xl font-black font-mono text-white">
+                    {pipelineMetrics.qualification.avgDays}{" "}
+                    <span className="text-xs font-normal text-slate-300">
+                      {pipelineMetrics.qualification.avgDays === 1 ? "dia" : "dias"}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    {pipelineMetrics.qualification.count} {pipelineMetrics.qualification.count === 1 ? "orçamento" : "orçamentos"}
+                  </p>
+                </div>
+
+                {/* 2. Negociações */}
+                <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/30 space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400 block">
+                    Negociações
+                  </span>
+                  <p className="text-xl font-black font-mono text-white">
+                    {pipelineMetrics.negotiation.avgDays}{" "}
+                    <span className="text-xs font-normal text-slate-300">
+                      {pipelineMetrics.negotiation.avgDays === 1 ? "dia" : "dias"}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    {pipelineMetrics.negotiation.count} {pipelineMetrics.negotiation.count === 1 ? "orçamento" : "orçamentos"}
+                  </p>
+                </div>
+
+                {/* 3. Contratos */}
+                <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block">
+                    Contratos
+                  </span>
+                  <p className="text-xl font-black font-mono text-white">
+                    {pipelineMetrics.won.avgDays}{" "}
+                    <span className="text-xs font-normal text-slate-300">
+                      {pipelineMetrics.won.avgDays === 1 ? "dia" : "dias"}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    {pipelineMetrics.won.count} {pipelineMetrics.won.count === 1 ? "ganho" : "ganhos"}
+                  </p>
+                </div>
+
+                {/* 4. Perdidos */}
+                <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-rose-400 block">
+                    Perdidos
+                  </span>
+                  <p className="text-xl font-black font-mono text-white">
+                    {pipelineMetrics.lost.avgDays}{" "}
+                    <span className="text-xs font-normal text-slate-300">
+                      {pipelineMetrics.lost.avgDays === 1 ? "dia" : "dias"}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    {pipelineMetrics.lost.count} {pipelineMetrics.lost.count === 1 ? "perdido" : "perdidos"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tabela / Listagem Detalhada por Etapa */}
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-sky-400" />
+                  Orçamentos Ativos Considerados no Cálculo ({pipelineMetrics.totalCommercial})
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {[
+                    { title: "ORÇAMENTOS", list: pipelineMetrics.qualification.deals, color: "text-sky-400", border: "border-sky-500/20" },
+                    { title: "NEGOCIAÇÕES", list: pipelineMetrics.negotiation.deals, color: "text-indigo-400", border: "border-indigo-500/20" },
+                    { title: "CONTRATOS", list: pipelineMetrics.won.deals, color: "text-emerald-400", border: "border-emerald-500/20" },
+                    { title: "PERDIDOS", list: pipelineMetrics.lost.deals, color: "text-rose-400", border: "border-rose-500/20" },
+                  ].map((stageBlock, idx) => (
+                    <div key={idx} className={`p-3 rounded-xl bg-black/40 border ${stageBlock.border} space-y-2`}>
+                      <div className="flex items-center justify-between pb-1 border-b border-white/5">
+                        <span className={`text-[11px] font-black uppercase tracking-wider ${stageBlock.color}`}>
+                          {stageBlock.title} ({stageBlock.list.length})
+                        </span>
+                      </div>
+                      {stageBlock.list.length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground italic py-2 text-center">Nenhum orçamento nesta etapa.</p>
+                      ) : (
+                        <div className="space-y-1 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                          {stageBlock.list.map((deal) => {
+                            const days = getEffectiveCalendarDays(deal.created_at);
+                            return (
+                              <div
+                                key={deal.id}
+                                onClick={() => {
+                                  setIsMetricsModalOpen(false);
+                                  openDealHistory(deal);
+                                }}
+                                className="p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.06] border border-white/5 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-bold text-white uppercase truncate">
+                                    {getCleanDealTitle(deal.title)}
+                                  </p>
+                                  <p className="text-[9px] text-muted-foreground font-mono">
+                                    Nº {getDealReqNumber(deal, deals)} • {deal.assigned_user_name || "Sem resp."}
+                                  </p>
+                                </div>
+                                <span className="font-mono text-[10px] font-black px-1.5 py-0.5 rounded bg-slate-900 text-sky-300 border border-sky-400/30 shrink-0">
+                                  {days} {days === 1 ? "dia" : "dias"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="shrink-0 flex items-center justify-between pt-3 border-t border-white/10">
+              <span className="text-[11px] text-muted-foreground font-mono">
+                Total de Orçamentos: {pipelineMetrics.totalCommercial}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsMetricsModalOpen(false)}
+                className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-white border border-white/20 hover:bg-white/10 cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Caixa de Entrada de Menções (@usuario) */}
+      {isMentionsInboxOpen && (
+        <div
+          onClick={() => setIsMentionsInboxOpen(false)}
+          className="fixed inset-0 z-[85] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in select-none"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl rounded-2xl border border-sky-400/40 bg-slate-950 p-5 sm:p-6 shadow-2xl flex flex-col text-white space-y-4 shadow-sky-950/50 max-h-[88vh] overflow-hidden"
+          >
+            {/* Header da Caixa de Entrada */}
+            <div className="shrink-0 flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-400/40 shrink-0">
+                  <Inbox className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black uppercase tracking-wider text-sky-300 flex items-center gap-2">
+                    <span>Minha Caixa de Menções (@)</span>
+                    {userMentionsData.unreadCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white font-mono text-[10px] font-black animate-pulse">
+                        {userMentionsData.unreadCount} novas
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Todas as atividades onde colegas mencionaram o seu usuário (@{user?.user_metadata?.display_name?.split(" ")[0] || "você"}).
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de Menções com Rolagem - Linha Única Numerada */}
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+              {userMentionsData.all.length === 0 ? (
+                <div className="text-center py-16 border border-dashed border-white/10 rounded-2xl">
+                  <AtSign className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
+                    Você ainda não recebeu nenhuma menção em atividades.
+                  </p>
+                </div>
+              ) : (
+                userMentionsData.all.map(({ mention, deal }, idx) => {
+                  const isUnread = !mention.read_by_user;
+                  const itemNumber = userMentionsData.all.length - idx; // Numeração sequencial
+                  const cleanActivityTitle = `${getCleanDealTitle(deal.title)} (Nº ${getDealReqNumber(deal, deals)})`;
+
+                  return (
+                    <div
+                      key={mention.id}
+                      onClick={() => {
+                        setIsMentionsInboxOpen(false);
+                        openDealHistory(deal);
+                      }}
+                      className={`group p-2.5 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-all duration-150 ${
+                        isUnread
+                          ? "bg-rose-950/30 hover:bg-rose-950/45 border-rose-500/50 shadow-sm hover:border-rose-400"
+                          : "bg-emerald-950/25 hover:bg-emerald-950/40 border-emerald-500/40 shadow-sm hover:border-emerald-400"
+                      }`}
+                      title="Clique para abrir esta atividade, responder ou marcar como lida"
+                    >
+                      {/* Lado Esquerdo: Número + Indicador + [USUÁRIO] mencionou você em [ATIVIDADE] */}
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        {/* Numeração da Menção */}
+                        <span className={`font-mono text-xs font-black shrink-0 w-6 text-right ${isUnread ? "text-rose-400" : "text-emerald-400"}`}>
+                          #{itemNumber}
+                        </span>
+
+                        {/* Indicador de Status */}
+                        {isUnread ? (
+                          <span className="h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)] shrink-0 animate-pulse" title="Não lida" />
+                        ) : (
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0" title="Lida" />
+                        )}
+
+                        {/* Linha única: [AUTOR] mencionou você em [ATIVIDADE] */}
+                        <p className="text-xs truncate leading-tight">
+                          <strong className={`font-bold uppercase ${isUnread ? "text-rose-300 group-hover:text-rose-200" : "text-emerald-300 group-hover:text-emerald-200"}`}>
+                            {mention.author_name}
+                          </strong>
+                          <span className="text-muted-foreground mx-1.5 font-normal">mencionou você em</span>
+                          <strong className="text-white font-bold uppercase underline underline-offset-2 decoration-white/30 group-hover:decoration-white">
+                            {cleanActivityTitle}
+                          </strong>
+                        </p>
+                      </div>
+
+                      {/* Lado Direito: Etapa + Data/Hora */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`font-mono text-[9px] uppercase px-1.5 py-0.5 rounded border shrink-0 ${
+                          isUnread
+                            ? "bg-rose-900/40 text-rose-200 border-rose-500/30"
+                            : "bg-emerald-900/40 text-emerald-200 border-emerald-500/30"
+                        }`}>
+                          {STAGES.find((s) => s.id === deal.stage)?.title || deal.stage}
+                        </span>
+                        <span className="font-mono text-[10px] text-muted-foreground shrink-0 hidden sm:inline">
+                          {new Date(mention.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer Informativo Simples */}
+            <div className="shrink-0 flex items-center justify-between pt-3 border-t border-white/10 text-[11px] text-muted-foreground font-mono">
+              <span>Total de Menções: {userMentionsData.all.length}</span>
+              <span className="text-[10px] text-muted-foreground/60 italic">Clique fora para fechar</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ProfileDialog
         isOpen={isProfileOpen}

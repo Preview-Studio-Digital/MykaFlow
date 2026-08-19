@@ -103,15 +103,84 @@ function ScrollDirectionListener() {
   return null;
 }
 
+import { useAuth } from "@/lib/auth-context";
+import { ShieldAlert, RefreshCw, LogOut, WifiOff } from "lucide-react";
+
+function NetworkSecurityGuard({ children }: { children: React.ReactNode }) {
+  const { user, role, isNetworkAllowed, clientIp, signOut, refreshNetworkSecurity } = useAuth();
+
+  // Se não está logado ou for admin, ou a rede for autorizada, renderiza normal
+  if (!user || role === "admin" || isNetworkAllowed) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 text-white">
+      <div className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-slate-900/90 p-8 text-center shadow-2xl backdrop-blur-2xl space-y-6">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
+          <WifiOff className="h-8 w-8" />
+        </div>
+
+        <div className="space-y-2">
+          <h1 className="text-xl font-black uppercase tracking-wider text-white">
+            Acesso Restrito à Empresa
+          </h1>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            O MykaFlow está configurado para uso exclusivo nas dependências da empresa. Conecte-se ao Wi-Fi ou rede corporativa para continuar.
+          </p>
+        </div>
+
+        <div className="p-3.5 rounded-xl bg-black/60 border border-white/10 text-xs space-y-1.5 font-mono">
+          <div className="flex justify-between text-muted-foreground">
+            <span>Seu IP Detectado:</span>
+            <span className="text-rose-400 font-bold">{clientIp}</span>
+          </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>Usuário:</span>
+            <span className="text-white font-bold truncate max-w-[180px]">
+              {user.user_metadata?.display_name || user.email}
+            </span>
+          </div>
+          <p className="text-[10px] text-amber-400/90 pt-1 border-t border-white/5">
+            🚨 Uma notificação com data, hora e IP foi registrada para o Administrador.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={() => refreshNetworkSecurity()}
+            className="btn-futuristic w-full rounded-xl py-2.5 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span>Já conectei à rede da empresa</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="btn-ghost-neon w-full rounded-xl py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-white flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Desconectar Conta</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ScrollDirectionListener />
-        <Outlet />
-        <Toaster theme="dark" position="top-right" />
+        <NetworkSecurityGuard>
+          <ScrollDirectionListener />
+          <Outlet />
+          <Toaster theme="dark" position="top-right" />
+        </NetworkSecurityGuard>
       </AuthProvider>
     </QueryClientProvider>
   );

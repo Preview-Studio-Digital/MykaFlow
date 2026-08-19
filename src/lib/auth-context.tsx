@@ -1,6 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getClientPublicIp,
+  fetchAllowedIps,
+  registerUnauthorizedAccessAttempt,
+} from "@/lib/network-security";
 
 export type Role = "admin" | "user" | "financeiro" | "crm_vendedor" | "crm_gestor" | "pending" | null;
 
@@ -9,6 +14,9 @@ interface AuthCtx {
   session: Session | null;
   role: Role;
   loading: boolean;
+  clientIp: string;
+  allowedIps: string[];
+  isNetworkAllowed: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (
     email: string,
@@ -17,6 +25,7 @@ interface AuthCtx {
   ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   fetchRole: (uid: string) => Promise<void>;
+  refreshNetworkSecurity: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthCtx | undefined>(undefined);
@@ -26,6 +35,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<Role>(null);
   const [loading, setLoading] = useState(true);
+  const [clientIp, setClientIp] = useState<string>("0.0.0.0");
+  const [allowedIps, setAllowedIps] = useState<string[]>([]);
+  const [isNetworkAllowed, setIsNetworkAllowed] = useState<boolean>(true);
+
+  async function checkNetwork(currentUser?: User | null, currentRole?: Role) {
+    try {
+      const [ip, ips] = await Promise.all([getClientPublicIp(), fetchAllowedIps()]);
+      setClientIp(ip);
+      setAllowedIps(ips);
+
+      // Admin tem acesso irrestrito
+      if (currentRole === "admin" || (currentUser?.email && currentUser.email.includes("admin"))) {
+        setIsNetworkAllowed(true);
+        return;
+      }
+
+      // Usuário comum: verifica se o IP está na lista de autorizados
+      const isAllowed = ip === "0.0.0.0" || ips.includes(ip);
+      setIsNetworkAllowed(isAllowed);
+
+      // Se for tentativa de usuário logado fora da rede, registra alerta no banco para o ADM
+      if (!isAllowed && currentUser) {
+        registerUnauthorizedAccessAttempt({
+          userId: currentUser.id,
+          userName: currentUser.user_metadata?.display_name,
+          userEmail: currentUser.email,
+          attemptedIp: ip,
+        });
+      }
+    } catch (err) {
+      console.warn("Erro ao validar segurança de rede:", err);
+      setIsNetworkAllowed(true); // Fallback suave
+    }
+  }
+
+  const refreshNetworkSecurity = async () => {
+    await checkNetwork(user, role);
+  };
+
+  useEffect(() => {
+    checkNetwork(user, role);
+  }, [user, role]);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
@@ -60,8 +111,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq("user_id", uid)
         .maybeSingle();
 
-      // Se não tiver role, assumimos que é 'pending' para os novos
-      setRole((data?.role as Role) ?? "pending");
+      const userRole = (data?.role as Role) ?? "pending";
+      setRole(userRole);
+      checkNetwork(user, userRole);
     } catch (err) {
       console.error("Auth: Falha ao buscar cargo:", err);
       setRole("pending");
@@ -71,9 +123,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signIn: AuthCtx["signIn"] = async (email, password) => {
-    setLoading(true); // Garante que mostre carregando ao trocar de usuário
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    setLoading(true);
+    const ip = await getClientPublicIp();
+    const ips = await fetchAllowedIps();
+    setClientIp(ip);
+    setAllowedIps(ips);
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error: error.message };
+
+    // Verifica cargo do usuário que acabou de logar
+    let loggedRole: Role = "user";
+    if (data.user) {
+      const { data: rData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      loggedRole = (rData?.role as Role) || "user";
+    }
+
+    // Se não for admin e tentar entrar fora da rede da empresa:
+    const isAllowed = loggedRole === "admin" || ip === "0.0.0.0" || ips.includes(ip);
+    if (!isAllowed) {
+      setIsNetworkAllowed(false);
+      // Registra a tentativa de acesso para alertar o ADM
+      await registerUnauthorizedAccessAttempt({
+        userId: data.user?.id,
+        userName: data.user?.user_metadata?.display_name,
+        userEmail: email,
+        attemptedIp: ip,
+      });
+      await supabase.auth.signOut();
+      return {
+        error: `ACESSO BLOQUEADO: Conexão detectada fora da rede da empresa (IP: ${ip}). Tentativa registrada e enviada para o Administrador.`,
+      };
+    }
+
+    setIsNetworkAllowed(true);
+    return { error: null };
   };
 
   const signUp: AuthCtx["signUp"] = async (email, password, displayName) => {
@@ -92,7 +180,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, session, role, loading, signIn, signUp, signOut, fetchRole }}
+      value={{
+        user,
+        session,
+        role,
+        loading,
+        clientIp,
+        allowedIps,
+        isNetworkAllowed,
+        signIn,
+        signUp,
+        signOut,
+        fetchRole,
+        refreshNetworkSecurity,
+      }}
     >
       {children}
     </AuthContext.Provider>

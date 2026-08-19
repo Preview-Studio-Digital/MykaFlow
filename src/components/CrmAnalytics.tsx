@@ -73,7 +73,7 @@ const STAGES_CONFIG: Record<
     glow: "shadow-[0_0_20px_rgba(129,140,248,0.25)]",
   },
   negotiation: {
-    title: "ANDAMENTO",
+    title: "NEGOCIAÇÕES",
     color: "#fbbf24", // Amber
     hoverColor: "#d97706",
     bg: "bg-amber-500/10",
@@ -81,7 +81,7 @@ const STAGES_CONFIG: Record<
     glow: "shadow-[0_0_20px_rgba(251,191,36,0.25)]",
   },
   won: {
-    title: "CONTRATADOS",
+    title: "CONTRATOS",
     color: "#34d399", // Emerald
     hoverColor: "#059669",
     bg: "bg-emerald-500/10",

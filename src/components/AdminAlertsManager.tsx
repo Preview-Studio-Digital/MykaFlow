@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Bell,
@@ -18,8 +19,14 @@ import {
   UserX,
   History,
   TrendingDown,
+  ExternalLink,
+  Wifi,
+  Shield,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { fetchAllowedIps, saveAllowedIps } from "@/lib/network-security";
 
 interface Deal {
   id: string;
@@ -52,20 +59,63 @@ interface DealHistoryItem {
 const STAGE_LABELS: Record<string, string> = {
   lead: "TAREFAS",
   qualification: "ORÇAMENTOS",
-  negotiation: "ANDAMENTO",
-  won: "CONTRATADOS",
+  negotiation: "NEGOCIAÇÕES",
+  won: "CONTRATOS",
   lost: "PERDIDOS",
 };
 
 export function AdminAlertsManager() {
+  const navigate = useNavigate();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [historyList, setHistoryList] = useState<DealHistoryItem[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeAlertTab, setActiveAlertTab] = useState<"all" | "overdue" | "returned" | "audit">("all");
+  const [activeAlertTab, setActiveAlertTab] = useState<"all" | "overdue" | "returned" | "audit" | "security">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterUser, setFilterUser] = useState<string>("ALL");
   const [selectedDealForModal, setSelectedDealForModal] = useState<Deal | null>(null);
+
+  // Segurança de Rede / IPs Autorizados
+  const [allowedIps, setAllowedIps] = useState<string[]>([]);
+  const [newIpInput, setNewIpInput] = useState("");
+  const [isSavingIps, setIsSavingIps] = useState(false);
+
+  useEffect(() => {
+    fetchAllowedIps().then(setAllowedIps);
+  }, []);
+
+  async function handleAddIp(ipToAdd?: string) {
+    const ip = (ipToAdd || newIpInput).trim();
+    if (!ip) return;
+    if (allowedIps.includes(ip)) {
+      return toast.info("Este IP já está na lista de autorizados.");
+    }
+    setIsSavingIps(true);
+    const updated = [...allowedIps, ip];
+    await saveAllowedIps(updated);
+    setAllowedIps(updated);
+    setNewIpInput("");
+    setIsSavingIps(false);
+    toast.success(`IP ${ip} autorizado com sucesso!`);
+  }
+
+  async function handleRemoveIp(ipToRemove: string) {
+    if (allowedIps.length <= 1) {
+      return toast.error("É necessário manter ao menos 1 IP autorizado.");
+    }
+    setIsSavingIps(true);
+    const updated = allowedIps.filter((ip) => ip !== ipToRemove);
+    await saveAllowedIps(updated);
+    setAllowedIps(updated);
+    setIsSavingIps(false);
+    toast.success(`IP ${ipToRemove} removido.`);
+  }
+
+  function handleOpenDeal(dealId?: string) {
+    if (!dealId) return;
+    sessionStorage.setItem("mykaflow_open_deal_id", dealId);
+    navigate({ to: "/crm", search: { dealId } as any });
+  }
 
   useEffect(() => {
     fetchAlertsData();
@@ -146,6 +196,15 @@ export function AdminAlertsManager() {
     );
   }, [historyList]);
 
+  // 4. Alertas de Segurança de Rede (Tentativas de Acesso Externo)
+  const securityAlertEntries = useMemo(() => {
+    return historyList.filter(
+      (h) =>
+        h.action_type === "security_unauthorized_ip" ||
+        h.description?.includes("ALERTA DE SEGURANÇA")
+    );
+  }, [historyList]);
+
   // Filtros combinados
   const displayedOverdue = useMemo(() => {
     return overdueAlerts.filter((d) => {
@@ -177,7 +236,7 @@ export function AdminAlertsManager() {
     });
   }, [returnedAlerts, filterUser, searchTerm]);
 
-  const totalAlertsCount = overdueAlerts.length + returnedAlerts.length;
+  const totalAlertsCount = overdueAlerts.length + returnedAlerts.length + securityAlertEntries.length;
 
   if (loading) {
     return (
@@ -245,6 +304,15 @@ export function AdminAlertsManager() {
                 {recentAuditEntries.length}
               </span>
             </div>
+
+            <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-center min-w-[110px]">
+              <span className="text-[10px] font-black uppercase tracking-widest text-purple-400 block">
+                Tentativas IP
+              </span>
+              <span className="text-xl font-black font-mono text-purple-300">
+                {securityAlertEntries.length}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -252,7 +320,7 @@ export function AdminAlertsManager() {
       {/* Barra de Filtros e Busca */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-xl">
         {/* Navegação de Abas Internas da Central */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/60 border border-white/10">
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/60 border border-white/10 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveAlertTab("all")}
@@ -297,6 +365,17 @@ export function AdminAlertsManager() {
           >
             <History className="h-3.5 w-3.5" /> Log Auditoria ({recentAuditEntries.length})
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveAlertTab("security")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeAlertTab === "security"
+                ? "bg-purple-500 text-white shadow-md"
+                : "text-muted-foreground hover:text-white"
+            }`}
+          >
+            <Shield className="h-3.5 w-3.5" /> Segurança / IPs ({securityAlertEntries.length})
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -340,7 +419,132 @@ export function AdminAlertsManager() {
       {/* ========================================================================= */}
       {/* CONTEÚDO DA CENTRAL DE ALERTAS CONFORME ABA SELECIONADA                   */}
       {/* ========================================================================= */}
-      {activeAlertTab === "audit" ? (
+      {activeAlertTab === "security" ? (
+        /* ABA DE SEGURANÇA DE REDE / IPs AUTORIZADOS E TENTATIVAS BLOQUEADAS */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Coluna 1: Gerenciamento de IPs Autorizados */}
+          <div className="p-6 rounded-2xl bg-white/[0.02] border border-purple-500/30 backdrop-blur-xl shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Wifi className="h-4 w-4 text-purple-400" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-white">
+                  IPs Públicos Autorizados da Empresa
+                </h3>
+              </div>
+              <span className="text-[10px] text-purple-300 font-mono">
+                {allowedIps.length} {allowedIps.length === 1 ? "rede cadastrada" : "redes cadastradas"}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Usuários e colaboradores só conseguem acessar o MykaFlow se estiverem conectados à internet com algum dos IPs abaixo.
+            </p>
+
+            {/* Adicionar Novo IP */}
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="text"
+                placeholder="Ex: 177.212.224.153"
+                value={newIpInput}
+                onChange={(e) => setNewIpInput(e.target.value)}
+                className="input-futuristic flex-1 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => handleAddIp()}
+                disabled={isSavingIps || !newIpInput.trim()}
+                className="btn-futuristic rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Adicionar IP</span>
+              </button>
+            </div>
+
+            {/* Lista de IPs */}
+            <div className="space-y-2 pt-3">
+              {allowedIps.map((ip) => (
+                <div
+                  key={ip}
+                  className="p-3 rounded-xl bg-black/60 border border-purple-500/20 flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                    <span className="font-mono text-sm font-bold text-white tracking-wider">
+                      {ip}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveIp(ip)}
+                    className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 transition-all cursor-pointer"
+                    title="Remover este IP autorizado"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Coluna 2: Alertas de Tentativas de Acesso Externo */}
+          <div className="p-6 rounded-2xl bg-white/[0.02] border border-rose-500/30 backdrop-blur-xl shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-rose-400" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-rose-300">
+                  Tentativas de Acesso Bloqueadas ({securityAlertEntries.length})
+                </h3>
+              </div>
+              <span className="text-[10px] text-rose-400 uppercase font-bold tracking-wider">
+                Auditoria em Tempo Real
+              </span>
+            </div>
+
+            {securityAlertEntries.length === 0 ? (
+              <div className="p-8 text-center text-xs uppercase font-bold text-muted-foreground/50">
+                Nenhuma tentativa de acesso externo registrada.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[460px] overflow-y-auto custom-scrollbar pr-1">
+                {securityAlertEntries.map((item) => {
+                  const ipMatch = item.description?.match(/IP:\s*([0-9.]+)/i);
+                  const attemptedIp = ipMatch?.[1];
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-3.5 rounded-xl bg-rose-950/20 border border-rose-500/30 flex flex-col gap-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-white uppercase">{item.user_name || "Usuário"}</span>
+                        <span className="text-[10px] text-rose-300 font-mono">
+                          {new Date(item.created_at).toLocaleString("pt-BR")}
+                        </span>
+                      </div>
+                      <p className="text-slate-200 text-xs leading-relaxed whitespace-pre-wrap">
+                        {item.description}
+                      </p>
+                      {attemptedIp && !allowedIps.includes(attemptedIp) && (
+                        <div className="pt-1 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleAddIp(attemptedIp)}
+                            className="btn-ghost-neon px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/20 flex items-center gap-1 cursor-pointer"
+                            title="Autorizar este IP imediatamente como rede da empresa"
+                          >
+                            <Plus className="h-3 w-3" />
+                            <span>Autorizar IP {attemptedIp}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : activeAlertTab === "audit" ? (
         /* ABA DE AUDITORIA E LOGS OPERACIONAIS */
         <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 backdrop-blur-xl shadow-xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -364,13 +568,19 @@ export function AdminAlertsManager() {
               {recentAuditEntries.map((item) => (
                 <div
                   key={item.id}
-                  className="p-3.5 rounded-xl bg-black/40 border border-white/10 hover:border-white/20 transition-all flex items-center justify-between gap-3 text-xs"
+                  onClick={() => handleOpenDeal(item.deal_id)}
+                  className={`p-3.5 rounded-xl bg-black/40 border border-white/10 transition-all flex items-center justify-between gap-3 text-xs ${
+                    item.deal_id
+                      ? "hover:border-sky-400/60 hover:bg-sky-950/20 cursor-pointer group shadow-sm"
+                      : ""
+                  }`}
+                  title={item.deal_id ? "Clique para abrir a atividade no CRM" : undefined}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400 shrink-0">
                       <ShieldAlert className="h-4 w-4" />
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-white uppercase">{item.user_name || "Sistema"}</span>
                         <span className="text-[10px] text-muted-foreground">•</span>
@@ -383,6 +593,12 @@ export function AdminAlertsManager() {
                       </p>
                     </div>
                   </div>
+                  {item.deal_id && (
+                    <div className="shrink-0 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-sky-400 group-hover:text-sky-300 group-hover:translate-x-0.5 transition-all">
+                      <span>Ver Atividade</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -406,7 +622,7 @@ export function AdminAlertsManager() {
                   </h3>
                 </div>
                 <span className="text-[10px] text-rose-400 uppercase font-bold tracking-wider">
-                  Ação Recomendada
+                  Clique no card para abrir
                 </span>
               </div>
 
@@ -427,7 +643,9 @@ export function AdminAlertsManager() {
                     return (
                       <div
                         key={deal.id}
-                        className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/40 via-slate-950 to-slate-950 border border-rose-500/50 hover:border-rose-400 transition-all flex flex-col justify-between gap-3 shadow-md"
+                        onClick={() => handleOpenDeal(deal.id)}
+                        className="group p-4 rounded-2xl bg-gradient-to-r from-rose-950/40 via-slate-950 to-slate-950 border border-rose-500/50 hover:border-rose-400 hover:shadow-lg hover:shadow-rose-950/50 hover:scale-[1.005] transition-all cursor-pointer flex flex-col justify-between gap-3 shadow-md"
+                        title="Clique para abrir e gerenciar esta atividade no CRM"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
@@ -435,7 +653,7 @@ export function AdminAlertsManager() {
                               <span className="font-mono text-[9px] font-black px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
                                 {STAGE_LABELS[deal.stage] || deal.stage.toUpperCase()}
                               </span>
-                              <span className="font-bold text-xs text-white truncate block uppercase">
+                              <span className="font-bold text-xs text-white truncate block uppercase group-hover:text-rose-200">
                                 {deal.title.replace(/^\[(REQ\.\s*INTERNA|TAREFA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "")}
                               </span>
                             </div>
@@ -448,7 +666,7 @@ export function AdminAlertsManager() {
 
                           <div className="text-right shrink-0">
                             <span className="text-xs font-black text-rose-400 font-mono bg-rose-500/20 border border-rose-500/50 px-2 py-1 rounded-xl block">
-                              Vencido há {diffDays} {diffDays === 1 ? "dia" : "dias"}
+                              Vencida há {diffDays} {diffDays === 1 ? "dia" : "dias"}
                             </span>
                           </div>
                         </div>
@@ -464,8 +682,11 @@ export function AdminAlertsManager() {
                             <UserCheck className="h-3 w-3 text-emerald-400 shrink-0" />
                             <span>Responsável: <strong className="text-white">{deal.assigned_user_name}</strong></span>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <span>Autor: <strong className="text-slate-300">{deal.creator_name}</strong></span>
+                          <div className="flex items-center gap-2">
+                            <span className="hidden sm:inline text-muted-foreground">Autor: <strong className="text-slate-300">{deal.creator_name}</strong></span>
+                            <span className="text-rose-300 font-bold uppercase tracking-wider flex items-center gap-1 group-hover:underline">
+                              Abrir no CRM <ArrowRight className="h-3 w-3" />
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -491,7 +712,7 @@ export function AdminAlertsManager() {
                   </h3>
                 </div>
                 <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider">
-                  Retorno Operacional
+                  Clique no card para abrir
                 </span>
               </div>
 
@@ -504,7 +725,9 @@ export function AdminAlertsManager() {
                   {displayedReturned.map((deal) => (
                     <div
                       key={deal.id}
-                      className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-950 to-slate-950 border border-amber-500/50 hover:border-amber-400 transition-all flex flex-col justify-between gap-3 shadow-md"
+                      onClick={() => handleOpenDeal(deal.id)}
+                      className="group p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-950 to-slate-950 border border-amber-500/50 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-950/50 hover:scale-[1.005] transition-all cursor-pointer flex flex-col justify-between gap-3 shadow-md"
+                      title="Clique para abrir e gerenciar esta atividade no CRM"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
@@ -512,7 +735,7 @@ export function AdminAlertsManager() {
                             <span className="font-mono text-[9px] font-black px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
                               {STAGE_LABELS[deal.stage] || deal.stage.toUpperCase()}
                             </span>
-                            <span className="font-bold text-xs text-white truncate block uppercase">
+                            <span className="font-bold text-xs text-white truncate block uppercase group-hover:text-amber-200">
                               {deal.title.replace(/^\[(REQ\.\s*INTERNA|TAREFA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "")}
                             </span>
                           </div>
@@ -541,12 +764,17 @@ export function AdminAlertsManager() {
                           <UserCheck className="h-3 w-3 text-amber-400 shrink-0" />
                           <span>Criador & Responsável: <strong className="text-white">{deal.creator_name}</strong></span>
                         </div>
-                        {deal.expected_close_date && (
-                          <div className="flex items-center gap-1 text-emerald-400 font-mono">
-                            <Calendar className="h-3 w-3" />
-                            <span>{deal.expected_close_date.split("-").reverse().join("/")}</span>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {deal.expected_close_date && (
+                            <div className="hidden sm:flex items-center gap-1 text-emerald-400 font-mono">
+                              <Calendar className="h-3 w-3" />
+                              <span>{deal.expected_close_date.split("-").reverse().join("/")}</span>
+                            </div>
+                          )}
+                          <span className="text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1 group-hover:underline">
+                            Abrir no CRM <ArrowRight className="h-3 w-3" />
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}

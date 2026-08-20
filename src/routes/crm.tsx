@@ -902,6 +902,7 @@ function CrmDashboard() {
   // Sugestões de @usuario no textarea de atualizações
   const [mentionSuggestions, setMentionSuggestions] = useState<Array<{ id: string; name: string }>>([]);
   const [mentionCursorIndex, setMentionCursorIndex] = useState<number | null>(null);
+  const [activeMentionInputId, setActiveMentionInputId] = useState<string | null>(null);
 
   // Alertas de Tarefas Vinculadas Concluídas (Quantidade de conclusões não lidas no Card)
   const [unreadParentAlerts, setUnreadParentAlerts] = useState<Record<string, number>>(() => {
@@ -1542,24 +1543,46 @@ function CrmDashboard() {
     };
   };
 
-  // Helper para formatar @menções em texto com destaque visual
+  // Helper para formatar @menções em texto com destaque visual (sem badge)
   const formatMentionsInText = (text: string) => {
     if (!text) return "";
     const parts = text.split(/(@[A-Za-z0-9À-ÿ._-]+)/g);
     return parts.map((part, pIdx) => {
       if (part.startsWith("@")) {
         return (
-          <span
-            key={pIdx}
-            className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 font-bold font-mono text-[11px] shadow-sm"
-          >
-            <AtSign className="h-2.5 w-2.5 text-sky-400" />
-            {part.slice(1)}
+          <span key={pIdx} className="text-sky-400 font-bold">
+            {part}
           </span>
         );
       }
       return part;
     });
+  };
+
+  // Helper para selecionar menção nas sugestões e inserir no campo correspondente
+  const handleSelectMention = (member: { id: string; name: string }) => {
+    if (mentionCursorIndex === null) return;
+    const mentionName = member.name.split(" ")[0]; // Primeiro nome para menção amigável
+
+    if (activeMentionInputId && activeMentionInputId !== "new_comment") {
+      const currentText = mentionReplyText[activeMentionInputId] || "";
+      const before = currentText.slice(0, mentionCursorIndex);
+      const after = currentText.slice(currentText.indexOf(" ", mentionCursorIndex) === -1 ? currentText.length : currentText.indexOf(" ", mentionCursorIndex));
+      const updatedText = `${before}@${mentionName} ${after.startsWith(" ") ? after.slice(1) : after}`;
+      
+      setMentionReplyText((prev) => ({
+        ...prev,
+        [activeMentionInputId]: updatedText,
+      }));
+    } else {
+      const before = newComment.slice(0, mentionCursorIndex);
+      const after = newComment.slice(newComment.indexOf(" ", mentionCursorIndex) === -1 ? newComment.length : newComment.indexOf(" ", mentionCursorIndex));
+      const updatedText = `${before}@${mentionName} ${after.startsWith(" ") ? after.slice(1) : after}`;
+      setNewComment(updatedText);
+    }
+    setMentionSuggestions([]);
+    setMentionCursorIndex(null);
+    setActiveMentionInputId(null);
   };
 
   // Helper unificado para renderizar descrições com botões clicáveis (criação e conclusão de tarefas)
@@ -5475,53 +5498,96 @@ function CrmDashboard() {
                                   </div>
                                 </div>
 
-                                {isReplyingCurrent && (
-                                  <div className="pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
-                                    <input
-                                      type="text"
-                                      placeholder="Digite sua resposta vinculada a esta atualização..."
-                                      value={mentionReplyText["latest_update"] || (userMention ? mentionReplyText[userMention.id] : "") || ""}
-                                      onChange={(e) => {
-                                        const text = e.target.value;
-                                        setMentionReplyText((prev) => ({
-                                          ...prev,
-                                          latest_update: text,
-                                          ...(userMention ? { [userMention.id]: text } : {}),
-                                        }));
-                                      }}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.preventDefault();
-                                          const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
-                                          handleSendMentionReply(selectedDealForHistory, targetId);
-                                        }
-                                      }}
-                                      className="input-futuristic flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none bg-slate-900/90"
-                                      autoFocus
-                                    />
-                                    <div className="shrink-0 flex items-center gap-1.5 ml-2 select-none">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
-                                          handleSendMentionReply(selectedDealForHistory, targetId);
+                                {isReplyingCurrent && (() => {
+                                  const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
+                                  return (
+                                    <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
+                                      <input
+                                        type="text"
+                                        placeholder="Digite sua resposta vinculada a esta atualização..."
+                                        value={mentionReplyText[targetId] || ""}
+                                        onChange={(e) => {
+                                          const text = e.target.value;
+                                          const cursor = e.target.selectionStart || 0;
+                                          setMentionReplyText((prev) => ({
+                                            ...prev,
+                                            [targetId]: text,
+                                          }));
+
+                                          // Detecta digitação de @ para exibir sugestões de menção
+                                          const textBeforeCursor = text.slice(0, cursor);
+                                          const atMatch = textBeforeCursor.match(/@([A-Za-z0-9À-ÿ._-]*)$/);
+                                          if (atMatch) {
+                                            const query = atMatch[1].toLowerCase();
+                                            const filtered = teamMembers
+                                              .filter((m) => {
+                                                const name = (m.display_name || m.email || "").toLowerCase();
+                                                return name.includes(query);
+                                              })
+                                              .map((m) => ({ id: m.id, name: m.display_name || m.email || "Usuário" }));
+                                            setMentionSuggestions(filtered);
+                                            setMentionCursorIndex(cursor - atMatch[0].length);
+                                            setActiveMentionInputId(targetId);
+                                          } else {
+                                            setMentionSuggestions([]);
+                                            setMentionCursorIndex(null);
+                                            setActiveMentionInputId(null);
+                                          }
                                         }}
-                                        className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
-                                        title="enviar"
-                                      >
-                                        <Send className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setReplyingToMentionId(null)}
-                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
-                                        title="cancelar"
-                                      >
-                                        <X className="h-4 w-4" />
-                                      </button>
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            handleSendMentionReply(selectedDealForHistory, targetId);
+                                          }
+                                        }}
+                                        className="input-futuristic flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none bg-slate-900/90"
+                                        autoFocus
+                                      />
+                                      
+                                      {/* Menu de Sugestões de Menção para a Resposta */}
+                                      {mentionSuggestions.length > 0 && mentionCursorIndex !== null && activeMentionInputId === targetId && (
+                                        <div className="absolute bottom-[110%] left-0 z-50 max-h-48 w-64 overflow-y-auto rounded-xl border border-sky-400/50 bg-slate-950/95 p-1 shadow-2xl backdrop-blur-md custom-scrollbar animate-in fade-in mt-1">
+                                          <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-300 border-b border-white/10 flex items-center gap-1.5">
+                                            <AtSign className="h-3 w-3 text-sky-400" />
+                                            <span>Mencionar Membro</span>
+                                          </div>
+                                          {mentionSuggestions.map((member) => (
+                                            <button
+                                              key={member.id}
+                                              type="button"
+                                              onClick={() => handleSelectMention(member)}
+                                              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-500/20 text-xs font-bold text-white hover:text-sky-300 flex items-center justify-between transition-colors cursor-pointer"
+                                            >
+                                              <span className="truncate">{member.name}</span>
+                                              <span className="text-[10px] text-sky-400 font-mono">@{member.name.split(" ")[0]}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      <div className="shrink-0 flex items-center gap-1.5 ml-2 select-none">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleSendMentionReply(selectedDealForHistory, targetId);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                          title="enviar"
+                                        >
+                                          <Send className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setReplyingToMentionId(null)}
+                                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                          title="cancelar"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
+                                  );
+                                })()}
                               </div>
 
                               {dealReplies.length > 0 && (
@@ -5913,9 +5979,11 @@ function CrmDashboard() {
                                     .map((m) => ({ id: m.id, name: m.display_name || m.email || "Usuário" }));
                                   setMentionSuggestions(filtered);
                                   setMentionCursorIndex(cursor - atMatch[0].length);
+                                  setActiveMentionInputId("new_comment");
                                 } else {
                                   setMentionSuggestions([]);
                                   setMentionCursorIndex(null);
+                                  setActiveMentionInputId(null);
                                 }
                               }}
                               className="input-futuristic flex-1 min-h-[140px] w-full rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed custom-scrollbar"
@@ -5923,7 +5991,7 @@ function CrmDashboard() {
                             />
 
                             {/* Menu Flutuante de Autocomplete de Menção (@usuario) */}
-                            {mentionSuggestions.length > 0 && mentionCursorIndex !== null && (
+                            {mentionSuggestions.length > 0 && mentionCursorIndex !== null && activeMentionInputId === "new_comment" && (
                               <div className="absolute bottom-2 left-2 z-30 max-h-48 w-64 overflow-y-auto rounded-xl border border-sky-400/50 bg-slate-950/95 p-1 shadow-2xl backdrop-blur-md custom-scrollbar animate-in fade-in">
                                 <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-300 border-b border-white/10 flex items-center gap-1.5">
                                   <AtSign className="h-3 w-3 text-sky-400" />
@@ -5933,15 +6001,7 @@ function CrmDashboard() {
                                   <button
                                     key={member.id}
                                     type="button"
-                                    onClick={() => {
-                                      const before = newComment.slice(0, mentionCursorIndex);
-                                      const after = newComment.slice(newComment.indexOf(" ", mentionCursorIndex) === -1 ? newComment.length : newComment.indexOf(" ", mentionCursorIndex));
-                                      const mentionName = member.name.split(" ")[0]; // Primeiro nome para menção amigável
-                                      const updatedText = `${before}@${mentionName} ${after.startsWith(" ") ? after.slice(1) : after}`;
-                                      setNewComment(updatedText);
-                                      setMentionSuggestions([]);
-                                      setMentionCursorIndex(null);
-                                    }}
+                                    onClick={() => handleSelectMention(member)}
                                     className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-500/20 text-xs font-bold text-white hover:text-sky-300 flex items-center justify-between transition-colors cursor-pointer"
                                   >
                                     <span className="truncate">{member.name}</span>

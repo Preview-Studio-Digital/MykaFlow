@@ -1546,7 +1546,7 @@ function CrmDashboard() {
     };
   };
 
-  // Helper para formatar @menções em texto com destaque visual padronizado (branco, caixa alta, sem @) e torná-las clicáveis
+  // Helper para formatar @menções em texto com destaque visual padronizado (branco, caixa alta, com @) e torná-las clicáveis
   const formatMentionsInText = (text: string) => {
     if (!text) return "";
     const parts = text.split(/(@[A-Za-z0-9À-ÿ._-]+)/g);
@@ -1574,14 +1574,14 @@ function CrmDashboard() {
               className="text-white font-bold hover:underline cursor-pointer transition-colors bg-transparent border-none p-0 inline align-baseline uppercase"
               title={`Ver atividades de ${displayName}`}
             >
-              {displayName.toUpperCase()}
+              @{displayName.toUpperCase()}
             </button>
           );
         }
 
         return (
           <span key={pIdx} className="text-white font-bold uppercase">
-            {namePart.toUpperCase()}
+            @{namePart.toUpperCase()}
           </span>
         );
       }

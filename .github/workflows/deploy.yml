@@ -33,10 +33,10 @@ jobs:
 
       - name: Build project
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://jjypxgsfqbpoiwhjaovo.supabase.co' }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqeXB4Z3NmcWJwb2l3aGphb3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNDM5NTAsImV4cCI6MjA5MzkxOTk1MH0.nGTeFuZ6F6imqiQjUuv4hDw4uk4Dq1seFNHO20KTpaU' }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqeXB4Z3NmcWJwb2l3aGphb3ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNDM5NTAsImV4cCI6MjA5MzkxOTk1MH0.nGTeFuZ6F6imqiQjUuv4hDw4uk4Dq1seFNHO20KTpaU' }}
-          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'jjypxgsfqbpoiwhjaovo' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://rbrqcncojnzmvebtznaf.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJicnFjbmNvam56bXZlYnR6bmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5Nzg2MTYsImV4cCI6MjEwMjU1NDYxNn0.AJArYP7yHBiNu8GgxZYl4Bcga378drJMK75i32zvQAs' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJicnFjbmNvam56bXZlYnR6bmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5Nzg2MTYsImV4cCI6MjEwMjU1NDYxNn0.AJArYP7yHBiNu8GgxZYl4Bcga378drJMK75i32zvQAs' }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'rbrqcncojnzmvebtznaf' }}
         run: |
           npm run build
           cp dist/index.html dist/404.html

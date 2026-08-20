@@ -2,19 +2,17 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { Zap, Lock, Mail, User as UserIcon, Sparkles } from "lucide-react";
+import { Zap, Lock, Mail } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
 function LoginPage() {
-  const { user, loading, signIn, signUp } = useAuth();
+  const { user, loading, signIn } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -24,27 +22,14 @@ function LoginPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    console.log("Login: Tentando...", { mode, email });
+    console.log("Login: Tentando...", { email });
     try {
-      if (mode === "signin") {
-        const { error } = await signIn(email, password);
-        if (error) {
-          console.error("Login Error:", error);
-          window.alert("ERRO NO LOGIN: " + error);
-        } else {
-          toast.success("Acesso concedido");
-        }
+      const { error } = await signIn(email, password);
+      if (error) {
+        console.error("Login Error:", error);
+        window.alert("ERRO NO LOGIN: " + error);
       } else {
-        const { error } = await signUp(email, password, name);
-        if (error) {
-          console.error("Signup Error:", error);
-          window.alert("ERRO NO REGISTRO: " + error);
-        } else {
-          window.alert(
-            "CONTA CRIADA! Verifique se recebeu um e-mail de confirmação ou tente fazer login direto.",
-          );
-          setMode("signin");
-        }
+        toast.success("Acesso concedido");
       }
     } catch (err: any) {
       console.error("Fatal Error:", err);
@@ -66,22 +51,11 @@ function LoginPage() {
             <h1 className="text-4xl font-extrabold tracking-widest text-gradient">MYKAFLOW</h1>
           </div>
           <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground">
-            {mode === "signin" ? "Acesso seguro" : "Registro ADM"}
+            Acesso seguro
           </p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          {mode === "signup" && (
-            <Field icon={<UserIcon className="h-4 w-4" />} label="Nome">
-              <input
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="input-futuristic w-full rounded-lg px-4 py-3 outline-none"
-                placeholder="Seu nome"
-              />
-            </Field>
-          )}
           <Field icon={<Mail className="h-4 w-4" />} label="E-mail">
             <input
               required
@@ -109,18 +83,12 @@ function LoginPage() {
             type="submit"
             className="btn-futuristic w-full rounded-lg px-6 py-3 text-sm font-bold disabled:opacity-50"
           >
-            {busy ? "..." : mode === "signin" ? "Entrar" : "Registrar ADM"}
+            {busy ? "..." : "Entrar"}
           </button>
         </form>
 
         <div className="mt-8 text-center">
-          <button
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-            className="text-[10px] uppercase font-black tracking-widest text-accent hover:text-white transition-all"
-          >
-            {mode === "signin" ? "Não tem uma conta? Registre o ADM" : "Já tem conta? Faça Login"}
-          </button>
-          <p className="mt-4 text-xs uppercase tracking-[0.2em] text-muted-foreground opacity-50">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground opacity-50">
             Acesso exclusivo para funcionários autorizados
           </p>
         </div>
@@ -139,11 +107,12 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
-      <span className="mb-1 flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
-        {icon} {label}
-      </span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        {icon}
+        <span>{label}</span>
+      </div>
       {children}
-    </label>
+    </div>
   );
 }

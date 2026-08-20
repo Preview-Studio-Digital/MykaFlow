@@ -189,6 +189,13 @@ export function getDealMentionReplies(deal: Deal | null): DealMentionReply[] {
   return replies;
 }
 
+// Helper para obter a data da última visualização do responsável da atividade
+export function getResponsibleLastSeen(deal: Deal | null): string | null {
+  if (!deal || !deal.notes) return null;
+  const match = deal.notes.match(/\[RESPONSIBLE_LAST_SEEN:(.*?)\]/);
+  return match ? match[1] : null;
+}
+
 export interface DealTimeSession {
   id: string;
   deal_id: string;
@@ -915,37 +922,37 @@ function CrmDashboard() {
   });
 
   // Controle de visualização de novas respostas/atualizações pelo responsável da atividade
-  const [dealLastSeenTimes, setDealLastSeenTimes] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem("mykaflow_crm_deal_last_seen");
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [initialLastSeenTime, setInitialLastSeenTime] = useState<string | null>(null);
 
-  const markDealAsSeen = (dealId: string) => {
+  const updateDealLastSeen = async (deal: Deal) => {
+    if (!user) return;
     const nowIso = new Date().toISOString();
-    setDealLastSeenTimes((prev) => {
-      const updated = { ...prev, [dealId]: nowIso };
-      try {
-        localStorage.setItem("mykaflow_crm_deal_last_seen", JSON.stringify(updated));
-      } catch (e) {
-        console.warn("Erro ao salvar tempos de visualização:", e);
-      }
-      return updated;
-    });
+    const cleanNotes = (deal.notes || "").replace(/\[RESPONSIBLE_LAST_SEEN:.*?\]\s*/g, "").trim();
+    const updatedNotes = `[RESPONSIBLE_LAST_SEEN:${nowIso}]\n${cleanNotes}`.trim();
+    
+    try {
+      await supabase.from("crm_deals").update({ notes: updatedNotes }).eq("id", deal.id);
+      setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes } : d)));
+      setSelectedDealForHistory((prev) => (prev ? { ...prev, notes: updatedNotes } : null));
+    } catch (e) {
+      console.warn("Erro ao atualizar visualização da atividade:", e);
+    }
   };
 
   const hasUnseenReplies = (deal: Deal): boolean => {
-    if (!user || !deal || deal.assigned_user_id !== user.id) return false;
+    if (!user || !deal) return false;
+    const isResponsible = deal.assigned_user_id === user.id;
+    const isAdmin = role === "admin";
+    if (!isResponsible && !isAdmin) return false;
+
     const replies = getDealMentionReplies(deal);
     if (!Array.isArray(replies)) return false;
 
-    const otherReplies = replies.filter((r) => r && r.user_id && r.user_id !== user.id);
+    // Respostas que não foram feitas pelo responsável da atividade
+    const otherReplies = replies.filter((r) => r && r.user_id && r.user_id !== deal.assigned_user_id);
     if (otherReplies.length === 0) return false;
 
-    // Encontra o timestamp da resposta mais recente de outro usuário de forma segura
+    // Encontra o timestamp da resposta mais recente de outro usuário
     const replyTimes = otherReplies
       .map((r) => r.created_at ? new Date(r.created_at).getTime() : 0)
       .filter((t) => !isNaN(t) && t > 0);
@@ -953,7 +960,7 @@ function CrmDashboard() {
     if (replyTimes.length === 0) return false;
     const latestReplyTime = Math.max(...replyTimes);
 
-    const lastSeenStr = dealLastSeenTimes[deal.id];
+    const lastSeenStr = getResponsibleLastSeen(deal);
     if (!lastSeenStr) return true; // nunca visto, mas tem respostas de outros -> unseen
 
     const lastSeenTime = new Date(lastSeenStr).getTime();
@@ -1867,8 +1874,10 @@ function CrmDashboard() {
     if (unreadParentAlerts[deal.id]) {
       handleMarkAlertAsSeen(deal.id);
     }
+    const currentLastSeen = getResponsibleLastSeen(deal);
+    setInitialLastSeenTime(currentLastSeen);
     if (deal.assigned_user_id === user?.id) {
-      markDealAsSeen(deal.id);
+      updateDealLastSeen(deal);
     }
     setAdminEditDeadline(deal.expected_close_date || new Date().toISOString().split("T")[0]);
     setIsEditingDeadline(false);
@@ -5621,25 +5630,40 @@ function CrmDashboard() {
                                   <span className="text-[10px] font-black uppercase tracking-wider text-sky-300 block">
                                     Respostas ({dealReplies.length}):
                                   </span>
-                                  {dealReplies.map((reply) => (
-                                    <div
-                                      key={reply.id}
-                                      className="p-2 rounded-xl bg-black/40 border border-white/10 text-xs space-y-1"
-                                    >
-                                      <div className="flex items-center justify-between text-[10px] text-muted-foreground border-b border-white/5 pb-1">
-                                        <span className="font-bold text-sky-200 uppercase flex items-center gap-1.5">
-                                          <Reply className="h-3 w-3 text-sky-400" />
-                                          {reply.user_name}
-                                        </span>
-                                        <span className="font-mono text-[9px]">
-                                          {new Date(reply.created_at).toLocaleString("pt-BR")}
-                                        </span>
+                                  {dealReplies.map((reply) => {
+                                    const isNewReply = 
+                                      reply.user_id !== selectedDealForHistory.assigned_user_id &&
+                                      (!initialLastSeenTime || new Date(reply.created_at).getTime() > new Date(initialLastSeenTime).getTime());
+
+                                    return (
+                                      <div
+                                        key={reply.id}
+                                        className={`p-2 rounded-xl bg-black/40 border text-xs space-y-1 transition-all ${
+                                          isNewReply 
+                                            ? "border-amber-500/40 bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.05)]" 
+                                            : "border-white/10"
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-b border-white/5 pb-1">
+                                          <div className="flex items-center gap-1.5 font-bold text-sky-200 uppercase">
+                                            <Reply className="h-3 w-3 text-sky-400" />
+                                            <span>{reply.user_name}</span>
+                                            {isNewReply && (
+                                              <span className="ml-1 text-[8px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/40 animate-pulse">
+                                                Nova
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span className="font-mono text-[9px]">
+                                            {new Date(reply.created_at).toLocaleString("pt-BR")}
+                                          </span>
+                                        </div>
+                                        <p className="text-white/90 text-xs pl-4 leading-relaxed whitespace-pre-wrap">
+                                          {formatMentionsInText(reply.reply_text)}
+                                        </p>
                                       </div>
-                                      <p className="text-white/90 text-xs pl-4 leading-relaxed whitespace-pre-wrap">
-                                        {formatMentionsInText(reply.reply_text)}
-                                      </p>
-                                    </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>

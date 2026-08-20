@@ -1543,12 +1543,38 @@ function CrmDashboard() {
     };
   };
 
-  // Helper para formatar @menções em texto com destaque visual (sem badge)
+  // Helper para formatar @menções em texto com destaque visual (sem badge) e torná-las clicáveis
   const formatMentionsInText = (text: string) => {
     if (!text) return "";
     const parts = text.split(/(@[A-Za-z0-9À-ÿ._-]+)/g);
     return parts.map((part, pIdx) => {
       if (part.startsWith("@")) {
+        const namePart = part.slice(1);
+        // Tenta encontrar o membro correspondente na equipe
+        const matchedMember = teamMembers.find((m) => {
+          const mName = m.display_name || m.email || "";
+          const firstName = mName.split(" ")[0];
+          return (
+            mName.toUpperCase() === namePart.toUpperCase() ||
+            firstName.toUpperCase() === namePart.toUpperCase() ||
+            (m.email && m.email.toUpperCase() === namePart.toUpperCase())
+          );
+        });
+
+        if (matchedMember) {
+          return (
+            <button
+              key={pIdx}
+              type="button"
+              onClick={(e) => handleToggleUserFilter(matchedMember.id, e)}
+              className="text-sky-400 font-bold hover:underline cursor-pointer transition-colors bg-transparent border-none p-0 inline align-baseline"
+              title={`Ver atividades de ${matchedMember.display_name || "Membro"}`}
+            >
+              {part}
+            </button>
+          );
+        }
+
         return (
           <span key={pIdx} className="text-sky-400 font-bold">
             {part}

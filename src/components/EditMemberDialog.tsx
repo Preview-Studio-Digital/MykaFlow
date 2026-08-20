@@ -93,13 +93,13 @@ export function EditMemberDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
 
-      <div className="glass relative w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-200">
+      <div className="glass relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar">
         <button
           onClick={onClose}
-          className="btn-ghost-neon absolute right-5 top-5 p-2 rounded-xl text-muted-foreground hover:text-white cursor-pointer"
+          className="btn-ghost-neon absolute right-5 top-5 p-2 rounded-xl text-muted-foreground hover:text-white cursor-pointer z-10"
         >
           <X className="h-5 w-5" />
         </button>

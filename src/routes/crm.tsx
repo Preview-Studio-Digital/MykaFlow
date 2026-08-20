@@ -939,34 +939,30 @@ function CrmDashboard() {
     }
   };
 
-  const hasUnseenReplies = (deal: Deal): boolean => {
-    if (!user || !deal) return false;
+  const getUnseenRepliesCount = (deal: Deal): number => {
+    if (!user || !deal) return 0;
     const isResponsible = deal.assigned_user_id === user.id;
     const isAdmin = role === "admin";
-    if (!isResponsible && !isAdmin) return false;
+    if (!isResponsible && !isAdmin) return 0;
 
     const replies = getDealMentionReplies(deal);
-    if (!Array.isArray(replies)) return false;
+    if (!Array.isArray(replies)) return 0;
 
     // Respostas que não foram feitas pelo responsável da atividade
     const otherReplies = replies.filter((r) => r && r.user_id && r.user_id !== deal.assigned_user_id);
-    if (otherReplies.length === 0) return false;
-
-    // Encontra o timestamp da resposta mais recente de outro usuário
-    const replyTimes = otherReplies
-      .map((r) => r.created_at ? new Date(r.created_at).getTime() : 0)
-      .filter((t) => !isNaN(t) && t > 0);
-
-    if (replyTimes.length === 0) return false;
-    const latestReplyTime = Math.max(...replyTimes);
+    if (otherReplies.length === 0) return 0;
 
     const lastSeenStr = getResponsibleLastSeen(deal);
-    if (!lastSeenStr) return true; // nunca visto, mas tem respostas de outros -> unseen
+    if (!lastSeenStr) return otherReplies.length; // todos são novos
 
     const lastSeenTime = new Date(lastSeenStr).getTime();
-    if (isNaN(lastSeenTime)) return true;
+    if (isNaN(lastSeenTime)) return otherReplies.length;
 
-    return latestReplyTime > lastSeenTime;
+    return otherReplies.filter((r) => r.created_at && new Date(r.created_at).getTime() > lastSeenTime).length;
+  };
+
+  const hasUnseenReplies = (deal: Deal): boolean => {
+    return getUnseenRepliesCount(deal) > 0;
   };
 
   // State para Pulso do Card "TRABALHANDO" (Fade in 1.5s + Fade out 1.5s contínuo com intervalo de 3s)
@@ -4364,16 +4360,7 @@ function CrmDashboard() {
                   </span>
                 )}
 
-                {/* Bolinha de Nova Resposta/Atualização por outros usuários */}
-                {hasUnseenReplies(deal) && (
-                  <span
-                    className="absolute top-2 left-2 flex h-3.5 w-3.5 z-30"
-                    title="Nova resposta/atualização de outro usuário!"
-                  >
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500 border border-slate-950"></span>
-                  </span>
-                )}
+
 
                 {/* STATUS OFICIAL EM TEMPO REAL: PULSO 'TRABALHANDO \n RESPONSÁVEL' */}
                 {(() => {
@@ -4485,37 +4472,59 @@ function CrmDashboard() {
                     )}
                   </div>
 
-                  {/* Direita: Usuário Responsável Clicável para Filtrar */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleToggleUserFilter(deal.assigned_user_id, e)}
-                    className={`group/userbtn shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-black/50 border transition-all cursor-pointer shadow-sm h-[20px] flex items-center gap-1 max-w-[155px] ml-auto ${
-                      internalFilterUser === deal.assigned_user_id
-                        ? "text-rose-300 border-rose-400/50 hover:bg-rose-500/25 hover:shadow-[0_0_12px_rgba(244,63,94,0.4)]"
-                        : "text-white hover:text-emerald-300 border-white/15 hover:border-emerald-400/50 hover:bg-emerald-500/20 hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]"
-                    }`}
-                    title={internalFilterUser === deal.assigned_user_id ? "Contrair Responsável" : "Expandir Responsável"}
-                  >
-                    <UserCheck
-                      className={`h-3 w-3 shrink-0 transition-colors ${
-                        internalFilterUser === deal.assigned_user_id
-                          ? "text-rose-400"
-                          : "text-sky-400 group-hover/userbtn:text-emerald-400"
-                      }`}
-                    />
-                    <span className="truncate group-hover/userbtn:hidden">{deal.assigned_user_name}</span>
-                    <span
-                      className={`hidden group-hover/userbtn:inline-flex items-center gap-1 truncate animate-in fade-in duration-150 ${
-                        internalFilterUser === deal.assigned_user_id
-                          ? "text-rose-300 drop-shadow-[0_0_8px_rgba(244,63,94,0.7)]"
-                          : "text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.7)]"
-                      }`}
-                    >
-                      <span className="truncate">{deal.assigned_user_name}</span>
-                      <span className="opacity-60">-</span>
-                      <span>{internalFilterUser === deal.assigned_user_id ? "CONTRAIR" : "EXPANDIR"}</span>
-                    </span>
-                  </button>
+                  {(() => {
+                    const unseenCount = getUnseenRepliesCount(deal);
+                    const hasUnseen = unseenCount > 0;
+                    
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleUserFilter(deal.assigned_user_id, e)}
+                        className={`group/userbtn shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-black/50 border transition-all cursor-pointer shadow-sm h-[20px] flex items-center gap-1 max-w-[155px] ml-auto ${
+                          hasUnseen
+                            ? "animate-pulse border-red-500/60 bg-red-500/10 text-red-300 hover:text-red-200 shadow-[0_0_12px_rgba(239,68,68,0.3)]"
+                            : internalFilterUser === deal.assigned_user_id
+                            ? "text-rose-300 border-rose-400/50 hover:bg-rose-500/25 hover:shadow-[0_0_12px_rgba(244,63,94,0.4)]"
+                            : "text-white hover:text-emerald-300 border-white/15 hover:border-emerald-400/50 hover:bg-emerald-500/20 hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]"
+                        }`}
+                        title={
+                          hasUnseen
+                            ? `Você possui ${unseenCount} ${unseenCount === 1 ? "resposta não lida" : "respostas não lidas"} nesta atividade!`
+                            : internalFilterUser === deal.assigned_user_id
+                            ? "Contrair Responsável"
+                            : "Expandir Responsável"
+                        }
+                      >
+                        {hasUnseen ? (
+                          <span className="flex items-center justify-center bg-red-500 text-white font-mono font-black text-[9px] w-3.5 h-3.5 rounded-full border border-slate-950 -ml-0.5 shrink-0">
+                            {unseenCount}
+                          </span>
+                        ) : (
+                          <UserCheck
+                            className={`h-3 w-3 shrink-0 transition-colors ${
+                              internalFilterUser === deal.assigned_user_id
+                                ? "text-rose-400"
+                                : "text-sky-400 group-hover/userbtn:text-emerald-400"
+                            }`}
+                          />
+                        )}
+                        <span className="truncate group-hover/userbtn:hidden">{deal.assigned_user_name}</span>
+                        <span
+                          className={`hidden group-hover/userbtn:inline-flex items-center gap-1 truncate animate-in fade-in duration-150 ${
+                            hasUnseen
+                              ? "text-red-300 drop-shadow-[0_0_8px_rgba(239,68,68,0.7)]"
+                              : internalFilterUser === deal.assigned_user_id
+                              ? "text-rose-300 drop-shadow-[0_0_8px_rgba(244,63,94,0.7)]"
+                              : "text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.7)]"
+                          }`}
+                        >
+                          <span className="truncate">{deal.assigned_user_name}</span>
+                          <span className="opacity-60">-</span>
+                          <span>{internalFilterUser === deal.assigned_user_id ? "CONTRAIR" : "EXPANDIR"}</span>
+                        </span>
+                      </button>
+                    );
+                  })()}
                 </div>
 
                 {/* 3. RODAPÉ DO CARD: PRAZO SE HOUVER (INTERNAS OU EXTERNAS COM PRAZO) / DIAS EM ABERTO SE NÃO HOUVER PRAZO */}

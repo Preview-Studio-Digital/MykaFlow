@@ -913,6 +913,45 @@ function CrmDashboard() {
     }
   });
 
+  // Controle de visualização de novas respostas/atualizações pelo responsável da atividade
+  const [dealLastSeenTimes, setDealLastSeenTimes] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem("mykaflow_crm_deal_last_seen");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const markDealAsSeen = (dealId: string) => {
+    const nowIso = new Date().toISOString();
+    setDealLastSeenTimes((prev) => {
+      const updated = { ...prev, [dealId]: nowIso };
+      try {
+        localStorage.setItem("mykaflow_crm_deal_last_seen", JSON.stringify(updated));
+      } catch (e) {
+        console.warn("Erro ao salvar tempos de visualização:", e);
+      }
+      return updated;
+    });
+  };
+
+  const hasUnseenReplies = (deal: Deal): boolean => {
+    if (!user || deal.assigned_user_id !== user.id) return false;
+    const replies = getDealMentionReplies(deal);
+    const otherReplies = replies.filter((r) => r.user_id !== user.id);
+    if (otherReplies.length === 0) return false;
+
+    // Encontra o timestamp da resposta mais recente de outro usuário
+    const latestReplyTime = Math.max(...otherReplies.map((r) => new Date(r.created_at).getTime()));
+
+    const lastSeenStr = dealLastSeenTimes[deal.id];
+    if (!lastSeenStr) return true; // nunca visto, mas tem respostas de outros -> unseen
+
+    const lastSeenTime = new Date(lastSeenStr).getTime();
+    return latestReplyTime > lastSeenTime;
+  };
+
   // State para Pulso do Card "TRABALHANDO" (Fade in 1.5s + Fade out 1.5s contínuo com intervalo de 3s)
   const [inProgressAlternation, setInProgressAlternation] = useState(false);
   useEffect(() => {
@@ -1768,6 +1807,9 @@ function CrmDashboard() {
     if (unreadParentAlerts[deal.id]) {
       handleMarkAlertAsSeen(deal.id);
     }
+    if (deal.assigned_user_id === user?.id) {
+      markDealAsSeen(deal.id);
+    }
     setAdminEditDeadline(deal.expected_close_date || new Date().toISOString().split("T")[0]);
     setIsEditingDeadline(false);
     setIsEditingTitle(false);
@@ -1822,10 +1864,10 @@ function CrmDashboard() {
   const handleSaveTitle = async () => {
     if (!selectedDealForHistory || !editingTitleValue.trim()) return;
 
-    // Apenas o autor da atividade ou o administrador podem alterar o título
-    const canEditTitle = role === "admin" || selectedDealForHistory.user_id === user?.id;
+    // Apenas o responsável pela atividade pode alterar o título
+    const canEditTitle = selectedDealForHistory.assigned_user_id === user?.id;
     if (!canEditTitle) {
-      return toast.error("Apenas o autor da atividade ou o administrador podem alterar o título.");
+      return toast.error("Apenas o responsável pela atividade pode alterar o título.");
     }
 
     setIsSavingTitle(true);
@@ -2563,8 +2605,30 @@ function CrmDashboard() {
       created_at: nowIso,
     };
 
+    const mentionTags: string[] = [];
+    teamMembers.forEach((member) => {
+      const memberName = member.display_name || member.email || "";
+      const firstName = memberName.split(" ")[0];
+      const mentionRegex = new RegExp(`@(${escapeRegExp(memberName)}|${escapeRegExp(firstName)}|${escapeRegExp(member.email || "")})\\b`, "i");
+      if (mentionRegex.test(replyText)) {
+        const mentionObj: DealMention = {
+          id: crypto.randomUUID(),
+          deal_id: deal.id,
+          author_id: user.id,
+          author_name: currentUserName,
+          mentioned_user_id: member.id,
+          mentioned_user_name: memberName,
+          content: replyText,
+          created_at: nowIso,
+          read_by_user: false,
+        };
+        mentionTags.push(`[MENTION:${JSON.stringify(mentionObj)}]`);
+      }
+    });
+
     const replyTag = `[MENTION_REPLY:${JSON.stringify(replyObj)}]`;
-    const updatedNotes = `${replyTag}\n${deal.notes || ""}`.trim();
+    const tagsBlock = mentionTags.length > 0 ? mentionTags.join("\n") + "\n" : "";
+    const updatedNotes = `${replyTag}\n${tagsBlock}${deal.notes || ""}`.trim();
 
     try {
       // Salva a resposta no deal SEM alterar o updated_at para não modificar a coloração das atualizações
@@ -3275,8 +3339,8 @@ function CrmDashboard() {
     e.preventDefault();
     if (!selectedDealForHistory) return;
 
-    if (role !== "admin" && selectedDealForHistory.assigned_user_id !== user?.id) {
-      return toast.error("Esta tarefa está com outro responsável e não pode ser editada por você no momento");
+    if (selectedDealForHistory.assigned_user_id !== user?.id) {
+      return toast.error("Apenas o responsável pela atividade pode inserir novas atualizações.");
     }
 
     if (!newComment.trim()) {
@@ -4231,6 +4295,17 @@ function CrmDashboard() {
                   </span>
                 )}
 
+                {/* Bolinha de Nova Resposta/Atualização por outros usuários */}
+                {hasUnseenReplies(deal) && (
+                  <span
+                    className="absolute top-2 left-2 flex h-3.5 w-3.5 z-30"
+                    title="Nova resposta/atualização de outro usuário!"
+                  >
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500 border border-slate-950"></span>
+                  </span>
+                )}
+
                 {/* STATUS OFICIAL EM TEMPO REAL: PULSO 'TRABALHANDO \n RESPONSÁVEL' */}
                 {(() => {
                   const activeWorker = getDealActiveWorker(deal);
@@ -4989,7 +5064,7 @@ function CrmDashboard() {
                       (selectedDealForHistory.customer_name && selectedDealForHistory.customer_name !== "Uso Interno / Empresa"
                         ? selectedDealForHistory.customer_name
                         : null);
-                    const isAuthor = selectedDealForHistory.user_id === user?.id || role === "admin";
+                    const isAuthor = selectedDealForHistory.assigned_user_id === user?.id;
                     const cleanTitle = getCleanDealTitle(selectedDealForHistory.title);
 
                     return (
@@ -5068,7 +5143,7 @@ function CrmDashboard() {
                                 type="button"
                                 onClick={handleStartEditTitle}
                                 className="p-1 rounded-lg text-white/40 hover:text-sky-300 hover:bg-sky-500/10 border border-transparent hover:border-sky-400/30 transition-all cursor-pointer"
-                                title="Alterar título da atividade (autor/administrador)"
+                                title="Alterar título da atividade (responsável)"
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </button>
@@ -5472,7 +5547,7 @@ function CrmDashboard() {
                   </div>
 
                   {/* Formulário de Atualização Integrado */}
-                  {role === "admin" || selectedDealForHistory.assigned_user_id === user?.id ? (
+                  {selectedDealForHistory.assigned_user_id === user?.id ? (
                     <div className="flex-1 min-h-0 flex flex-col justify-between gap-2.5 overflow-hidden">
                       <div className="flex-1 min-h-0 flex flex-col p-3.5 rounded-xl bg-white/[0.02] border border-white/10 space-y-2.5">
                         {/* Linha Única de Ações: Tarefa Vinculada, Orçamento, Etapa e Responsável */}
@@ -5942,7 +6017,7 @@ function CrmDashboard() {
                           Modo de Apenas Leitura
                         </p>
                         <p className="text-white/80 mt-0.5 leading-relaxed">
-                          Esta atividade foi encaminhada e está sob a responsabilidade de <strong className="text-emerald-400">{selectedDealForHistory.assigned_user_name}</strong>. Os dados não podem ser alterados até que ela retorne para sua responsabilidade.
+                          Esta atividade está sob a responsabilidade de <strong className="text-emerald-400">{selectedDealForHistory.assigned_user_name || "outro usuário"}</strong>. Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações.
                         </p>
                       </div>
                     </div>

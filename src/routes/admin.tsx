@@ -18,11 +18,13 @@ import {
   Link2,
   PieChart as PieChartIcon,
   Bell as BellIcon,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationManager } from "@/components/IntegrationManager";
 import { CrmAnalytics } from "@/components/CrmAnalytics";
 import { AdminAlertsManager } from "@/components/AdminAlertsManager";
+import { WorkHoursManager } from "@/components/WorkHoursManager";
 import { EditMemberDialog, type MemberProfile } from "@/components/EditMemberDialog";
 import { Wallet } from "lucide-react";
 
@@ -40,7 +42,7 @@ interface Category {
 
 function AdminPage() {
   const { user, role, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"analytics" | "alerts" | "users" | "categories" | "integration">("analytics");
+  const [activeTab, setActiveTab] = useState<"analytics" | "alerts" | "users" | "categories" | "integration" | "work_hours">("analytics");
 
   const [profiles, setProfiles] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -190,6 +192,16 @@ function AdminPage() {
               <PieChartIcon className="h-3.5 w-3.5" /> Atividades & Gráficos
             </button>
             <button
+              onClick={() => setActiveTab("work_hours")}
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "work_hours"
+                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Clock className="h-3.5 w-3.5" /> Horas de Trabalho
+            </button>
+            <button
               onClick={() => setActiveTab("alerts")}
               className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === "alerts"
@@ -237,6 +249,8 @@ function AdminPage() {
             <CrmAnalytics />
           ) : activeTab === "alerts" ? (
             <AdminAlertsManager />
+          ) : activeTab === "work_hours" ? (
+            <WorkHoursManager />
           ) : activeTab === "users" ? (
             <UserList profiles={profiles} loading={usersLoading} onRefresh={fetchUsers} />
           ) : activeTab === "categories" ? (

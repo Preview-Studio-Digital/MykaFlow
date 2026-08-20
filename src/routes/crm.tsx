@@ -1546,7 +1546,7 @@ function CrmDashboard() {
     };
   };
 
-  // Helper para formatar @menções em texto com destaque visual (sem badge) e torná-las clicáveis
+  // Helper para formatar @menções em texto com destaque visual padronizado (branco, caixa alta, sem @) e torná-las clicáveis
   const formatMentionsInText = (text: string) => {
     if (!text) return "";
     const parts = text.split(/(@[A-Za-z0-9À-ÿ._-]+)/g);
@@ -1565,22 +1565,23 @@ function CrmDashboard() {
         });
 
         if (matchedMember) {
+          const displayName = matchedMember.display_name || matchedMember.email || namePart;
           return (
             <button
               key={pIdx}
               type="button"
               onClick={(e) => handleToggleUserFilter(matchedMember.id, e)}
-              className="text-sky-400 font-bold hover:underline cursor-pointer transition-colors bg-transparent border-none p-0 inline align-baseline"
-              title={`Ver atividades de ${matchedMember.display_name || "Membro"}`}
+              className="text-white font-bold hover:underline cursor-pointer transition-colors bg-transparent border-none p-0 inline align-baseline uppercase"
+              title={`Ver atividades de ${displayName}`}
             >
-              {part}
+              {displayName.toUpperCase()}
             </button>
           );
         }
 
         return (
-          <span key={pIdx} className="text-sky-400 font-bold">
-            {part}
+          <span key={pIdx} className="text-white font-bold uppercase">
+            {namePart.toUpperCase()}
           </span>
         );
       }
@@ -6147,7 +6148,7 @@ function CrmDashboard() {
                           Modo de Apenas Leitura
                         </p>
                         <p className="text-white/80 mt-0.5 leading-relaxed">
-                          Esta atividade está sob a responsabilidade de <strong className="text-emerald-400">{selectedDealForHistory.assigned_user_name || "outro usuário"}</strong>. Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações.
+                          Esta atividade está sob a responsabilidade de <strong className="text-white uppercase font-bold">{selectedDealForHistory.assigned_user_name || "outro usuário"}</strong>. Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações.
                         </p>
                       </div>
                     </div>

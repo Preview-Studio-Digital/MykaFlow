@@ -937,18 +937,27 @@ function CrmDashboard() {
   };
 
   const hasUnseenReplies = (deal: Deal): boolean => {
-    if (!user || deal.assigned_user_id !== user.id) return false;
+    if (!user || !deal || deal.assigned_user_id !== user.id) return false;
     const replies = getDealMentionReplies(deal);
-    const otherReplies = replies.filter((r) => r.user_id !== user.id);
+    if (!Array.isArray(replies)) return false;
+
+    const otherReplies = replies.filter((r) => r && r.user_id && r.user_id !== user.id);
     if (otherReplies.length === 0) return false;
 
-    // Encontra o timestamp da resposta mais recente de outro usuário
-    const latestReplyTime = Math.max(...otherReplies.map((r) => new Date(r.created_at).getTime()));
+    // Encontra o timestamp da resposta mais recente de outro usuário de forma segura
+    const replyTimes = otherReplies
+      .map((r) => r.created_at ? new Date(r.created_at).getTime() : 0)
+      .filter((t) => !isNaN(t) && t > 0);
+
+    if (replyTimes.length === 0) return false;
+    const latestReplyTime = Math.max(...replyTimes);
 
     const lastSeenStr = dealLastSeenTimes[deal.id];
     if (!lastSeenStr) return true; // nunca visto, mas tem respostas de outros -> unseen
 
     const lastSeenTime = new Date(lastSeenStr).getTime();
+    if (isNaN(lastSeenTime)) return true;
+
     return latestReplyTime > lastSeenTime;
   };
 
@@ -1533,6 +1542,26 @@ function CrmDashboard() {
     };
   };
 
+  // Helper para formatar @menções em texto com destaque visual
+  const formatMentionsInText = (text: string) => {
+    if (!text) return "";
+    const parts = text.split(/(@[A-Za-z0-9À-ÿ._-]+)/g);
+    return parts.map((part, pIdx) => {
+      if (part.startsWith("@")) {
+        return (
+          <span
+            key={pIdx}
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 font-bold font-mono text-[11px] shadow-sm"
+          >
+            <AtSign className="h-2.5 w-2.5 text-sky-400" />
+            {part.slice(1)}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   // Helper unificado para renderizar descrições com botões clicáveis (criação e conclusão de tarefas)
   const renderInteractiveDescription = (rawText: string) => {
     if (!rawText) return null;
@@ -1764,24 +1793,6 @@ function CrmDashboard() {
             );
           }
 
-          // Helper para formatar @menções em texto com destaque visual
-          const formatMentionsInText = (text: string) => {
-            const parts = text.split(/(@[A-Za-z0-9À-ÿ._-]+)/g);
-            return parts.map((part, pIdx) => {
-              if (part.startsWith("@")) {
-                return (
-                  <span
-                    key={pIdx}
-                    className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 font-bold font-mono text-[11px] shadow-sm"
-                  >
-                    <AtSign className="h-2.5 w-2.5 text-sky-400" />
-                    {part.slice(1)}
-                  </span>
-                );
-              }
-              return part;
-            });
-          };
 
           return (
             <p key={lineIdx} className="text-white/90 text-xs whitespace-pre-wrap leading-relaxed">
@@ -5533,7 +5544,7 @@ function CrmDashboard() {
                                         </span>
                                       </div>
                                       <p className="text-white/90 text-xs pl-4 leading-relaxed whitespace-pre-wrap">
-                                        {reply.reply_text}
+                                        {formatMentionsInText(reply.reply_text)}
                                       </p>
                                     </div>
                                   ))}

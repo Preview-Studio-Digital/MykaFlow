@@ -33,8 +33,8 @@ export function AppHeader({ onOpenProfile }: AppHeaderProps) {
       <div className="flex h-16 items-center justify-between px-4 sm:px-6">
         {/* Brand & Module Switcher */}
         <div className="flex items-center gap-6">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold shadow-md shadow-emerald-500/20">
               M
             </div>
             <div className="flex flex-col">
@@ -48,7 +48,7 @@ export function AppHeader({ onOpenProfile }: AppHeaderProps) {
                 Gestão Financeira & CRM
               </span>
             </div>
-          </Link>
+          </div>
 
           {/* Module Navigation Tabs */}
           <nav className="hidden md:flex items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1">

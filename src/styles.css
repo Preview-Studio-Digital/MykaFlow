@@ -328,10 +328,30 @@ html[data-scroll-dir="down"] ::-webkit-scrollbar-thumb {
   position: relative;
 }
 
-.crm-kanban-column:hover {
-  border-color: rgba(255, 255, 255, 0.25) !important;
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(10, 15, 25, 0.6) !important;
+/* Hover no Card CRM: Auto scroll vertical lento e suave para cima */
+.crm-hover-scroll-container {
+  overflow: hidden;
+  height: 48px;
+  position: relative;
+}
+
+@keyframes crm-slow-scroll-up {
+  0%, 20% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(var(--scroll-diff, -50%));
+  }
+}
+
+.crm-hover-scroll-content {
+  display: block;
+  width: 100%;
+}
+
+.crm-card:hover .crm-hover-scroll-content.should-scroll,
+.group:hover .crm-hover-scroll-content.should-scroll {
+  animation: crm-slow-scroll-up var(--scroll-duration, 8s) ease-in-out forwards;
 }
 
 /* Saira Stencil One font utility */

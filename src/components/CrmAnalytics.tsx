@@ -88,6 +88,14 @@ const STAGES_CONFIG: Record<
     border: "border-emerald-500/30",
     glow: "shadow-[0_0_20px_rgba(52,211,153,0.25)]",
   },
+  completed: {
+    title: "CONCLUÍDOS",
+    color: "#10b981", // Emerald / Green
+    hoverColor: "#059669",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+    glow: "shadow-[0_0_20px_rgba(16,185,129,0.25)]",
+  },
   lost: {
     title: "PERDIDOS",
     color: "#f87171", // Rose / Red
@@ -95,14 +103,6 @@ const STAGES_CONFIG: Record<
     bg: "bg-rose-500/10",
     border: "border-rose-500/30",
     glow: "shadow-[0_0_20px_rgba(248,113,113,0.25)]",
-  },
-  completed: {
-    title: "CONCLUÍDAS",
-    color: "#c084fc", // Purple / Violet
-    hoverColor: "#9333ea",
-    bg: "bg-purple-500/10",
-    border: "border-purple-500/30",
-    glow: "shadow-[0_0_20px_rgba(192,132,252,0.25)]",
   },
 };
 
@@ -322,8 +322,8 @@ export function CrmAnalytics() {
 
   return (
     <div className="h-full flex-1 flex flex-col justify-between gap-3 min-h-0">
-      {/* Cards de Métricas Rápidas */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 shrink-0">
+      {/* Cards de Métricas Rápidas (Todos os 6 cards em linha única) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-6 gap-2.5 shrink-0">
         {Object.entries(STAGES_CONFIG).map(([stageKey, cfg]) => {
           const count = filteredDeals.filter((d) => d.stage === stageKey).length;
           const pct = totalDealsCount > 0 ? Math.round((count / totalDealsCount) * 100) : 0;

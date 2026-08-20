@@ -46,6 +46,7 @@ function AdminPage() {
 
   const [profiles, setProfiles] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [selectedUserToEdit, setSelectedUserToEdit] = useState<MemberProfile | null>(null);
 
   async function fetchUsers() {
     setUsersLoading(true);
@@ -252,7 +253,13 @@ function AdminPage() {
           ) : activeTab === "work_hours" ? (
             <WorkHoursManager />
           ) : activeTab === "users" ? (
-            <UserList profiles={profiles} loading={usersLoading} onRefresh={fetchUsers} />
+            <UserList
+              profiles={profiles}
+              loading={usersLoading}
+              onRefresh={fetchUsers}
+              selectedUserToEdit={selectedUserToEdit}
+              setSelectedUserToEdit={setSelectedUserToEdit}
+            />
           ) : activeTab === "categories" ? (
             <CategoryManager />
           ) : (
@@ -260,6 +267,17 @@ function AdminPage() {
           )}
         </div>
       </div>
+
+      {/* Renderizado na raiz do AdminPage para evitar bugs de transform: translateY (float-up) */}
+      <EditMemberDialog
+        isOpen={Boolean(selectedUserToEdit)}
+        onClose={() => setSelectedUserToEdit(null)}
+        targetUser={selectedUserToEdit}
+        onSuccess={() => {
+          setSelectedUserToEdit(null);
+          fetchUsers();
+        }}
+      />
     </div>
   );
 }
@@ -268,15 +286,18 @@ function UserList({
   profiles,
   loading,
   onRefresh,
+  selectedUserToEdit,
+  setSelectedUserToEdit,
 }: {
   profiles: any[];
   loading: boolean;
   onRefresh: () => void;
+  selectedUserToEdit: MemberProfile | null;
+  setSelectedUserToEdit: (user: MemberProfile | null) => void;
 }) {
   const { user: currentUser } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [selectedUserToEdit, setSelectedUserToEdit] = useState<MemberProfile | null>(null);
 
   async function handleDeleteUser(targetUserId: string, userName: string) {
     if (!confirm(`Tem certeza que deseja EXCLUIR DEFINITIVAMENTE o usuário ${userName.toUpperCase()}?`)) return;
@@ -410,17 +431,6 @@ function UserList({
           );
         })}
       </div>
-
-      {/* Modal de Edição de Dados e Direitos (ADM, Financeiro, CRM) */}
-      <EditMemberDialog
-        isOpen={Boolean(selectedUserToEdit)}
-        onClose={() => setSelectedUserToEdit(null)}
-        targetUser={selectedUserToEdit}
-        onSuccess={() => {
-          setSelectedUserToEdit(null);
-          onRefresh();
-        }}
-      />
     </div>
   );
 }

@@ -135,47 +135,34 @@ function AdminPage() {
   }
 
   return (
-    <div className="relative z-10 min-h-screen lg:h-screen lg:overflow-hidden px-4 py-3 md:px-8 flex flex-col justify-start">
-      <div className="mx-auto max-w-7xl w-full flex-1 flex flex-col min-h-0">
+    <div className="relative z-10 min-h-screen lg:h-screen lg:overflow-hidden p-3 md:px-6 pb-2 flex flex-col justify-start select-none">
+      <div className="w-full flex-1 flex flex-col min-h-0">
         <header className="mb-3 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3.5">
+          <div className="flex items-center gap-3">
             <Link
               to="/"
-              className="group flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5 border border-white/10 transition-all hover:bg-primary/20 hover:border-primary/30 shrink-0"
-              title="Voltar ao Início"
+              className="btn-ghost-neon p-2 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white"
+              title="Voltar ao Seletor de Módulos (Hub Inicial)"
             >
-              <ChevronLeft className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-white" />
+              <ChevronLeft className="h-5 w-5" />
             </Link>
             <div className="flex flex-col justify-center">
               <svg
-                viewBox="0 0 280 42"
-                className="w-[230px] sm:w-[270px] h-[40px] overflow-visible select-none"
+                viewBox="0 0 200 26"
+                className="w-[185px] sm:w-[205px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
+                fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
                 <text
                   x="0"
-                  y="22"
+                  y="21"
                   className="font-saira-stencil"
                   fontSize="22"
                   fill="#22d3ee"
-                  textLength="280"
+                  textLength="200"
                   lengthAdjust="spacing"
-                  style={{ filter: "drop-shadow(0px 0px 14px rgba(34, 211, 238, 0.45))" }}
                 >
                   ADMINISTRAÇÃO
-                </text>
-                <text
-                  x="0"
-                  y="38"
-                  fontSize="8.5"
-                  fontWeight="700"
-                  fill="#94a3b8"
-                  textLength="280"
-                  lengthAdjust="spacing"
-                  fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-                  opacity="0.8"
-                >
-                  GESTÃO DE EQUIPE, ANÁLISES E CONFIGURAÇÕES
                 </text>
               </svg>
             </div>
@@ -398,7 +385,7 @@ function UserList({
                           : "bg-sky-500/20 text-sky-300 border-sky-500/40"
                       }`}
                     >
-                      {isAdmin ? "🛡️ ADM" : isFinance ? "💵 FINANCEIRO" : "👥 CRM"}
+                      {isAdmin ? "🛡️ ADM" : isFinance ? "💵 FINANCEIRO" : "👥 COMERCIAL"}
                     </span>
                   </div>
                   <p className="text-[10px] text-muted-foreground font-mono opacity-70 mt-0.5 truncate">

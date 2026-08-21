@@ -634,27 +634,32 @@ function Dashboard() {
     );
   }
 
-  // NOVA TRAVA DE SEGURANÇA: Bloqueio para usuários pendentes
-  if (role !== "admin" && role !== "user") {
+  // TRAVA DE SEGURANÇA: Apenas ADM e FINANCEIRO acessam o financeiro
+  if (role !== "admin" && role !== "financeiro") {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 py-12 bg-background">
+      <div className="flex min-h-screen items-center justify-center px-4 py-12 bg-background select-none">
         <div className="glass max-w-md w-full p-8 rounded-2xl text-center space-y-6 float-up">
           <div className="inline-flex p-4 rounded-full bg-accent/20 mb-4 pulse-glow">
             <Lock className="h-12 w-12 text-accent" />
           </div>
-          <h1 className="text-3xl font-black tracking-widest text-gradient">ACESSO PENDENTE</h1>
-          <p className="text-muted-foreground text-sm leading-relaxed">
+          <h1 className="text-2xl font-black tracking-widest text-gradient uppercase">ACESSO RESTRITO</h1>
+          <p className="text-muted-foreground text-xs leading-relaxed">
             Olá, <span className="text-white font-bold">{user.email}</span>!<br />
-            Seu cadastro foi realizado com sucesso, mas o administrador **DIEGO** precisa validar
-            seu acesso antes de você visualizar os dados da empresa.
+            Seu perfil atual de acesso não possui permissão para visualizar o módulo financeiro.
           </p>
-          <div className="pt-6 border-t border-white/10">
+          <div className="pt-6 border-t border-white/10 flex flex-col gap-2.5">
+            <Link
+              to="/crm"
+              className="btn-futuristic w-full rounded-xl py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2"
+            >
+              Acessar Módulo Comercial
+            </Link>
             <button
               onClick={async () => {
                 await signOut();
                 navigate({ to: "/login" });
               }}
-              className="btn-ghost-neon w-full rounded-xl py-3 text-xs font-bold flex items-center justify-center gap-2"
+              className="btn-ghost-neon w-full rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 text-rose-400"
             >
               <LogOut className="h-4 w-4" /> Sair do Sistema
             </button>
@@ -677,17 +682,30 @@ function Dashboard() {
           >
             <ChevronLeft className="h-5 w-5" />
           </Link>
-          <div className="rounded-lg bg-primary/20 p-2 glow">
-            <Zap className="h-6 w-6 text-accent" />
-          </div>
-          <div>
-            <h1 className="text-4xl font-black tracking-[0.12em] text-gradient leading-none mb-1">
-              MYKAFLOW
-            </h1>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground whitespace-nowrap">
-              Controle financeiro empresarial
-            </p>
-          </div>
+          <Link
+            to="/"
+            className="flex flex-col select-none justify-center cursor-pointer focus:outline-none"
+            title="Voltar à tela inicial"
+          >
+            <svg
+              className="w-[240px] sm:w-[265px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
+              viewBox="0 0 265 26"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <text
+                x="0"
+                y="21"
+                className="font-saira-stencil"
+                fontSize="22"
+                fill="#22d3ee"
+                textLength="265"
+                lengthAdjust="spacing"
+              >
+                GESTÃO FINANCEIRA
+              </text>
+            </svg>
+          </Link>
         </div>
 
         {/* 4 Glow Buttons / KPI Cards */}

@@ -161,7 +161,7 @@ export function CrmAnalytics() {
       if (histRes.data) setReturnedHistoryList(histRes.data);
     } catch (err: any) {
       console.error("Erro ao carregar dados analíticos:", err);
-      toast.error("Erro ao carregar dados do CRM");
+      toast.error("Erro ao carregar dados do Comercial");
     } finally {
       setLoading(false);
     }
@@ -315,7 +315,7 @@ export function CrmAnalytics() {
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center text-muted-foreground uppercase tracking-widest text-xs">
-        Carregando gráficos e indicadores do CRM...
+        Carregando gráficos e indicadores do Comercial...
       </div>
     );
   }
@@ -439,30 +439,41 @@ export function CrmAnalytics() {
                           nameKey="name"
                           cx="50%"
                           cy="50%"
-                          innerRadius={60}
+                          innerRadius={62}
                           outerRadius={100}
-                          paddingAngle={3}
+                          paddingAngle={1}
+                          stroke="rgba(15,23,42,0.85)"
+                          strokeWidth={2}
                         >
                           {userStageChartData.map((entry, index) => (
                             <Cell key={`cell-user-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
                         <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#020617",
-                            borderColor: "rgba(255,255,255,0.15)",
-                            borderRadius: "12px",
-                            fontSize: "11px",
-                            fontWeight: "bold",
-                            color: "#fff",
-                            textTransform: "uppercase",
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0];
+                              const value = data.value as number;
+                              const name = data.name;
+                              const color = data.payload?.color || "#38bdf8";
+                              const pct = currentStageDeals.length > 0 ? Math.round((value / currentStageDeals.length) * 100) : 0;
+                              return (
+                                <div className="rounded-xl border border-sky-400/40 bg-slate-950/95 backdrop-blur-xl px-3.5 py-2.5 shadow-[0_0_25px_rgba(56,189,248,0.35)] select-none">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="w-2.5 h-2.5 rounded-full shadow-[0_0_6px_currentColor] shrink-0" style={{ backgroundColor: color }} />
+                                    <span className="text-xs font-black uppercase tracking-wider text-white">
+                                      {name}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs font-mono font-bold text-sky-400">
+                                    {value} {value === 1 ? "atividade" : "atividades"}{" "}
+                                    <span className="text-slate-300 font-semibold">({pct}%)</span>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
                           }}
-                          formatter={(value: any, name: any) => [
-                            `${value} atividades (${Math.round(
-                              ((Number(value) || 0) / currentStageDeals.length) * 100
-                            )}%)`,
-                            name,
-                          ]}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -654,7 +665,7 @@ export function CrmAnalytics() {
 
             {totalDealsCount === 0 ? (
               <div className="flex-1 flex items-center justify-center text-xs uppercase font-bold text-muted-foreground/50">
-                Nenhuma atividade registrada no CRM
+                Nenhuma atividade registrada no Comercial
               </div>
             ) : (
               <div className="flex-1 min-h-0 flex flex-col md:flex-row items-center justify-center gap-6 py-2">
@@ -667,9 +678,11 @@ export function CrmAnalytics() {
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        innerRadius={70}
+                        innerRadius={72}
                         outerRadius={125}
-                        paddingAngle={4}
+                        paddingAngle={1}
+                        stroke="rgba(15,23,42,0.85)"
+                        strokeWidth={2}
                         onClick={(entry) => {
                           if (entry && entry.stageId) {
                             setSelectedStageId(entry.stageId);
@@ -681,24 +694,35 @@ export function CrmAnalytics() {
                           <Cell
                             key={`cell-${index}`}
                             fill={entry.color}
-                            className="transition-all hover:opacity-80 hover:scale-105 cursor-pointer"
+                            className="transition-all hover:opacity-85 hover:scale-[1.02] cursor-pointer"
                           />
                         ))}
                       </Pie>
                       <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#020617",
-                          borderColor: "rgba(255,255,255,0.15)",
-                          borderRadius: "12px",
-                          fontSize: "11px",
-                          fontWeight: "bold",
-                          color: "#fff",
-                          textTransform: "uppercase",
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0];
+                            const value = data.value as number;
+                            const name = data.name;
+                            const color = data.payload?.color || "#38bdf8";
+                            const pct = totalDealsCount > 0 ? Math.round((value / totalDealsCount) * 100) : 0;
+                            return (
+                              <div className="rounded-xl border border-sky-400/40 bg-slate-950/95 backdrop-blur-xl px-3.5 py-2.5 shadow-[0_0_25px_rgba(56,189,248,0.35)] select-none">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="w-2.5 h-2.5 rounded-full shadow-[0_0_6px_currentColor] shrink-0" style={{ backgroundColor: color }} />
+                                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                                    {name}
+                                  </span>
+                                </div>
+                                <div className="text-xs font-mono font-bold text-sky-400">
+                                  {value} {value === 1 ? "atividade" : "atividades"}{" "}
+                                  <span className="text-slate-300 font-semibold">({pct}%)</span>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
                         }}
-                        formatter={(value: any, name: any) => [
-                          `${value} atividades (${Math.round(((Number(value) || 0) / totalDealsCount) * 100)}%)`,
-                          name,
-                        ]}
                       />
                     </PieChart>
                   </ResponsiveContainer>

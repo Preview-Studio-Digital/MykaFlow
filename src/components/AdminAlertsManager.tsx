@@ -148,7 +148,7 @@ export function AdminAlertsManager() {
       setHistoryList(histRes.data || []);
     } catch (err: any) {
       console.error("Erro ao carregar auditoria de alertas:", err);
-      toast.error("Erro ao carregar alertas do CRM");
+      toast.error("Erro ao carregar alertas do Comercial");
     } finally {
       setLoading(false);
     }
@@ -575,7 +575,7 @@ export function AdminAlertsManager() {
                       ? "hover:border-sky-400/60 hover:bg-sky-950/20 cursor-pointer group shadow-sm"
                       : ""
                   }`}
-                  title={item.deal_id ? "Clique para abrir a atividade no CRM" : undefined}
+                  title={item.deal_id ? "Clique para abrir a atividade no Comercial" : undefined}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400 shrink-0">
@@ -646,7 +646,7 @@ export function AdminAlertsManager() {
                         key={deal.id}
                         onClick={() => handleOpenDeal(deal.id)}
                         className="group p-4 rounded-2xl bg-gradient-to-r from-rose-950/40 via-slate-950 to-slate-950 border border-rose-500/50 hover:border-rose-400 hover:shadow-lg hover:shadow-rose-950/50 hover:scale-[1.005] transition-all cursor-pointer flex flex-col justify-between gap-3 shadow-md"
-                        title="Clique para abrir e gerenciar esta atividade no CRM"
+                        title="Clique para abrir e gerenciar esta atividade no Comercial"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
@@ -686,7 +686,7 @@ export function AdminAlertsManager() {
                           <div className="flex items-center gap-2">
                             <span className="hidden sm:inline text-muted-foreground">Autor: <strong className="text-slate-300">{deal.creator_name}</strong></span>
                             <span className="text-rose-300 font-bold uppercase tracking-wider flex items-center gap-1 group-hover:underline">
-                              Abrir no CRM <ArrowRight className="h-3 w-3" />
+                              Abrir no Comercial <ArrowRight className="h-3 w-3" />
                             </span>
                           </div>
                         </div>
@@ -728,7 +728,7 @@ export function AdminAlertsManager() {
                       key={deal.id}
                       onClick={() => handleOpenDeal(deal.id)}
                       className="group p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-950 to-slate-950 border border-amber-500/50 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-950/50 hover:scale-[1.005] transition-all cursor-pointer flex flex-col justify-between gap-3 shadow-md"
-                      title="Clique para abrir e gerenciar esta atividade no CRM"
+                      title="Clique para abrir e gerenciar esta atividade no Comercial"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
@@ -773,7 +773,7 @@ export function AdminAlertsManager() {
                             </div>
                           )}
                           <span className="text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1 group-hover:underline">
-                            Abrir no CRM <ArrowRight className="h-3 w-3" />
+                            Abrir no Comercial <ArrowRight className="h-3 w-3" />
                           </span>
                         </div>
                       </div>

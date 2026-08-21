@@ -210,12 +210,12 @@ export function EditMemberDialog({
                     FINANCEIRO
                   </span>
                   <span className="text-[9px] text-muted-foreground leading-tight block mt-0.5">
-                    Acesso ao Fluxo de Caixa, DRE e Lançamentos
+                    Acesso ao Módulo Financeiro & Comercial
                   </span>
                 </div>
               </button>
 
-              {/* Opção 3: CRM */}
+              {/* Opção 3: COMERCIAL */}
               <button
                 type="button"
                 onClick={() => setRole("crm")}
@@ -235,10 +235,10 @@ export function EditMemberDialog({
                 </div>
                 <div>
                   <span className="font-black text-xs uppercase text-sky-300 block">
-                    CRM
+                    COMERCIAL
                   </span>
                   <span className="text-[9px] text-muted-foreground leading-tight block mt-0.5">
-                    Acesso às Atividades, Tarefas e Funil Comercial
+                    Acesso exclusivo ao Módulo Comercial
                   </span>
                 </div>
               </button>

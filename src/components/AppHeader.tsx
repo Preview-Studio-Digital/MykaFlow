@@ -45,7 +45,7 @@ export function AppHeader({ onOpenProfile }: AppHeaderProps) {
                 </span>
               </span>
               <span className="text-[11px] text-muted-foreground font-medium">
-                Gestão Financeira & CRM
+                Gestão Financeira & Comercial
               </span>
             </div>
           </div>
@@ -76,7 +76,7 @@ export function AppHeader({ onOpenProfile }: AppHeaderProps) {
                 }`}
               >
                 <Users2 className={`h-3.5 w-3.5 ${isCrmActive ? "text-blue-500" : ""}`} />
-                CRM & Vendas
+                Comercial & Vendas
               </Link>
             )}
 
@@ -113,7 +113,7 @@ export function AppHeader({ onOpenProfile }: AppHeaderProps) {
               <Link
                 to="/crm"
                 className={`p-2 rounded-lg text-xs ${isCrmActive ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                title="CRM"
+                title="Comercial"
               >
                 <Users2 className="h-4 w-4" />
               </Link>

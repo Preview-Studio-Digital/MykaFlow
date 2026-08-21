@@ -45,14 +45,12 @@ function LoginPage() {
         <div className="absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-primary/30 blur-3xl pulse-glow" />
       </div>
       <div className="glass w-full max-w-md rounded-2xl p-8 float-up">
-        <div className="mb-8 flex flex-col items-center gap-2 text-center">
-          <div className="flex items-center gap-2">
-            <Zap className="h-8 w-8 text-accent" />
-            <h1 className="text-4xl font-extrabold tracking-widest text-gradient">MYKAFLOW</h1>
-          </div>
-          <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground">
-            Acesso seguro
-          </p>
+        <div className="mb-8 flex flex-col items-center justify-center text-center">
+          <img
+            src="/mykaflow-logo.png"
+            alt="MykaFlow"
+            className="h-10 sm:h-12 w-auto max-w-[260px] object-contain drop-shadow-[0_0_25px_rgba(34,211,238,0.4)] select-none"
+          />
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">

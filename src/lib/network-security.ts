@@ -32,24 +32,6 @@ export async function getClientPublicIp(): Promise<string> {
 // Helper para buscar lista de IPs autorizados da empresa
 export async function fetchAllowedIps(): Promise<string[]> {
   try {
-    const { data } = await supabase
-      .from("app_settings" as any)
-      .select("value")
-      .eq("key", "company_allowed_ips")
-      .maybeSingle();
-
-    if (data && (data as any).value) {
-      const parsed = JSON.parse((data as any).value);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.warn("Aviso ao carregar IPs autorizados:", err);
-  }
-
-  // Fallback local caso a tabela não exista ainda
-  try {
     const local = localStorage.getItem("mykaflow_allowed_ips");
     if (local) {
       const parsedLocal = JSON.parse(local);
@@ -67,11 +49,6 @@ export async function saveAllowedIps(newIps: string[]): Promise<boolean> {
   const cleanIps = newIps.map((ip) => ip.trim()).filter(Boolean);
   try {
     localStorage.setItem("mykaflow_allowed_ips", JSON.stringify(cleanIps));
-    await supabase.from("app_settings" as any).upsert({
-      key: "company_allowed_ips",
-      value: JSON.stringify(cleanIps),
-      updated_at: new Date().toISOString(),
-    });
     return true;
   } catch {
     return true;

@@ -46,8 +46,9 @@ function ModuleHub() {
   if (!user) return null;
 
   const isAdmin = role === "admin";
-  const canAccessFinance = isAdmin || role === "financeiro" || role === "user";
-  const canAccessCrm = isAdmin || role === "crm" || role === "crm_vendedor" || role === "crm_gestor" || role === "user";
+  const isFinanceiro = role === "financeiro";
+  const canAccessFinance = isAdmin || isFinanceiro;
+  const canAccessCrm = isAdmin || isFinanceiro || role === "crm" || role === "crm_vendedor" || role === "crm_gestor" || role === "user";
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background/95 to-muted/20 text-foreground flex flex-col justify-between">
@@ -57,7 +58,7 @@ function ModuleHub() {
           <img
             src="/logo-myka.ico"
             alt="Logo MykaFlow"
-            className="h-8 md:h-9 w-auto max-w-[200px] object-contain object-left drop-shadow-[0_0_15px_rgba(34,211,238,0.35)] hover:scale-105 transition-transform"
+            className="h-8 md:h-9 w-auto max-w-[200px] object-contain object-left drop-shadow-[0_0_15px_rgba(34,211,238,0.35)]"
           />
         </div>
 
@@ -87,10 +88,12 @@ function ModuleHub() {
 
       {/* Main Selection Area */}
       <main className="max-w-5xl w-full mx-auto px-6 py-8 flex-1 flex flex-col justify-center items-center">
-        <div className="text-center mx-auto mb-12 select-none">
-          <h1 className="font-saira-stencil text-5xl sm:text-7xl font-bold tracking-[0.15em] text-cyan-400 drop-shadow-[0_0_30px_rgba(34,211,238,0.45)] uppercase">
-            MYKAFLOW
-          </h1>
+        <div className="text-center mx-auto mb-8 select-none flex items-center justify-center">
+          <img
+            src="/mykaflow-logo.png"
+            alt="MykaFlow"
+            className="h-9 sm:h-12 md:h-14 w-auto max-w-[70vw] object-contain drop-shadow-[0_0_25px_rgba(34,211,238,0.35)] select-none"
+          />
         </div>
 
         {/* 2 Main Module Cards */}
@@ -98,122 +101,110 @@ function ModuleHub() {
           {/* Card 1: FINANCEIRO */}
           <div
             onClick={() => canAccessFinance && navigate({ to: "/financeiro" })}
-            className={`group relative overflow-hidden rounded-2xl border p-8 transition-all flex flex-col justify-between ${
+            className={`group relative overflow-hidden rounded-3xl border p-8 transition-all duration-300 flex flex-col justify-between select-none ${
               canAccessFinance
-                ? "border-border/60 bg-card hover:border-emerald-500/50 hover:shadow-2xl hover:shadow-emerald-500/10 cursor-pointer hover:-translate-y-1"
+                ? "border-border/60 bg-card/80 hover:border-emerald-500/60 hover:shadow-[0_0_35px_rgba(16,185,129,0.2)] cursor-pointer hover:scale-[1.02] active:scale-[0.99] backdrop-blur-xl"
                 : "border-border/20 bg-muted/20 opacity-60 cursor-not-allowed"
             }`}
           >
-            <div className="absolute top-0 right-0 h-32 w-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/15 transition-colors" />
+            <div className="absolute top-0 right-0 h-40 w-40 bg-emerald-500/5 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-all duration-300" />
 
-            <div className="space-y-4 relative z-10">
+            <div className="space-y-5 relative z-10">
               <div className="flex items-center justify-between">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 group-hover:scale-110 transition-transform">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:scale-110 group-hover:bg-emerald-500/20 group-hover:border-emerald-500/40 shadow-sm transition-all duration-300">
                   <Wallet className="h-7 w-7" />
                 </div>
-                <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 group-hover:border-emerald-500/50 transition-colors">
                   Módulo Financeiro
                 </span>
               </div>
 
               <div>
-                <h3 className="text-2xl font-bold text-foreground group-hover:text-emerald-400 transition-colors">
-                  Financeiro & Caixa
+                <h3 className="text-2xl font-black uppercase tracking-wider text-foreground group-hover:text-emerald-400 transition-colors">
+                  GESTÃO FINANCEIRA
                 </h3>
-                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                  Controle total de fluxo de caixa, DRE, métricas operacionais, gráficos de evolução e conciliação bancária.
-                </p>
               </div>
 
-              <ul className="space-y-2 pt-2 text-xs text-muted-foreground">
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-500/80" />
-                  Lançamento de receitas e despesas
+              <ul className="space-y-2.5 pt-1 text-xs text-muted-foreground font-medium">
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                  Fluxo de Caixa e DRE em Tempo Real
                 </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-500/80" />
-                  Diária empresarial e hora operacional
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                  Controle de Receitas, Despesas e Prazos
                 </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-500/80" />
-                  Previsão e recebíveis automáticos
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                  Métricas Operacionais e Conciliação
                 </li>
               </ul>
             </div>
-
-            <div className="pt-8 relative z-10">
-              <button
-                disabled={!canAccessFinance}
-                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 group-hover:gap-3"
-              >
-                Acessar Financeiro
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
           </div>
 
-          {/* Card 2: CRM & VENDAS */}
+          {/* Card 2: GESTÃO DE ATIVIDADES */}
           <div
             onClick={() => canAccessCrm && navigate({ to: "/crm" })}
-            className={`group relative overflow-hidden rounded-2xl border p-8 transition-all flex flex-col justify-between ${
+            className={`group relative overflow-hidden rounded-3xl border p-8 transition-all duration-300 flex flex-col justify-between select-none ${
               canAccessCrm
-                ? "border-border/60 bg-card hover:border-blue-500/50 hover:shadow-2xl hover:shadow-blue-500/10 cursor-pointer hover:-translate-y-1"
+                ? "border-border/60 bg-card/80 hover:border-sky-500/60 hover:shadow-[0_0_35px_rgba(56,189,248,0.2)] cursor-pointer hover:scale-[1.02] active:scale-[0.99] backdrop-blur-xl"
                 : "border-border/20 bg-muted/20 opacity-60 cursor-not-allowed"
             }`}
           >
-            <div className="absolute top-0 right-0 h-32 w-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/15 transition-colors" />
+            <div className="absolute top-0 right-0 h-40 w-40 bg-sky-500/5 rounded-full blur-3xl group-hover:bg-sky-500/20 transition-all duration-300" />
 
-            <div className="space-y-4 relative z-10">
+            <div className="space-y-5 relative z-10">
               <div className="flex items-center justify-between">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20 group-hover:scale-110 transition-transform">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20 group-hover:scale-110 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 shadow-sm transition-all duration-300">
                   <Users2 className="h-7 w-7" />
                 </div>
-                <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/25 group-hover:border-sky-500/50 transition-colors">
                   Módulo Comercial
                 </span>
               </div>
 
               <div>
-                <h3 className="text-2xl font-bold text-foreground group-hover:text-blue-400 transition-colors">
-                  CRM & Vendas
+                <h3 className="text-2xl font-black uppercase tracking-wider text-foreground group-hover:text-sky-400 transition-colors">
+                  GESTÃO COMERCIAL
                 </h3>
-                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                  Funil de vendas, cadastro de clientes, acompanhamento de orçamentos e fechamento integrado ao caixa.
-                </p>
               </div>
 
-              <ul className="space-y-2 pt-2 text-xs text-muted-foreground">
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-500/80" />
-                  Funil de vendas visual e interativo
+              <ul className="space-y-2.5 pt-1 text-xs text-muted-foreground font-medium">
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
+                  Atividades e Tarefas Individuais
                 </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-500/80" />
-                  Acompanhamento de orçamentos
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
+                  Eficiência e Produtividade
                 </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-500/80" />
-                  Lançamento automático de contratos no fluxo
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
+                  Automação Financeira
                 </li>
               </ul>
-            </div>
-
-            <div className="pt-8 relative z-10">
-              <button
-                disabled={!canAccessCrm}
-                className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-600/20 group-hover:gap-3"
-              >
-                Acessar CRM
-                <ArrowRight className="h-4 w-4" />
-              </button>
             </div>
           </div>
         </div>
       </main>
 
       {/* Footer info */}
-      <footer className="w-full text-center py-4 text-xs text-muted-foreground border-t border-border/20">
-        MykaFlow Sistema Integrado de Gestão &bull; Financeiro + CRM
+      <footer className="w-full text-center py-4 px-4 text-xs text-muted-foreground border-t border-border/20 select-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-3">
+        <span className="font-semibold uppercase tracking-wider">
+          MYKAFLOW GESTÃO FINANCEIRA & COMERCIAL
+        </span>
+        <span className="hidden sm:inline opacity-40">•</span>
+        <span className="text-[11px] font-medium text-slate-400">
+          Desenvolvido por{" "}
+          <a
+            href="https://www.previewstudio.com.br"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-cyan-400 hover:text-cyan-300 font-bold transition-colors hover:underline"
+          >
+            Preview Studio Digital
+          </a>
+        </span>
       </footer>
     </div>
   );

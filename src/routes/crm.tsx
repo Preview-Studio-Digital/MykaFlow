@@ -118,6 +118,7 @@ export interface Deal {
   working_user_id?: string | null;
   working_user_name?: string | null;
   working_started_at?: string | null;
+  latest_update_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -753,11 +754,11 @@ function getDealAgingStyle(updatedAtStr: string) {
       days: diffDays,
       hoverText,
       label: `+15 dias sem atualização`,
-      badgeClass: "bg-black text-white border-zinc-700",
-      cardClass: "bg-zinc-950 border-zinc-700 shadow-xl shadow-black/80 text-white",
-      dotColor: "bg-zinc-500",
-      accentText: "text-zinc-300",
-      tooltipClass: "bg-zinc-950/95 text-zinc-300 border-zinc-700 shadow-black/80",
+      badgeClass: "bg-zinc-950/90 text-zinc-300 border border-zinc-500 font-bold",
+      cardClass: "bg-gradient-to-br from-zinc-600/35 via-zinc-950/20 to-slate-950/95 border-2 border-zinc-400 shadow-md shadow-black/80 text-white",
+      dotColor: "bg-zinc-400 shadow-[0_0_6px_#a1a1aa]",
+      accentText: "text-zinc-400 font-bold",
+      tooltipClass: "bg-zinc-950/95 text-zinc-300 border border-zinc-500 shadow-black/80",
     };
   }
 
@@ -767,11 +768,11 @@ function getDealAgingStyle(updatedAtStr: string) {
       days: diffDays,
       hoverText,
       label: `há ${diffDays} dias`,
-      badgeClass: "bg-fuchsia-950 text-fuchsia-200 border-fuchsia-400/60",
-      cardClass: "bg-gradient-to-br from-fuchsia-900/90 via-fuchsia-950/95 to-slate-950 border-fuchsia-500/60 shadow-lg shadow-fuchsia-900/30 text-white",
-      dotColor: "bg-fuchsia-400",
-      accentText: "text-fuchsia-300",
-      tooltipClass: "bg-fuchsia-950/95 text-fuchsia-200 border-fuchsia-400/70 shadow-fuchsia-900/50",
+      badgeClass: "bg-fuchsia-950/90 text-fuchsia-300 border border-fuchsia-400 font-bold shadow-[0_0_8px_rgba(232,121,249,0.35)]",
+      cardClass: "bg-gradient-to-br from-fuchsia-500/35 via-fuchsia-950/20 to-slate-950/95 border-2 border-fuchsia-400 shadow-lg shadow-fuchsia-500/25 text-white",
+      dotColor: "bg-fuchsia-400 shadow-[0_0_8px_#e879f9]",
+      accentText: "text-fuchsia-400 font-bold drop-shadow-[0_0_6px_rgba(232,121,249,0.5)]",
+      tooltipClass: "bg-fuchsia-950/95 text-fuchsia-200 border border-fuchsia-400 shadow-fuchsia-900/50",
     };
   }
 
@@ -781,11 +782,11 @@ function getDealAgingStyle(updatedAtStr: string) {
       days: diffDays,
       hoverText,
       label: `há ${diffDays} dias`,
-      badgeClass: "bg-rose-950 text-rose-200 border-rose-400/60",
-      cardClass: "bg-gradient-to-br from-rose-900/90 via-rose-950/95 to-slate-950 border-rose-500/60 shadow-lg shadow-rose-900/30 text-white",
-      dotColor: "bg-rose-400",
-      accentText: "text-rose-300",
-      tooltipClass: "bg-rose-950/95 text-rose-200 border-rose-400/70 shadow-rose-900/50",
+      badgeClass: "bg-rose-950/90 text-rose-300 border border-rose-400 font-bold shadow-[0_0_8px_rgba(244,63,94,0.35)]",
+      cardClass: "bg-gradient-to-br from-rose-500/35 via-rose-950/20 to-slate-950/95 border-2 border-rose-500 shadow-lg shadow-rose-500/25 text-white",
+      dotColor: "bg-rose-500 shadow-[0_0_8px_#f43f5e]",
+      accentText: "text-rose-400 font-bold drop-shadow-[0_0_6px_rgba(244,63,94,0.5)]",
+      tooltipClass: "bg-rose-950/95 text-rose-200 border border-rose-500 shadow-rose-900/50",
     };
   }
 
@@ -795,25 +796,25 @@ function getDealAgingStyle(updatedAtStr: string) {
       days: diffDays,
       hoverText,
       label: `há 4 dias`,
-      badgeClass: "bg-orange-950 text-orange-200 border-orange-400/60",
-      cardClass: "bg-gradient-to-br from-orange-900/90 via-orange-950/95 to-slate-950 border-orange-500/60 shadow-lg shadow-orange-900/30 text-white",
-      dotColor: "bg-orange-400",
-      accentText: "text-orange-300",
-      tooltipClass: "bg-orange-950/95 text-orange-200 border-orange-400/70 shadow-orange-900/50",
+      badgeClass: "bg-orange-950/90 text-orange-300 border border-orange-400 font-bold shadow-[0_0_8px_rgba(251,146,60,0.35)]",
+      cardClass: "bg-gradient-to-br from-orange-500/35 via-orange-950/20 to-slate-950/95 border-2 border-orange-400 shadow-lg shadow-orange-500/25 text-white",
+      dotColor: "bg-orange-400 shadow-[0_0_8px_#fb923c]",
+      accentText: "text-orange-400 font-bold drop-shadow-[0_0_6px_rgba(251,146,60,0.5)]",
+      tooltipClass: "bg-orange-950/95 text-orange-200 border border-orange-400 shadow-orange-900/50",
     };
   }
 
-  // 3º dia (3 dias): Amarelo Intenso
+  // 3º dia (3 dias): Amarelo Literal, Puro e Elétrico (#FFFF00)
   if (diffDays === 3) {
     return {
       days: diffDays,
       hoverText,
       label: `há 3 dias`,
-      badgeClass: "bg-amber-950 text-amber-200 border-amber-400/60",
-      cardClass: "bg-gradient-to-br from-amber-900/90 via-amber-950/95 to-slate-950 border-amber-500/60 shadow-lg shadow-amber-900/30 text-white",
-      dotColor: "bg-amber-400",
-      accentText: "text-amber-300",
-      tooltipClass: "bg-amber-950/95 text-amber-200 border-amber-400/70 shadow-amber-900/50",
+      badgeClass: "bg-yellow-950/90 text-[#ffff00] border border-[#ffff00] font-black shadow-[0_0_8px_rgba(255,255,0,0.4)]",
+      cardClass: "bg-gradient-to-br from-yellow-400/35 via-yellow-950/20 to-slate-950/95 border-2 border-[#ffff00] shadow-lg shadow-yellow-400/30 text-white",
+      dotColor: "bg-[#ffff00] shadow-[0_0_8px_#ffff00]",
+      accentText: "text-[#ffff00] font-black drop-shadow-[0_0_6px_rgba(255,255,0,0.5)]",
+      tooltipClass: "bg-black/95 text-[#ffff00] border border-[#ffff00] shadow-[0_0_12px_rgba(255,255,0,0.3)]",
     };
   }
 
@@ -823,24 +824,24 @@ function getDealAgingStyle(updatedAtStr: string) {
       days: diffDays,
       hoverText,
       label: `há 2 dias`,
-      badgeClass: "bg-lime-950 text-lime-200 border-lime-400/60",
-      cardClass: "bg-gradient-to-br from-lime-900/90 via-lime-950/95 to-slate-950 border-lime-500/60 shadow-lg shadow-lime-900/30 text-white",
-      dotColor: "bg-lime-400",
-      accentText: "text-lime-300",
-      tooltipClass: "bg-lime-950/95 text-lime-200 border-lime-400/70 shadow-lime-900/50",
+      badgeClass: "bg-lime-950/90 text-lime-300 border border-lime-400 font-bold shadow-[0_0_8px_rgba(163,230,53,0.35)]",
+      cardClass: "bg-gradient-to-br from-lime-500/35 via-lime-950/20 to-slate-950/95 border-2 border-lime-400 shadow-lg shadow-lime-500/25 text-white",
+      dotColor: "bg-lime-400 shadow-[0_0_8px_#a3e635]",
+      accentText: "text-lime-400 font-bold drop-shadow-[0_0_6px_rgba(163,230,53,0.5)]",
+      tooltipClass: "bg-lime-950/95 text-lime-200 border border-lime-400 shadow-lime-900/50",
     };
   }
 
-  // HOJE (0 d) e 1º dia (1 d): Verde Esmeralda
+  // HOJE (0 d) e 1º dia (1 d): Verde Floresta Escuro Sólido
   return {
     days: diffDays,
     hoverText,
     label: diffDays === 0 ? "atualização hoje" : "há 1 dia",
-    badgeClass: "bg-emerald-950 text-emerald-200 border-emerald-400/60",
-    cardClass: "bg-gradient-to-br from-emerald-900/90 via-emerald-950/95 to-slate-950 border-emerald-500/60 shadow-lg shadow-emerald-900/30 text-white",
-    dotColor: "bg-emerald-400",
-    accentText: "text-emerald-300",
-    tooltipClass: "bg-emerald-950/95 text-emerald-200 border-emerald-400/70 shadow-emerald-900/50",
+    badgeClass: "bg-green-950/90 text-green-300 border border-green-600 font-bold shadow-[0_0_8px_rgba(22,163,74,0.3)]",
+    cardClass: "bg-gradient-to-br from-green-600/35 via-green-950/20 to-slate-950/95 border-2 border-green-600 shadow-md shadow-green-950/50 text-white",
+    dotColor: "bg-green-500 shadow-[0_0_6px_#16a34a]",
+    accentText: "text-green-400 font-bold drop-shadow-[0_0_4px_rgba(34,197,94,0.4)]",
+    tooltipClass: "bg-green-950/95 text-green-200 border border-green-600 shadow-green-950/50",
   };
 }
 
@@ -960,6 +961,7 @@ function CrmDashboard() {
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null);
   const [calendarViewDate, setCalendarViewDate] = useState<Date>(new Date());
+  const [calendarUserFilter, setCalendarUserFilter] = useState<string>("ALL");
 
   // Controle de visualização de novas respostas/atualizações pelo responsável da atividade
   const [initialLastSeenTime, setInitialLastSeenTime] = useState<string | null>(null);
@@ -1081,40 +1083,67 @@ function CrmDashboard() {
     return () => clearInterval(interval);
   }, [user, deals]);
 
-  // Monitoramento Automático de Atividade Obrigatória (Prompt a cada 5 minutos se não escolher atividade)
+  // Monitoramento Automático de Atividade Obrigatória (Prompt inicial ao entrar e a cada 5 minutos sem atividade)
   const [showChooseActivityPrompt, setShowChooseActivityPrompt] = useState(false);
   const lastPromptTimeRef = useRef<number>(Date.now());
+  const initialPromptCheckedRef = useRef<boolean>(false);
+
+  // Saudação dinâmica conforme o horário do dia
+  const getGreeting = () => {
+    const hours = new Date().getHours();
+    if (hours >= 5 && hours < 12) return "Bom dia";
+    if (hours >= 12 && hours < 18) return "Boa tarde";
+    return "Boa noite";
+  };
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || loading) return;
 
+    const hasActiveWork = deals.some((d) => {
+      const active = getDealActiveWorker(d);
+      return Boolean(active && active.userId === user.id);
+    });
+
+    if (hasActiveWork) {
+      lastPromptTimeRef.current = Date.now();
+      setShowChooseActivityPrompt(false);
+      return;
+    }
+
+    // Dispara imediatamente assim que o usuário entra na página de CRM sem atividade ativa
+    if (!initialPromptCheckedRef.current) {
+      initialPromptCheckedRef.current = true;
+      lastPromptTimeRef.current = Date.now();
+      setShowChooseActivityPrompt(true);
+      return;
+    }
+
+    // Se NÃO tem atividade em andamento, verifica se já passaram 5 minutos (300.000 ms)
     const checkActiveActivity = () => {
-      // Verifica se o usuário tem alguma atividade com status ativo
-      const hasActiveWork = deals.some((d) => {
+      const isWorkingNow = deals.some((d) => {
         const active = getDealActiveWorker(d);
         return Boolean(active && active.userId === user.id);
       });
 
-      if (hasActiveWork) {
-        // Se tem atividade em andamento, reseta o temporizador e fecha qualquer prompt
+      if (isWorkingNow) {
         lastPromptTimeRef.current = Date.now();
         setShowChooseActivityPrompt(false);
         return;
       }
 
-      // Se NÃO tem atividade em andamento, verifica se já passaram 5 minutos (300.000 ms)
       const elapsed = Date.now() - lastPromptTimeRef.current;
       if (elapsed >= 5 * 60 * 1000) {
+        lastPromptTimeRef.current = Date.now();
         setShowChooseActivityPrompt(true);
       }
     };
 
     const interval = setInterval(checkActiveActivity, 5000); // Avalia a cada 5 segundos
     return () => clearInterval(interval);
-  }, [user, deals]);
+  }, [user, deals, loading]);
 
   const handleDismissActivityPrompt = () => {
-    // Ao clicar em qualquer lugar da tela, fecha o prompt e reinicia a contagem dos próximos 5 minutos
+    // Ao fechar o prompt, reinicia a contagem dos próximos 5 minutos
     lastPromptTimeRef.current = Date.now();
     setShowChooseActivityPrompt(false);
   };
@@ -1156,6 +1185,10 @@ function CrmDashboard() {
   // Isolamento de Coluna / Tipo de Requisição na Tela
   const [isolatedStageId, setIsolatedStageId] = useState<string | null>(null);
 
+  // Hover de Topo de Coluna para Duração Média (ocupa o 1º card abaixo do cabeçalho)
+  const [hoveredStageHeaderId, setHoveredStageHeaderId] = useState<string | null>(null);
+  const [hoveredUserSubcolId, setHoveredUserSubcolId] = useState<string | null>(null);
+
   // Movimentação Manual Drag and Drop entre Etapas e Reordenação de Prioridade
   const [draggingDealId, setDraggingDealId] = useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
@@ -1175,24 +1208,9 @@ function CrmDashboard() {
     }
   });
 
-  // Colunas Recolhidas em Abas Estreitas (Padrão: apenas Perdidos oculta)
-  const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>(() => {
-    try {
-      const saved = localStorage.getItem("mykaflow_crm_collapsed_stages_v2");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return { lost: true };
-  });
-
-  const toggleCollapseStage = (stageId: string) => {
-    setCollapsedStages((prev) => {
-      const next = { ...prev, [stageId]: !prev[stageId] };
-      try {
-        localStorage.setItem("mykaflow_crm_collapsed_stages_v2", JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
+  // Colunas Recolhidas em Abas Estreitas
+  const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>({});
+  const [userInitializedStages, setUserInitializedStages] = useState(false);
 
   // Controle de recolhimento / expansão de tarefas vinculadas no Kanban (via clique ou hover)
   const [expandedSubtaskDealIds, setExpandedSubtaskDealIds] = useState<Record<string, boolean>>({});
@@ -1259,6 +1277,10 @@ function CrmDashboard() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // Se houver preview de arquivo ou modal específico aberto no topo, fecha o mais específico primeiro
+        if (showChooseActivityPrompt) {
+          handleDismissActivityPrompt();
+          return;
+        }
         if (previewingQuoteFile) {
           setPreviewingQuoteFile(null);
           return;
@@ -1377,19 +1399,25 @@ function CrmDashboard() {
         .select("*, crm_customers(name)")
         .order("updated_at", { ascending: false });
 
-      // Busca histórico recente para obter o autor da última atualização de cada atividade
+      // Busca histórico recente para obter o autor e a data da última atualização real de cada atividade
       let historyMap = new Map<string, string>();
+      let historyDateMap = new Map<string, string>();
       try {
         const { data: recentHistory } = await supabase
           .from("crm_deal_history")
           .select("deal_id, user_name, created_at")
           .order("created_at", { ascending: false })
-          .limit(300);
+          .limit(1000);
 
         if (recentHistory) {
           recentHistory.forEach((h: any) => {
-            if (h.deal_id && h.user_name && !historyMap.has(h.deal_id)) {
-              historyMap.set(h.deal_id, h.user_name);
+            if (h.deal_id) {
+              if (h.user_name && !historyMap.has(h.deal_id)) {
+                historyMap.set(h.deal_id, h.user_name);
+              }
+              if (h.created_at && !historyDateMap.has(h.deal_id)) {
+                historyDateMap.set(h.deal_id, h.created_at);
+              }
             }
           });
         }
@@ -1426,6 +1454,8 @@ function CrmDashboard() {
             "Não atribuído"
           ).toUpperCase();
 
+          const latestRealDate = historyDateMap.get(d.id) || d.created_at;
+
           return {
             ...d,
             stage: mappedStage,
@@ -1435,6 +1465,7 @@ function CrmDashboard() {
               "Uso Interno / Empresa",
             creator_name: creatorName,
             latest_update_author: latestAuthor,
+            latest_update_at: latestRealDate,
             assigned_user_name: assignedName,
           };
         });
@@ -1448,14 +1479,11 @@ function CrmDashboard() {
           let parentReq: string | null = null;
 
           if (deal.notes.includes("[PARENT_DEAL:")) {
-            try {
-              const match = deal.notes.match(/\[PARENT_DEAL:(.*?)\]/);
-              if (match && match[1]) {
-                const data = JSON.parse(match[1]);
-                parentId = data.parentId;
-                parentReq = data.parentReq;
-              }
-            } catch (e) {}
+            const data = extractParentDealData(deal.notes);
+            if (data) {
+              parentId = data.parentId;
+              parentReq = data.parentReq;
+            }
           }
           if (!parentId) {
             const match = deal.notes.match(/Tarefa vinculada a:\s*(.*?)\s*\(Nº\s*([0-9.]+)\)/i);
@@ -1500,7 +1528,7 @@ function CrmDashboard() {
 
         if (retHistory) setReturnedHistoryList(retHistory);
       } catch (historyErr) {
-        console.warn("Aviso ao carregar histórico de devoluções:", historyErr);
+        // silencioso
       }
     } catch (err: any) {
       console.error("Erro ao carregar dados do CRM:", err);
@@ -1534,26 +1562,41 @@ function CrmDashboard() {
     );
   }
 
+  // Extração defensiva e à prova de falhas de metadados PARENT_DEAL
+  const extractParentDealData = (notes: string | undefined | null) => {
+    if (!notes || !notes.includes("[PARENT_DEAL:")) return null;
+    try {
+      const startIdx = notes.indexOf("[PARENT_DEAL:");
+      if (startIdx === -1) return null;
+      const jsonStart = startIdx + "[PARENT_DEAL:".length;
+      const endIdx = notes.indexOf("}]", jsonStart);
+      if (endIdx !== -1) {
+        const jsonStr = notes.substring(jsonStart, endIdx + 1);
+        return JSON.parse(jsonStr);
+      }
+      const match = notes.match(/\[PARENT_DEAL:(\{.*?\})\]/s) || notes.match(/\[PARENT_DEAL:(.*?)\]/s);
+      if (match && match[1]) {
+        return JSON.parse(match[1]);
+      }
+    } catch {}
+    return null;
+  };
+
   // Helper para identificar vínculo de atividade primária
   const getParentDealInfo = (deal: Deal | null) => {
     if (!deal || !deal.notes) return null;
 
     // 1. Tag [PARENT_DEAL:{...}]
     if (deal.notes.includes("[PARENT_DEAL:")) {
-      try {
-        const match = deal.notes.match(/\[PARENT_DEAL:(.*?)\]/);
-        if (match && match[1]) {
-          const data = JSON.parse(match[1]);
-          const found = deals.find((d) => d.id === data.parentId);
-          return {
-            id: data.parentId,
-            title: data.parentTitle,
-            reqNumber: data.parentReq,
-            deal: found,
-          };
-        }
-      } catch (e) {
-        console.warn("Erro ao parsear PARENT_DEAL:", e);
+      const data = extractParentDealData(deal.notes);
+      if (data && data.parentId) {
+        const found = deals.find((d) => d.id === data.parentId);
+        return {
+          id: data.parentId,
+          title: data.parentTitle,
+          reqNumber: data.parentReq,
+          deal: found,
+        };
       }
     }
 
@@ -2010,6 +2053,11 @@ function CrmDashboard() {
         user_name: (h.user_name || "Usuário").toUpperCase(),
       }));
       setDealHistoryList(formattedHistory);
+      if (formattedHistory.length > 0) {
+        const latestRealDate = formattedHistory[0].created_at;
+        setSelectedDealForHistory((prev) => (prev ? { ...prev, latest_update_at: latestRealDate } : null));
+        setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, latest_update_at: latestRealDate } : d)));
+      }
     } catch (err: any) {
       console.error("Erro ao buscar histórico:", err);
     } finally {
@@ -2720,7 +2768,7 @@ function CrmDashboard() {
         const updatedDeal: Deal = {
           ...deal,
           notes: updatedNotes,
-          updated_at: nowIso,
+          latest_update_at: deal.latest_update_at || deal.created_at,
         };
 
         setSelectedDealForHistory(updatedDeal);
@@ -2780,7 +2828,7 @@ function CrmDashboard() {
 
         try {
           await supabase.from("crm_deals").update({ notes: prevUpdatedNotes, updated_at: nowIso }).eq("id", otherRunningDeal.id);
-          setDeals((prev) => prev.map((d) => (d.id === otherRunningDeal.id ? { ...d, notes: prevUpdatedNotes, updated_at: nowIso } : d)));
+          setDeals((prev) => prev.map((d) => (d.id === otherRunningDeal.id ? { ...d, notes: prevUpdatedNotes, latest_update_at: d.latest_update_at || d.created_at } : d)));
         } catch (e) {}
       }
     }
@@ -2802,7 +2850,7 @@ function CrmDashboard() {
       const updatedDeal: Deal = {
         ...deal,
         notes: updatedNotes,
-        updated_at: nowIso,
+        latest_update_at: deal.latest_update_at || deal.created_at,
       };
 
       setSelectedDealForHistory(updatedDeal);
@@ -3815,7 +3863,7 @@ function CrmDashboard() {
             user_id: user?.id,
             type: "income",
             nature: "variable",
-            category: "Contratos / Vendas CRM",
+            category: "Contratos / Vendas Comercial",
             description: desc,
             amount: Number(installmentVal.toFixed(2)),
             occurred_on: dateStr,
@@ -3988,13 +4036,59 @@ function CrmDashboard() {
     };
   }, [visibleDeals]);
 
+  // Inicialização inteligente: Abre automaticamente todas as colunas que possuem atividades e oculta as vazias
+  useEffect(() => {
+    if (visibleDeals && !loading && !userInitializedStages) {
+      const initialCollapsed: Record<string, boolean> = {};
+      STAGES.forEach((stage) => {
+        const count = visibleDeals.filter((d) => d.stage === stage.id).length;
+        initialCollapsed[stage.id] = count === 0;
+      });
+      setCollapsedStages(initialCollapsed);
+      setUserInitializedStages(true);
+    }
+  }, [visibleDeals, loading, userInitializedStages]);
+
+  // Garante que qualquer coluna que receba novas atividades permaneça sempre aberta e visível
+  useEffect(() => {
+    if (!visibleDeals || loading) return;
+    setCollapsedStages((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      STAGES.forEach((stage) => {
+        const count = visibleDeals.filter((d) => d.stage === stage.id).length;
+        if (count > 0 && next[stage.id]) {
+          next[stage.id] = false;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [visibleDeals, loading]);
+
+  const toggleCollapseStage = (stageId: string) => {
+    const stageDealsCount = visibleDeals.filter((d) => d.stage === stageId).length;
+    const isCurrentlyCollapsed = Boolean(collapsedStages[stageId]);
+
+    // Se estiver aberta e tiver atividades, não permite encolher
+    if (!isCurrentlyCollapsed && stageDealsCount > 0) {
+      toast.info("Colunas com atividades permanecem sempre abertas e não podem ser encolhidas.");
+      return;
+    }
+
+    setCollapsedStages((prev) => ({
+      ...prev,
+      [stageId]: !prev[stageId],
+    }));
+  };
+
   if (authLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-foreground">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent glow" />
           <p className="font-mono text-sm tracking-widest text-muted-foreground uppercase animate-pulse">
-            Carregando CRM...
+            Carregando Comercial...
           </p>
         </div>
       </div>
@@ -4029,35 +4123,36 @@ function CrmDashboard() {
       >
         {/* Topo do Menu */}
         <div className="space-y-4">
-          <div className="flex items-center gap-2.5 border-b border-white/10 pb-3">
+          {/* Topo do Menu: MYKAFLOW GESTÃO COMERCIAL em largura total e ampliado */}
+          <div className="w-full flex flex-col items-center justify-center border-b border-white/10 pb-3 pt-1 select-none">
             <svg
-              className="w-[125px] h-[30px] overflow-visible select-none"
-              viewBox="0 0 125 30"
+              className="w-full h-[46px] overflow-visible select-none drop-shadow-[0_0_15px_rgba(34,211,238,0.35)]"
+              viewBox="0 0 250 46"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
               <text
                 x="0"
-                y="14"
+                y="24"
                 className="font-saira-stencil"
-                fontSize="15"
+                fontSize="25"
                 fill="#22d3ee"
-                textLength="125"
+                textLength="250"
                 lengthAdjust="spacing"
               >
                 MYKAFLOW
               </text>
               <text
                 x="0"
-                y="27"
-                fontSize="8.5"
-                fontWeight="600"
+                y="42"
+                fontSize="11"
+                fontWeight="700"
                 fill="#94a3b8"
                 fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-                textLength="125"
+                textLength="250"
                 lengthAdjust="spacing"
               >
-                CRM & ATIVIDADES
+                GESTÃO COMERCIAL
               </text>
             </svg>
           </div>
@@ -4102,6 +4197,8 @@ function CrmDashboard() {
               Repositório
             </p>
 
+
+
             <button
               type="button"
               onClick={() => {
@@ -4117,24 +4214,6 @@ function CrmDashboard() {
               </div>
               <span className="px-2 py-0.5 rounded-md bg-white/10 text-white font-mono text-[10px] font-bold border border-white/15 shrink-0">
                 {totalArchivedCount}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsSideMenuOpen(false);
-                setIsCalendarModalOpen(true);
-              }}
-              className="w-full btn-ghost-neon rounded-xl px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center justify-between gap-2 text-sky-400 hover:text-sky-300 border-sky-500/30 hover:border-sky-400/50 hover:bg-sky-500/10 shadow-sm transition-all text-left group"
-              title="Visualizar calendário de prazos das atividades"
-            >
-              <div className="flex items-center gap-2.5 truncate">
-                <Calendar className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform shrink-0" />
-                <span className="truncate">Calendário de Prazos</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-mono text-[10px] font-bold border border-sky-400/30 shrink-0">
-                {deals.filter((d) => Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost").length}
               </span>
             </button>
           </div>
@@ -4155,8 +4234,8 @@ function CrmDashboard() {
       </aside>
 
       {/* Header com botão do Menu Lateral */}
-      <header className="shrink-0 mb-1 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between pb-0">
-        <div className="flex items-center gap-3 lg:w-1/3 lg:justify-start">
+      <header className="shrink-0 mb-1 flex items-center justify-between pb-0">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setIsSideMenuOpen(true)}
@@ -4167,126 +4246,56 @@ function CrmDashboard() {
           </button>
           <Link
             to="/"
-            className="group flex flex-col select-none justify-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] focus:outline-none"
+            className="flex flex-col select-none justify-center cursor-pointer focus:outline-none"
             title="Voltar à tela inicial"
           >
             <svg
-              className="w-[280px] sm:w-[305px] h-[36px] overflow-visible select-none transition-all duration-300 group-hover:drop-shadow-[0_0_12px_rgba(34,211,238,0.45)]"
-              viewBox="0 0 305 36"
+              className="w-[240px] sm:w-[265px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
+              viewBox="0 0 265 26"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
               <text
                 x="0"
                 y="21"
-                className="font-saira-stencil transition-colors duration-200"
-                fontSize="24"
+                className="font-saira-stencil"
+                fontSize="22"
                 fill="#22d3ee"
-                textLength="305"
+                textLength="265"
                 lengthAdjust="spacing"
               >
-                CRM & ATIVIDADES
-              </text>
-              <text
-                x="0"
-                y="33"
-                fontSize="9"
-                fontWeight="500"
-                className="transition-colors duration-200 group-hover:fill-sky-300/80"
-                fill="#94a3b8"
-                fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-                textLength="305"
-                lengthAdjust="spacing"
-              >
-                MYKAFLOW GESTÃO FINANCEIRA, COMERCIAL E TAREFAS
+                GESTÃO COMERCIAL
               </text>
             </svg>
           </Link>
         </div>
 
-          {/* 4 Tags de Médias por Coluna (Desconsiderando Tarefas e Tarefas Vinculadas) - Clicáveis para Abrir Modal Completo */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mx-auto select-none">
-            {/* 1. Média Orçamentos */}
-            <button
-              type="button"
-              onClick={() => setIsMetricsModalOpen(true)}
-              className="glass relative overflow-hidden rounded-xl border border-sky-500/20 hover:border-sky-400/50 hover:bg-sky-500/10 px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left group shadow-sm whitespace-nowrap shrink-0"
-              title="Clique para ver o relatório completo de métricas"
-            >
-              <div className="w-1 h-7 rounded-full bg-sky-400 group-hover:shadow-[0_0_8px_rgba(56,189,248,0.8)] shrink-0" />
-              <div className="whitespace-nowrap min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-sky-300 whitespace-nowrap">
-                  Média Orçamentos
-                </p>
-                <p className="text-xs font-black font-mono text-sky-400 mt-0.5 flex items-center gap-1 whitespace-nowrap">
-                  <span className="whitespace-nowrap">{pipelineMetrics.qualification.avgDays} {pipelineMetrics.qualification.avgDays === 1 ? "dia" : "dias"}</span>
-                  <span className="text-[10px] text-muted-foreground font-normal whitespace-nowrap">({pipelineMetrics.qualification.count})</span>
-                </p>
-              </div>
-            </button>
+        {/* Lado Direito: Calendário de Prazos, Caixa de Entrada de Menções (@usuario), ADM e Sair */}
+        <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
+          {/* Botão de Calendário de Prazos no Cabeçalho */}
+          <button
+            type="button"
+            onClick={() => {
+              setCalendarUserFilter(role === "admin" ? "ALL" : (user?.id || "ALL"));
+              setIsCalendarModalOpen(true);
+            }}
+            className="btn-ghost-neon px-2.5 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-sky-400 hover:text-white border-sky-500/30 hover:border-sky-400/60 bg-sky-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
+            title={role === "admin" ? "Calendário de Prazos (Geral de Todos os Responsáveis)" : "Meu Calendário de Prazos"}
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline text-xs font-black uppercase tracking-wider">
+              Prazos
+            </span>
+            <span className="px-1.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-mono text-[10px] font-bold border border-sky-400/40">
+              {role === "admin"
+                ? deals.filter((d) => Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost").length
+                : deals.filter((d) => d.assigned_user_id === user?.id && Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost").length
+              }
+            </span>
+          </button>
 
-            {/* 2. Média Negociações */}
-            <button
-              type="button"
-              onClick={() => setIsMetricsModalOpen(true)}
-              className="glass relative overflow-hidden rounded-xl border border-indigo-500/20 hover:border-indigo-400/50 hover:bg-indigo-500/10 px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left group shadow-sm whitespace-nowrap shrink-0"
-              title="Clique para ver o relatório completo de métricas"
-            >
-              <div className="w-1 h-7 rounded-full bg-indigo-400 group-hover:shadow-[0_0_8px_rgba(129,140,248,0.8)] shrink-0" />
-              <div className="whitespace-nowrap min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-indigo-300 whitespace-nowrap">
-                  Média Negociações
-                </p>
-                <p className="text-xs font-black font-mono text-indigo-400 mt-0.5 flex items-center gap-1 whitespace-nowrap">
-                  <span className="whitespace-nowrap">{pipelineMetrics.negotiation.avgDays} {pipelineMetrics.negotiation.avgDays === 1 ? "dia" : "dias"}</span>
-                  <span className="text-[10px] text-muted-foreground font-normal whitespace-nowrap">({pipelineMetrics.negotiation.count})</span>
-                </p>
-              </div>
-            </button>
-
-            {/* 3. Média Contratos */}
-            <button
-              type="button"
-              onClick={() => setIsMetricsModalOpen(true)}
-              className="glass relative overflow-hidden rounded-xl border border-emerald-500/20 hover:border-emerald-400/50 hover:bg-emerald-500/10 px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left group shadow-sm whitespace-nowrap shrink-0"
-              title="Clique para ver o relatório completo de métricas"
-            >
-              <div className="w-1 h-7 rounded-full bg-emerald-400 group-hover:shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0" />
-              <div className="whitespace-nowrap min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-emerald-300 whitespace-nowrap">
-                  Média Contratos
-                </p>
-                <p className="text-xs font-black font-mono text-emerald-400 mt-0.5 flex items-center gap-1 whitespace-nowrap">
-                  <span className="whitespace-nowrap">{pipelineMetrics.won.avgDays} {pipelineMetrics.won.avgDays === 1 ? "dia" : "dias"}</span>
-                  <span className="text-[10px] text-muted-foreground font-normal whitespace-nowrap">({pipelineMetrics.won.count})</span>
-                </p>
-              </div>
-            </button>
-
-            {/* 4. Média Perdidos */}
-            <button
-              type="button"
-              onClick={() => setIsMetricsModalOpen(true)}
-              className="glass relative overflow-hidden rounded-xl border border-rose-500/20 hover:border-rose-400/50 hover:bg-rose-500/10 px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200 hover:scale-[1.03] text-left group shadow-sm whitespace-nowrap shrink-0"
-              title="Clique para ver o relatório completo de métricas"
-            >
-              <div className="w-1 h-7 rounded-full bg-rose-400 group-hover:shadow-[0_0_8px_rgba(244,63,94,0.8)] shrink-0" />
-              <div className="whitespace-nowrap min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-rose-300 whitespace-nowrap">
-                  Média Perdidos
-                </p>
-                <p className="text-xs font-black font-mono text-rose-400 mt-0.5 flex items-center gap-1 whitespace-nowrap">
-                  <span className="whitespace-nowrap">{pipelineMetrics.lost.avgDays} {pipelineMetrics.lost.avgDays === 1 ? "dia" : "dias"}</span>
-                  <span className="text-[10px] text-muted-foreground font-normal whitespace-nowrap">({pipelineMetrics.lost.count})</span>
-                </p>
-              </div>
-            </button>
-          </div>
-
-          {/* Lado Direito: Caixa de Entrada de Menções (@usuario), ADM e Sair */}
-          <div className="flex items-center gap-3 justify-between lg:w-1/3 lg:justify-end shrink-0">
-            <div className="flex items-center">
-              {/* Botão Caixa de Entrada de Menções com @usuario */}
+          <div className="flex items-center">
+            {/* Botão Caixa de Entrada de Menções com @usuario */}
               <button
                 type="button"
                 onClick={() => setIsMentionsInboxOpen(true)}
@@ -4453,7 +4462,7 @@ function CrmDashboard() {
 
             const hasDeadline = Boolean(deal.expected_close_date);
             const internalStyle = getInternalDeadlineStyle(deal.expected_close_date);
-            const aging = getDealAgingStyle(deal.updated_at || deal.created_at);
+            const aging = getDealAgingStyle(deal.latest_update_at || deal.created_at);
 
             const cardBgClass = aging.cardClass;
 
@@ -4586,7 +4595,7 @@ function CrmDashboard() {
                   isBeingDragged
                     ? "border-2 border-dashed border-sky-400/50 bg-sky-500/10 shadow-[inset_0_0_20px_rgba(56,189,248,0.15)] flex items-center justify-center"
                     : canModifyDeal
-                    ? `cursor-grab active:cursor-grabbing hover:border-white/30 hover:shadow-lg shadow-sm ${cardBgClass}`
+                    ? `cursor-grab active:cursor-grabbing hover:shadow-lg shadow-sm ${cardBgClass}`
                     : `cursor-pointer hover:shadow-lg shadow-sm ${cardBgClass}`
                 }`}
               >
@@ -4603,28 +4612,51 @@ function CrmDashboard() {
 
 
 
-                {/* STATUS OFICIAL EM TEMPO REAL: PULSO 'TRABALHANDO \n RESPONSÁVEL' */}
+                {/* STATUS OFICIAL EM TEMPO REAL: PULSO ALTERNADO ENTRE 'TRABALHANDO' E 'VENCIDA' COM RESPONSÁVEL */}
                 {(() => {
                   const activeWorker = getDealActiveWorker(deal);
-                  if (!activeWorker) return null;
+                  const isExpiredTask = internalStyle.isExpired && deal.stage !== "completed" && deal.stage !== "won" && deal.stage !== "lost" && deal.stage !== "archived";
+                  
+                  if (!activeWorker && !isExpiredTask) return null;
+
+                  // Se está em andamento -> Modo exclusivo "working" (NUNCA mostra "VENCIDA")
+                  // Se está vencida e não está em andamento -> Modo exclusivo "expired" (NUNCA mostra "TRABALHANDO")
+                  const mode: "working" | "expired" = activeWorker ? "working" : "expired";
+
+                  // Ciclo A (inProgressAlternation === true) -> pulsa apenas os cards em ANDAMENTO ("TRABALHANDO")
+                  // Ciclo B (inProgressAlternation === false) -> pulsa apenas os cards VENCIDOS ("VENCIDA")
+                  const isVisible = mode === "working" ? inProgressAlternation : !inProgressAlternation;
+                  const isWorking = mode === "working";
 
                   return (
                     <div
-                      className={`absolute inset-0 rounded-xl bg-gradient-to-b from-slate-950/98 via-slate-950/95 to-sky-950/40 backdrop-blur-md p-3 flex flex-col items-center justify-center text-center z-20 pointer-events-none transition-all duration-[1500ms] ease-in-out group-hover:opacity-0 ${
-                        inProgressAlternation ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+                      className={`absolute inset-0 rounded-xl bg-slate-950/60 backdrop-blur-[2px] p-3 flex flex-col items-center justify-center text-center z-20 pointer-events-none transition-all duration-[1500ms] ease-in-out group-hover:opacity-0 ${
+                        isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
                       }`}
                     >
-                      {/* Linha 1: TRABALHANDO aumentado em destaque */}
-                      <span className="font-mono text-xs sm:text-[13px] font-black uppercase tracking-[0.25em] text-sky-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.6)]">
-                        TRABALHANDO
+                      {/* Linha 1: TRABALHANDO (azul/ciano) ou VENCIDA (vermelho vivo) */}
+                      <span
+                        className={`font-mono text-xs sm:text-[13px] font-black uppercase tracking-[0.25em] ${
+                          isWorking
+                            ? "text-sky-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.7)]"
+                            : "text-red-400 drop-shadow-[0_0_12px_rgba(239,68,68,0.8)]"
+                        }`}
+                      >
+                        {isWorking ? "TRABALHANDO" : "VENCIDA"}
                       </span>
 
-                      {/* Divisor sutil e elegante */}
-                      <div className="w-14 h-[1px] bg-gradient-to-r from-transparent via-sky-400/50 to-transparent my-1.5" />
+                      {/* Divisor com intensidade aumentada e brilho neon */}
+                      <div
+                        className={`w-24 sm:w-28 h-[2px] rounded-full bg-gradient-to-r from-transparent ${
+                          isWorking
+                            ? "via-sky-300 shadow-[0_0_10px_rgba(56,189,248,0.9)]"
+                            : "via-red-400 shadow-[0_0_10px_rgba(239,68,68,0.9)]"
+                        } to-transparent my-1.5`}
+                      />
 
-                      {/* Linha 2: Nome do Responsável em destaque refinado */}
+                      {/* Linha 2: Nome do Responsável em destaque */}
                       <span className="font-mono text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-100 drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] truncate max-w-[210px]">
-                        {activeWorker.userName || deal.assigned_user_name || "RESPONSÁVEL"}
+                        {activeWorker?.userName || deal.assigned_user_name || "RESPONSÁVEL"}
                       </span>
                     </div>
                   );
@@ -4632,7 +4664,7 @@ function CrmDashboard() {
 
                 {/* OVERLAY DE ATUALIZAÇÃO NO HOVER: DESATIVADO DURANTE ARRASTE/MOVIMENTAÇÃO */}
                 {!isBeingDragged && !draggingDealId && (
-                  <div className="crm-hover-update-overlay absolute inset-0 rounded-xl bg-slate-950/95 backdrop-blur-md px-3 py-2 flex flex-col justify-between text-left opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-30 overflow-hidden border border-white/10 shadow-xl">
+                  <div className="crm-hover-update-overlay absolute inset-0 rounded-xl bg-slate-950/95 backdrop-blur-md px-3 py-2 flex flex-col justify-between text-left opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-30 overflow-hidden shadow-xl">
                     {(() => {
                       const fallbackAuthor = deal.latest_update_author || deal.creator_name || deal.assigned_user_name || "Usuário";
                       const hoverData = getCleanHoverNote(deal.notes, fallbackAuthor);
@@ -4992,6 +5024,14 @@ function CrmDashboard() {
                       (deal) => !isSubtaskWithParentInPool(deal, displayedUserDeals)
                     );
 
+                    const avgUserDaysFormatted = (() => {
+                      if (!displayedUserDeals || displayedUserDeals.length === 0) return "0,0";
+                      const totalDays = displayedUserDeals.reduce((sum, d) => {
+                        return sum + getEffectiveCalendarDays(d.created_at);
+                      }, 0);
+                      return (totalDays / displayedUserDeals.length).toFixed(1).replace(".", ",");
+                    })();
+
                     return (
                       <div
                         key={group.id}
@@ -5002,6 +5042,8 @@ function CrmDashboard() {
                       >
                         {/* Header da Coluna do Usuário com Hover Interno e Ações de Expandir */}
                         <div
+                          onMouseEnter={() => setHoveredUserSubcolId(group.id)}
+                          onMouseLeave={() => setHoveredUserSubcolId(null)}
                           onClick={() => {
                             if (group.id !== "unassigned") {
                               setInternalFilterUser((prev) => (prev === group.id ? "ALL" : group.id));
@@ -5125,7 +5167,29 @@ function CrmDashboard() {
 
                         {/* Lista de Cards deste Usuário */}
                         <div className="flex-1 min-h-0 overflow-y-auto space-y-2 w-full px-1.5 py-1.5 no-scrollbar pb-10">
-                          {topLevelUserDeals.map((deal, idx) => renderDealCard(deal, currentStage.id, isManyUsers, false, idx))}
+                          {/* Banner Estético de Duração Média que surge ocupando a área do primeiro card */}
+                          {hoveredUserSubcolId === group.id && (
+                            <div className="w-full h-[88px] min-h-[88px] max-h-[88px] rounded-xl border border-sky-400/50 bg-gradient-to-br from-slate-950/98 via-sky-950/70 to-slate-950/95 backdrop-blur-xl px-3 py-2 flex flex-col items-center justify-center text-center shadow-[0_0_25px_rgba(56,189,248,0.3)] animate-in fade-in zoom-in-95 duration-150 select-none shrink-0 mb-2 relative z-20">
+                              <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-[0.16em] text-slate-300 leading-tight">
+                                DURAÇÃO MÉDIA DAS ATIVIDADES
+                              </span>
+                              <div className="w-20 h-[1.5px] bg-gradient-to-r from-transparent via-sky-400 to-transparent my-1.5" />
+                              <span className="font-mono text-sm sm:text-base font-black uppercase tracking-widest text-sky-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.85)] leading-tight">
+                                {avgUserDaysFormatted} {avgUserDaysFormatted === "1,0" ? "DIA" : "DIAS"}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Container das atividades com desfoque no hover do cabeçalho */}
+                          <div
+                            className={`space-y-2 w-full transition-all duration-300 ${
+                              hoveredUserSubcolId === group.id
+                                ? "blur-[2.5px] opacity-25 select-none pointer-events-none filter"
+                                : "transition-all duration-200"
+                            }`}
+                          >
+                            {topLevelUserDeals.map((deal, idx) => renderDealCard(deal, currentStage.id, isManyUsers, false, idx))}
+                          </div>
                         </div>
 
                         {/* Efeito desfoque suave e gradiente na base da coluna com altura ampliada */}
@@ -5138,9 +5202,9 @@ function CrmDashboard() {
             );
           }
 
-          // CASO 2: MODO NORMAL (Colunas de Etapas do Kanban - Concluídas e Perdidos recolhidas por padrão em abas estreitas)
+          // CASO 2: MODO NORMAL (Colunas de Etapas do Kanban com ajuste automático de largura total e sem rolagem lateral)
           return (
-            <div className="flex-1 min-h-0 flex gap-3.5 h-full overflow-x-auto overflow-y-hidden pt-1 pb-1 px-0.5 w-full">
+            <div className="flex-1 min-h-0 flex gap-2 sm:gap-2.5 h-full overflow-x-hidden overflow-y-hidden pt-1 pb-1 px-0.5 w-full">
               {STAGES.map((stage) => {
                 let stageDeals = visibleDeals.filter((d) => d.stage === stage.id);
 
@@ -5193,6 +5257,14 @@ function CrmDashboard() {
                   (deal) => !isSubtaskWithParentInPool(deal, stageDeals)
                 );
 
+                const avgStageDaysFormatted = (() => {
+                  if (!stageDeals || stageDeals.length === 0) return "0,0";
+                  const totalDays = stageDeals.reduce((sum, d) => {
+                    return sum + getEffectiveCalendarDays(d.created_at);
+                  }, 0);
+                  return (totalDays / stageDeals.length).toFixed(1).replace(".", ",");
+                })();
+
                 const isCollapsed = Boolean(collapsedStages[stage.id]);
                 const draggedDeal = draggingDealId ? deals.find((d) => d.id === draggingDealId) : null;
                 const isMovingFromAnotherStage = Boolean(draggedDeal && draggedDeal.stage !== stage.id);
@@ -5232,8 +5304,8 @@ function CrmDashboard() {
                           }
                         }
                       }}
-                      title={`Clique para expandir ${stage.title}`}
-                      className={`glass group/collapsed flex flex-col items-center justify-between rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all duration-200 h-full max-h-full w-12 min-w-[48px] max-w-[48px] py-3 cursor-pointer select-none hover:border-white/40 hover:bg-white/[0.04] ${
+                      title={`Clique para expandir ${stage.title}\nDuração média da atividade em ${stage.title}: ${avgStageDaysFormatted} ${avgStageDaysFormatted === "1.0" ? "DIA" : "DIAS"}`}
+                      className={`glass group/collapsed flex flex-col items-center justify-between rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all duration-200 h-full max-h-full w-10 sm:w-11 min-w-[40px] sm:min-w-[44px] max-w-[40px] sm:max-w-[44px] py-3 cursor-pointer select-none hover:border-white/40 hover:bg-white/[0.04] ${
                         dragOverStageId === stage.id && isMovingFromAnotherStage ? "ring-2 ring-sky-400 border-sky-400 shadow-[0_0_30px_rgba(56,189,248,0.35)] bg-sky-950/40" : ""
                       }`}
                     >
@@ -5268,24 +5340,26 @@ function CrmDashboard() {
                   );
                 }
 
-                // Renderização da Coluna Aberta / Expandida
+                // Renderização da Coluna Aberta / Expandida (ocupa toda a largura disponível proporcionalmente)
                 return (
                   <div
                     key={stage.id}
                     onClick={(e) => e.stopPropagation()}
-                    className={`glass flex-1 min-w-[260px] flex flex-col rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all h-full max-h-full ${
+                    className={`glass flex-1 min-w-0 flex flex-col rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all h-full max-h-full ${
                       dragOverStageId === stage.id && isMovingFromAnotherStage ? "ring-2 ring-sky-400 border-sky-400 shadow-[0_0_30px_rgba(56,189,248,0.35)] bg-sky-950/25" : ""
                     }`}
                   >
                     {/* Header da Coluna com Hover Interno */}
                     <div
+                      onMouseEnter={() => setHoveredStageHeaderId(stage.id)}
+                      onMouseLeave={() => setHoveredStageHeaderId(null)}
                       onClick={() => {
                         setIsolatedStageId((prev) => (prev === stage.id ? null : stage.id));
                       }}
                       className={`group/header shrink-0 flex items-center justify-between p-3 border-b select-none cursor-pointer transition-all duration-200 relative overflow-hidden ${
                         isolatedStageId === stage.id
                           ? "border-white/10 bg-gradient-to-b from-rose-500/20 via-rose-950/40 to-transparent hover:bg-rose-500/25 hover:border-rose-400/50 shadow-[inset_0_1px_15px_rgba(244,63,94,0.15)] hover:shadow-[inset_0_1px_20px_rgba(244,63,94,0.3)]"
-                          : `border-white/10 bg-gradient-to-b ${stage.glow} to-transparent hover:bg-emerald-500/20 hover:border-emerald-400/50 hover:shadow-[inset_0_1px_20px_rgba(52,211,153,0.25)]`
+                          : `border-white/10 bg-gradient-to-b ${stage.glow} to-transparent hover:bg-sky-950/40 hover:border-sky-400/50 hover:shadow-[inset_0_1px_20px_rgba(56,189,248,0.25)]`
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
@@ -5314,7 +5388,7 @@ function CrmDashboard() {
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5 shrink-0 relative z-30" onClick={(e) => e.stopPropagation()}>
                         <div className="relative flex items-center crm-search-box">
                           {isStageSearchOpen ? (
                             <div className="flex items-center gap-1 bg-black/80 border border-sky-400/50 rounded-lg px-2 py-0.5 animate-in fade-in max-w-[120px] sm:max-w-[140px] shadow-sm">
@@ -5374,18 +5448,20 @@ function CrmDashboard() {
                           {stageDeals.length}
                         </span>
 
-                        {/* Botão de Recolher Coluna em Aba Estreita */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleCollapseStage(stage.id);
-                          }}
-                          className="p-1.5 rounded-lg text-xs bg-white/5 text-muted-foreground hover:text-white hover:bg-white/15 border border-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-center"
-                          title={`Recolher coluna ${stage.title}`}
-                        >
-                          <ChevronsLeft className="h-3.5 w-3.5" />
-                        </button>
+                        {/* Botão de Recolher Coluna em Aba Estreita (somente permitido para colunas vazias) */}
+                        {stageDeals.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCollapseStage(stage.id);
+                            }}
+                            className="p-1.5 rounded-lg text-xs bg-white/5 text-muted-foreground hover:text-white hover:bg-white/15 border border-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-center"
+                            title={`Ocultar coluna vazia ${stage.title}`}
+                          >
+                            <ChevronsLeft className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -5421,21 +5497,43 @@ function CrmDashboard() {
                       }}
                       className="flex-1 min-h-0 overflow-y-auto space-y-2 w-full px-1.5 py-1.5 no-scrollbar pb-10"
                     >
-                      {topLevelDeals.length === 0 ? (
-                        <div className="h-full min-h-[140px] flex items-center justify-center p-6 border border-dashed border-white/5 rounded-xl text-[11px] uppercase font-bold tracking-widest text-muted-foreground/40 text-center">
-                          Sem atividades nesta etapa
+                      {/* Banner Estético de Duração Média no topo dos cards */}
+                      {hoveredStageHeaderId === stage.id && (
+                        <div className="w-full h-[88px] min-h-[88px] max-h-[88px] rounded-xl border border-sky-400/50 bg-gradient-to-br from-slate-950/98 via-sky-950/70 to-slate-950/95 backdrop-blur-xl px-3 py-2 flex flex-col items-center justify-center text-center shadow-[0_0_25px_rgba(56,189,248,0.3)] animate-in fade-in zoom-in-95 duration-150 select-none shrink-0 mb-2 relative z-20">
+                          <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-[0.16em] text-slate-300 leading-tight">
+                            DURAÇÃO MÉDIA DAS ATIVIDADES
+                          </span>
+                          <div className="w-20 h-[1.5px] bg-gradient-to-r from-transparent via-sky-400 to-transparent my-1.5" />
+                          <span className="font-mono text-sm sm:text-base font-black uppercase tracking-widest text-sky-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.85)] leading-tight">
+                            {avgStageDaysFormatted} {avgStageDaysFormatted === "1,0" ? "DIA" : "DIAS"}
+                          </span>
                         </div>
-                      ) : (
-                        <>
-                          {topLevelDeals.map((deal, idx) => renderDealCard(deal, stage.id, false, false, idx))}
-                          {dragOverStageId === stage.id && isMovingFromAnotherStage && !dragOverTargetDealId && (
-                            <div className="w-full py-2.5 px-2 rounded-xl border-2 border-dashed border-sky-400/70 bg-sky-500/10 text-sky-300 flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-wider animate-pulse shadow-md">
-                              <ArrowRight className="h-3.5 w-3.5 text-sky-400" />
-                              <span>Mover para {stage.title}</span>
-                            </div>
-                          )}
-                        </>
                       )}
+
+                      {/* Container das atividades com desfoque no hover do cabeçalho */}
+                      <div
+                        className={`space-y-2 w-full transition-all duration-300 ${
+                          hoveredStageHeaderId === stage.id
+                            ? "blur-[2.5px] opacity-25 select-none pointer-events-none filter"
+                            : "transition-all duration-200"
+                        }`}
+                      >
+                        {topLevelDeals.length === 0 ? (
+                          <div className="h-full min-h-[140px] flex items-center justify-center p-6 border border-dashed border-white/5 rounded-xl text-[11px] uppercase font-bold tracking-widest text-muted-foreground/40 text-center">
+                            Sem atividades nesta etapa
+                          </div>
+                        ) : (
+                          <>
+                            {topLevelDeals.map((deal, idx) => renderDealCard(deal, stage.id, false, false, idx))}
+                            {dragOverStageId === stage.id && isMovingFromAnotherStage && !dragOverTargetDealId && (
+                              <div className="w-full py-2.5 px-2 rounded-xl border-2 border-dashed border-sky-400/70 bg-sky-500/10 text-sky-300 flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-wider animate-pulse shadow-md">
+                                <ArrowRight className="h-3.5 w-3.5 text-sky-400" />
+                                <span>Mover para {stage.title}</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     {/* Efeito desfoque suave e gradiente na base da coluna com altura ampliada */}
@@ -5452,8 +5550,8 @@ function CrmDashboard() {
         const hasModalDeadline = Boolean(selectedDealForHistory.expected_close_date);
         const modalStyle = hasModalDeadline
           ? getInternalDeadlineStyle(selectedDealForHistory.expected_close_date)
-          : getDealAgingStyle(selectedDealForHistory.updated_at || selectedDealForHistory.created_at);
-        const aging = getDealAgingStyle(selectedDealForHistory.updated_at || selectedDealForHistory.created_at);
+          : getDealAgingStyle(selectedDealForHistory.latest_update_at || selectedDealForHistory.created_at);
+        const aging = getDealAgingStyle(selectedDealForHistory.latest_update_at || selectedDealForHistory.created_at);
 
         return (
           <div
@@ -7064,23 +7162,43 @@ function CrmDashboard() {
             className="glass w-full max-w-3xl rounded-2xl border border-sky-500/30 p-6 shadow-2xl space-y-5 animate-in zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden"
           >
             {/* Cabeçalho do Calendário */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-4 shrink-0">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/10 pb-4 gap-3 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+                <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.2)] shrink-0">
                   <Calendar className="h-6 w-6" />
                 </div>
                 <div>
                   <h3 className="text-lg font-black uppercase tracking-wider text-white flex items-center gap-2">
-                    Calendário de Prazos das Atividades
+                    Calendário de Prazos
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Acompanhamento visual de vencimentos de todas as tarefas e orçamentos ativos
+                    {role === "admin"
+                      ? "Acompanhamento geral de vencimentos (Todos os Usuários ou por Responsável)"
+                      : "Acompanhamento visual dos vencimentos das suas atividades atribuídas"
+                    }
                   </p>
                 </div>
               </div>
 
-              {/* Ações no Canto Superior Direito: VOLTAR e FECHAR */}
-              <div className="flex items-center gap-2">
+              {/* Ações no Canto Superior Direito: Filtro ADM, VOLTAR e FECHAR */}
+              <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
+                {role === "admin" && (
+                  <select
+                    value={calendarUserFilter}
+                    onChange={(e) => setCalendarUserFilter(e.target.value)}
+                    className="input-futuristic rounded-xl px-2.5 py-1.5 text-xs outline-none bg-black text-white font-bold border border-white/20 cursor-pointer max-w-[200px]"
+                    title="Filtrar por Responsável"
+                  >
+                    <option value="ALL">Todos os Responsáveis</option>
+                    <option value="unassigned">Sem Responsável</option>
+                    {teamMembers.map((p) => (
+                      <option key={p.id} value={p.id} className="bg-slate-900">
+                        {p.display_name || p.email}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
                 {calendarSelectedDate && (
                   <button
                     type="button"
@@ -7103,10 +7221,19 @@ function CrmDashboard() {
 
             {/* Conteúdo do Calendário em Grade Mensal ou Lista do Dia Selecionado */}
             {(() => {
-              // Atividades ativas com prazo definido
-              const activeDealsWithDeadline = deals.filter(
-                (d) => Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost"
-              );
+              // Atividades ativas com prazo definido respeitando o usuário / ADM
+              const activeDealsWithDeadline = deals.filter((d) => {
+                const hasDeadline = Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost";
+                if (!hasDeadline) return false;
+
+                if (role !== "admin") {
+                  return d.assigned_user_id === user?.id;
+                }
+
+                if (calendarUserFilter === "ALL") return true;
+                if (calendarUserFilter === "unassigned") return !d.assigned_user_id;
+                return d.assigned_user_id === calendarUserFilter;
+              });
 
               // Agrupamento por data (YYYY-MM-DD)
               const dealsByDate: Record<string, Deal[]> = {};
@@ -7188,7 +7315,7 @@ function CrmDashboard() {
                           const stageTitle = STAGES.find((s) => s.id === deal.stage)?.title || deal.stage;
                           const cardCustomer = getDealCustomer(deal);
                           const customerName = cardCustomer?.company_name || cardCustomer?.name || deal.customer_name;
-                          const aging = getDealAgingStyle(deal.updated_at || deal.created_at);
+                          const aging = getDealAgingStyle(deal.latest_update_at || deal.created_at);
 
                           const agingLabel =
                             aging.days === 0
@@ -8600,27 +8727,33 @@ function CrmDashboard() {
         </div>
       )}
 
-      {/* Modal / Alerta de Inatividade: 'EM QUAL ATIVIDADE VOCÊ ATUARÁ?' com Fundo Desfocado (Fecha com qualquer clique) */}
+      {/* Modal / Alerta de Inatividade com Fundo Desfocado e Visível (Fecha com qualquer clique) */}
       {showChooseActivityPrompt && (
         <div
           onClick={handleDismissActivityPrompt}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 cursor-pointer animate-in fade-in select-none"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 cursor-pointer animate-in fade-in select-none"
         >
           <div
             onClick={handleDismissActivityPrompt}
-            className="glass max-w-lg w-full p-8 rounded-3xl border border-sky-400/50 shadow-[0_0_50px_rgba(56,189,248,0.25)] flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 cursor-pointer relative overflow-hidden"
+            className="glass max-w-md w-full p-8 rounded-3xl border border-sky-400/50 shadow-[0_0_50px_rgba(56,189,248,0.25)] flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 cursor-pointer relative overflow-hidden"
           >
             <div className="p-4 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-400/30 shadow-[0_0_20px_rgba(56,189,248,0.4)] animate-pulse">
               <Play className="h-10 w-10 fill-sky-400" />
             </div>
 
-            <h2 className="text-xl sm:text-2xl font-black uppercase tracking-widest text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.6)]">
-              EM QUAL ATIVIDADE VOCÊ ATUARÁ?
-            </h2>
+            <div className="space-y-2">
+              <h2 className="text-lg sm:text-xl font-black uppercase tracking-wider text-sky-400 drop-shadow-[0_0_15px_rgba(56,189,248,0.5)]">
+                {getGreeting()},{" "}
+                <span className="text-white">
+                  {user?.user_metadata?.display_name || user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Usuário")}
+                </span>
+                !
+              </h2>
 
-            <p className="text-xs sm:text-sm text-sky-200/90 max-w-md font-semibold leading-relaxed">
-              Selecione uma atividade e clique em <strong>INICIAR ATIVIDADE</strong>.
-            </p>
+              <p className="text-sm sm:text-base text-sky-100 font-semibold leading-relaxed">
+                Selecione uma atividade e clique em <strong className="text-white font-black">INICIAR ATIVIDADE</strong>.
+              </p>
+            </div>
           </div>
         </div>
       )}

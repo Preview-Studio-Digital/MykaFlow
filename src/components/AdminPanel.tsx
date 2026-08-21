@@ -157,7 +157,7 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
               FINANCEIRO
             </option>
             <option value="crm" className="bg-slate-900 font-bold text-sky-400">
-              CRM
+              COMERCIAL
             </option>
           </select>
           <div className="flex gap-2">

@@ -6,6 +6,7 @@ import {
   fetchAllowedIps,
   registerUnauthorizedAccessAttempt,
 } from "@/lib/network-security";
+import { recordLoginAudit } from "@/lib/work-time-tracker";
 
 export type Role = "admin" | "user" | "financeiro" | "crm_vendedor" | "crm_gestor" | "pending" | null;
 
@@ -161,6 +162,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setIsNetworkAllowed(true);
+    if (data.user) {
+      recordLoginAudit(data.user);
+    }
     return { error: null };
   };
 

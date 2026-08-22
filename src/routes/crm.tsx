@@ -80,6 +80,15 @@ import {
   TooltipContent,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import {
+  isBusinessWorkTime,
+  getAutoCutoffInfo,
+  type WorkScheduleInfo,
+} from "@/lib/work-schedule";
+import {
+  recordActivitySessionAudit,
+  recordInactivitySeconds,
+} from "@/lib/work-time-tracker";
 
 export const Route = createFileRoute("/crm")({
   component: CrmDashboard,
@@ -1033,37 +1042,52 @@ function CrmDashboard() {
   }, []);
 
   // Monitoramento Automático de Horário (Auto-parada forçada às 12:00 e às 17:30)
+  // Monitoramento Automático de Horário e Encerramento Automático (Almoço 12h00 e Fim de Expediente 17h30/16h30)
   useEffect(() => {
     const checkScheduleAutoStop = async () => {
       if (!user) return;
       const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const curMins = hours * 60 + minutes;
 
-      // 12:00 (720 min) ou 17:30 (1050 min)
-      const isLunchTime = curMins >= 12 * 60 && curMins < 13 * 60;
-      const isEndOfDay = curMins >= 17 * 60 + 30 || curMins < 7 * 60 + 30;
+      for (const deal of deals) {
+        const activeWorker = getDealActiveWorker(deal);
+        if (activeWorker && activeWorker.userId === user.id) {
+          const cutoffInfo = getAutoCutoffInfo(activeWorker.startedAt, now);
+          const schedule = isBusinessWorkTime(now);
 
-      if (isLunchTime || isEndOfDay) {
-        for (const deal of deals) {
-          const activeWorker = getDealActiveWorker(deal);
-          if (activeWorker && activeWorker.userId === user.id) {
+          if (cutoffInfo.shouldCutoff || !schedule.allowed) {
             const nowIso = new Date().toISOString();
-            const durationSeconds = Math.max(1, Math.floor((Date.now() - new Date(activeWorker.startedAt).getTime()) / 1000));
+            const cutoffTimeIso = cutoffInfo.cutoffTimeIso || nowIso;
+            const startTime = new Date(activeWorker.startedAt).getTime();
+            const endTime = new Date(cutoffTimeIso).getTime();
+            const durationSeconds = Math.max(1, Math.floor((endTime - startTime) / 1000));
             const formatted = formatDurationHoursMinutes(durationSeconds);
-            const stopReason = isLunchTime ? "lunch_12h" : "end_of_day_17h30";
+            const stopReason = cutoffInfo.reason || "auto_off_hours";
+            const userName = user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || "Usuário";
 
             const session: DealTimeSession = {
               id: crypto.randomUUID(),
               deal_id: deal.id,
               user_id: user.id,
-              user_name: user.user_metadata?.display_name || user.email || "Usuário",
+              user_name: userName,
               started_at: activeWorker.startedAt,
-              ended_at: nowIso,
+              ended_at: cutoffTimeIso,
               duration_seconds: durationSeconds,
               stop_reason: stopReason,
             };
+
+            // Registra para auditoria e métricas futuras
+            recordActivitySessionAudit({
+              dealId: deal.id,
+              dealTitle: deal.title,
+              userId: user.id,
+              userName,
+              startedAtIso: activeWorker.startedAt,
+              endedAtIso: cutoffTimeIso,
+              durationSeconds,
+              durationFormatted: formatted,
+              closeType: stopReason,
+              notes: cutoffInfo.reasonLabel || "Encerramento automático por corte de expediente",
+            });
 
             const sessionTag = `[WORK_LOG:${JSON.stringify(session)}]`;
             const cleanNotes = (deal.notes || "").replace(/\[WORK_ACTIVE:.*?\]\s*/g, "").trim();
@@ -1072,19 +1096,23 @@ function CrmDashboard() {
             try {
               await supabase.from("crm_deals").update({ notes: updatedNotes, updated_at: nowIso }).eq("id", deal.id);
               setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes, updated_at: nowIso } : d)));
-              toast.info(`Atividade pausada automaticamente (${isLunchTime ? "Horário de Almoço 12h" : "Fim de Expediente 17h30"}).`);
-            } catch (e) {}
+              toast.warning(`Atividade encerrada automaticamente (${cutoffInfo.reasonLabel || schedule.reason || "Fora do expediente"}).`, { duration: 6000 });
+            } catch (e) {
+              console.warn("Erro ao registrar parada automática:", e);
+            }
           }
         }
       }
     };
 
-    const interval = setInterval(checkScheduleAutoStop, 30000); // Checa a cada 30 segundos
+    const interval = setInterval(checkScheduleAutoStop, 10000); // Checa a cada 10 segundos
     return () => clearInterval(interval);
   }, [user, deals]);
 
-  // Monitoramento Automático de Atividade Obrigatória (Prompt inicial ao entrar e a cada 5 minutos sem atividade)
+  // Monitoramento de Atividade: Prompt de Inatividade no Expediente vs Aviso Único Fora do Expediente
   const [showChooseActivityPrompt, setShowChooseActivityPrompt] = useState(false);
+  const [showOffHoursPrompt, setShowOffHoursPrompt] = useState(false);
+  const [offHoursInfo, setOffHoursInfo] = useState<WorkScheduleInfo | null>(null);
   const lastPromptTimeRef = useRef<number>(Date.now());
   const initialPromptCheckedRef = useRef<boolean>(false);
 
@@ -1099,6 +1127,23 @@ function CrmDashboard() {
   useEffect(() => {
     if (!user || loading) return;
 
+    const schedule = isBusinessWorkTime();
+
+    // 1. FORA DO EXPEDIENTE (Noite, Almoço, Fim de Semana, Feriados)
+    if (!schedule.allowed) {
+      setShowChooseActivityPrompt(false);
+      // Exibe apenas UMA vez logo após o login informando a situação
+      if (!initialPromptCheckedRef.current) {
+        initialPromptCheckedRef.current = true;
+        setOffHoursInfo(schedule);
+        setShowOffHoursPrompt(true);
+      }
+      return; // NÃO inicia loop de 5 minutos fora do expediente!
+    }
+
+    // 2. DENTRO DO EXPEDIENTE DE TRABALHO
+    setShowOffHoursPrompt(false);
+
     const hasActiveWork = deals.some((d) => {
       const active = getDealActiveWorker(d);
       return Boolean(active && active.userId === user.id);
@@ -1110,7 +1155,7 @@ function CrmDashboard() {
       return;
     }
 
-    // Dispara imediatamente assim que o usuário entra na página de CRM sem atividade ativa
+    // Dispara imediatamente no primeiro acesso durante o expediente se não tiver atividade ativa
     if (!initialPromptCheckedRef.current) {
       initialPromptCheckedRef.current = true;
       lastPromptTimeRef.current = Date.now();
@@ -1118,8 +1163,14 @@ function CrmDashboard() {
       return;
     }
 
-    // Se NÃO tem atividade em andamento, verifica se já passaram 5 minutos (300.000 ms)
+    // Se NÃO tem atividade em andamento durante o expediente, contabiliza inatividade e verifica os 5 minutos
     const checkActiveActivity = () => {
+      const currentSchedule = isBusinessWorkTime();
+      if (!currentSchedule.allowed) {
+        setShowChooseActivityPrompt(false);
+        return;
+      }
+
       const isWorkingNow = deals.some((d) => {
         const active = getDealActiveWorker(d);
         return Boolean(active && active.userId === user.id);
@@ -1130,6 +1181,10 @@ function CrmDashboard() {
         setShowChooseActivityPrompt(false);
         return;
       }
+
+      // Registra 5 segundos de inatividade durante o expediente para auditoria futura
+      const currentUserName = user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || "Usuário";
+      recordInactivitySeconds(user.id, currentUserName, 5);
 
       const elapsed = Date.now() - lastPromptTimeRef.current;
       if (elapsed >= 5 * 60 * 1000) {
@@ -1143,9 +1198,14 @@ function CrmDashboard() {
   }, [user, deals, loading]);
 
   const handleDismissActivityPrompt = () => {
-    // Ao fechar o prompt, reinicia a contagem dos próximos 5 minutos
+    // Ao fechar o prompt de atividade em expediente, reinicia a contagem dos próximos 5 minutos
     lastPromptTimeRef.current = Date.now();
     setShowChooseActivityPrompt(false);
+  };
+
+  const handleDismissOffHoursPrompt = () => {
+    // Fecha o aviso único de fora de expediente e não exibe mais durante a sessão
+    setShowOffHoursPrompt(false);
   };
 
   const saveParentAlerts = (newAlerts: Record<string, number>) => {
@@ -2696,30 +2756,6 @@ function CrmDashboard() {
     }
   }
 
-  // Helper para validar se o horário atual permite iniciar atividade (comercial das 08h às 12h e 13h às 17h30 em dias úteis)
-  const isBusinessWorkTime = (): { allowed: boolean; reason?: string } => {
-    const now = new Date();
-    const day = now.getDay(); // 0 = Domingo, 6 = Sábado
-    if (day === 0 || day === 6) {
-      return { allowed: false, reason: "Fora de expediente (final de semana)." };
-    }
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const currentMinutes = hours * 60 + minutes;
-
-    // 12:00 às 13:00 (Almoço / Intervalo)
-    if (currentMinutes >= 12 * 60 && currentMinutes < 13 * 60) {
-      return { allowed: false, reason: "Horário de intervalo/almoço (12h00 às 13h00)." };
-    }
-
-    // Antes das 07:30 ou após as 17:30
-    if (currentMinutes < 7 * 60 + 30 || currentMinutes >= 17 * 60 + 30) {
-      return { allowed: false, reason: "Fora de expediente comercial (após 17h30 ou antes do início)." };
-    }
-
-    return { allowed: true };
-  };
-
   // Ação de Iniciar ou Parar Atividade (Toggle de um único botão)
   const handleToggleWorkActivity = async (deal: Deal, forceSwitch: boolean = false) => {
     if (!user) return;
@@ -2740,17 +2776,31 @@ function CrmDashboard() {
       const startTime = new Date(activeWorker.startedAt).getTime();
       const durationSeconds = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
       const formattedDuration = formatDurationHoursMinutes(durationSeconds);
+      const userName = user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || "Usuário";
 
       const session: DealTimeSession = {
         id: crypto.randomUUID(),
         deal_id: deal.id,
         user_id: user.id,
-        user_name: user.user_metadata?.display_name || user.email || "Usuário",
+        user_name: userName,
         started_at: activeWorker.startedAt,
         ended_at: nowIso,
         duration_seconds: durationSeconds,
         stop_reason: "manual",
       };
+
+      // Registra auditoria de sessão
+      recordActivitySessionAudit({
+        dealId: deal.id,
+        dealTitle: deal.title,
+        userId: user.id,
+        userName,
+        startedAtIso: activeWorker.startedAt,
+        endedAtIso: nowIso,
+        durationSeconds,
+        durationFormatted: formattedDuration,
+        closeType: "manual",
+      });
 
       const sessionTag = `[WORK_LOG:${JSON.stringify(session)}]`;
       const cleanNotes = (deal.notes || "").replace(/\[WORK_ACTIVE:.*?\]\s*/g, "").trim();
@@ -2822,9 +2872,19 @@ function CrmDashboard() {
           duration_seconds: otherDuration,
           stop_reason: "auto_switch",
         };
-        const prevTag = `[WORK_LOG:${JSON.stringify(prevSession)}]`;
-        const prevCleanNotes = (otherRunningDeal.notes || "").replace(/\[WORK_ACTIVE:.*?\]\s*/g, "").trim();
-        const prevUpdatedNotes = `${prevTag}\n${prevCleanNotes}`.trim();
+        // Registra auditoria da atividade anterior finalizada na troca
+        recordActivitySessionAudit({
+          dealId: otherRunningDeal.id,
+          dealTitle: otherRunningDeal.title,
+          userId: user.id,
+          userName,
+          startedAtIso: otherActive.startedAt,
+          endedAtIso: nowIso,
+          durationSeconds: otherDuration,
+          durationFormatted: formatDurationHoursMinutes(otherDuration),
+          closeType: "manual",
+          notes: "Troca de atividade em andamento",
+        });
 
         try {
           await supabase.from("crm_deals").update({ notes: prevUpdatedNotes, updated_at: nowIso }).eq("id", otherRunningDeal.id);
@@ -8727,7 +8787,42 @@ function CrmDashboard() {
         </div>
       )}
 
-      {/* Modal / Alerta de Inatividade com Fundo Desfocado e Visível (Fecha com qualquer clique) */}
+      {/* Modal 1: Aviso Único ao Logar Fora do Expediente */}
+      {showOffHoursPrompt && offHoursInfo && (
+        <div
+          onClick={handleDismissOffHoursPrompt}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 cursor-pointer animate-in fade-in select-none"
+        >
+          <div
+            onClick={handleDismissOffHoursPrompt}
+            className="glass max-w-md w-full p-8 rounded-3xl border border-sky-400/40 shadow-[0_0_50px_rgba(56,189,248,0.25)] flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 relative overflow-hidden cursor-pointer"
+          >
+            <div className="p-3.5 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-400/30 shadow-[0_0_20px_rgba(56,189,248,0.4)]">
+              <Clock className="h-9 w-9 text-sky-400" />
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-base sm:text-lg font-black uppercase tracking-wider text-sky-400">
+                {getGreeting()},{" "}
+                <span className="text-white">
+                  {user?.user_metadata?.display_name || user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Usuário")}
+                </span>
+                !
+              </h2>
+
+              <div className="inline-block px-3 py-1 rounded-full bg-sky-950/60 border border-sky-400/40 text-[11px] font-bold uppercase tracking-wider text-sky-300">
+                {offHoursInfo.reason}
+              </div>
+
+              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
+                Você pode navegar, consultar quadros e acompanhar tarefas normalmente mas não pode iniciar atividades fora do horário comercial.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Alerta de Inatividade Durante o Expediente (Apenas em horário de trabalho após 5min) */}
       {showChooseActivityPrompt && (
         <div
           onClick={handleDismissActivityPrompt}

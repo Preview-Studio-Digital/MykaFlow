@@ -15,6 +15,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { ProfileDialog } from "@/components/ProfileDialog";
+import { MYKAFLOW_LOGO_DATA_URI } from "@/assets/logo";
 
 export const Route = createFileRoute("/")({
   component: ModuleHub,
@@ -56,9 +57,9 @@ function ModuleHub() {
       <header className="w-full px-6 pt-3 pb-2 flex items-center justify-between">
         <div className="flex items-center">
           <img
-            src="/logo-myka.ico"
+            src={MYKAFLOW_LOGO_DATA_URI}
             alt="Logo MykaFlow"
-            className="h-8 md:h-9 w-auto max-w-[200px] object-contain object-left drop-shadow-[0_0_15px_rgba(34,211,238,0.35)]"
+            className="h-8 md:h-9 w-auto max-w-[200px] object-contain object-left drop-shadow-[0_0_15px_rgba(34,211,238,0.35)] select-none"
           />
         </div>
 
@@ -90,7 +91,7 @@ function ModuleHub() {
       <main className="max-w-5xl w-full mx-auto px-6 py-8 flex-1 flex flex-col justify-center items-center">
         <div className="text-center mx-auto mb-8 select-none flex items-center justify-center">
           <img
-            src="/mykaflow-logo.png"
+            src={MYKAFLOW_LOGO_DATA_URI}
             alt="MykaFlow"
             className="h-9 sm:h-12 md:h-14 w-auto max-w-[70vw] object-contain drop-shadow-[0_0_25px_rgba(34,211,238,0.35)] select-none"
           />

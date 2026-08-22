@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { Zap, Lock, Mail } from "lucide-react";
+import { MYKAFLOW_LOGO_DATA_URI } from "@/assets/logo";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -47,7 +48,7 @@ function LoginPage() {
       <div className="glass w-full max-w-md rounded-2xl p-8 float-up">
         <div className="mb-8 flex flex-col items-center justify-center text-center">
           <img
-            src="/mykaflow-logo.png"
+            src={MYKAFLOW_LOGO_DATA_URI}
             alt="MykaFlow"
             className="h-10 sm:h-12 w-auto max-w-[260px] object-contain drop-shadow-[0_0_25px_rgba(34,211,238,0.4)] select-none"
           />

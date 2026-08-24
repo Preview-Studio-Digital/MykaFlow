@@ -92,19 +92,33 @@ function AdminPage() {
   async function fetchUsers() {
     setUsersLoading(true);
     try {
-      const { data: profs, error: pErr } = await supabase.from("profiles").select("*");
+      const { data: profs, error: pErr } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
       if (pErr) throw pErr;
 
-      const { data: roles, error: rErr } = await supabase.from("user_roles").select("*");
+      const { data: roles } = await supabase.from("user_roles").select("*");
 
-      const merged = (profs || []).map((p) => ({
-        id: p.id,
-        email: p.email,
-        name: p.display_name || "Sem nome",
-        role: roles?.find((r) => r.user_id === p.id)?.role || "user",
-      }));
+      const profileMap = new Map<string, any>();
+      (profs || []).forEach((p) => {
+        profileMap.set(p.id, {
+          id: p.id,
+          email: p.email || "",
+          name: p.display_name || p.email?.split("@")[0] || "Sem nome",
+          role: roles?.find((r) => r.user_id === p.id)?.role || "user",
+        });
+      });
 
-      setProfiles(merged);
+      (roles || []).forEach((r) => {
+        if (!profileMap.has(r.user_id)) {
+          profileMap.set(r.user_id, {
+            id: r.user_id,
+            email: "Aguardando sincronização",
+            name: "Novo Membro",
+            role: r.role || "user",
+          });
+        }
+      });
+
+      setProfiles(Array.from(profileMap.values()));
     } catch (err: any) {
       console.error("Erro ao listar usuários:", err);
       toast.error(`Erro na lista: ${err.message || "Falha de conexão"}`);

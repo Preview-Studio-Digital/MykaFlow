@@ -77,23 +77,36 @@ export function AdminPanel({ onSuccess, onCancel }: { onSuccess?: () => void; on
 
       if (authError) throw authError;
 
+      if (authData.user && authData.user.identities && authData.user.identities.length === 0) {
+        throw new Error("Este e-mail já está cadastrado no sistema. Se desejar alterar senha ou permissões, utilize a opção 'Editar Direitos' na lista de equipe.");
+      }
+
+      // Mapeia a opção selecionada para o enum válido do banco: 'admin' | 'financeiro' | 'user'
+      const dbRole = roleOption === "admin" ? "admin" : roleOption === "financeiro" ? "financeiro" : "user";
+
       // 2. Gravar perfil e permissão utilizando o cliente autenticado do Administrador
       if (authData.user) {
         const newUserId = authData.user.id;
 
-        await supabase.from("profiles").upsert({
+        const { error: profError } = await supabase.from("profiles").upsert({
           id: newUserId,
           display_name: name.trim().toUpperCase(),
           email: email.trim().toLowerCase(),
         });
+        if (profError) {
+          console.warn("Aviso ao gravar profile:", profError);
+        }
 
-        await supabase.from("user_roles").upsert(
+        const { error: roleError } = await supabase.from("user_roles").upsert(
           {
             user_id: newUserId,
-            role: roleOption,
+            role: dbRole,
           },
           { onConflict: "user_id" },
         );
+        if (roleError) {
+          console.warn("Aviso ao gravar user_roles:", roleError);
+        }
       }
 
       toast.success(`Novo usuário ${name.trim().toUpperCase()} criado com sucesso!`);

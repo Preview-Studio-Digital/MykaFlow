@@ -15,7 +15,7 @@ export default defineConfig({
     tailwindcss(),
     tsconfigPaths(),
   ],
-  base: "/",
+  base: "./",
   server: {
     hmr: {
       overlay: false,

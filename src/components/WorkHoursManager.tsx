@@ -28,14 +28,24 @@ interface UserProfile {
   display_name: string;
 }
 
-export function WorkHoursManager() {
+export interface WorkHoursManagerProps {
+  initialUserId?: string;
+}
+
+export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [selectedUserId, setSelectedUserId] = useState<string>(initialUserId || "");
   const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "week" | "month" | "all">("all");
   const [dailyShiftHours, setDailyShiftHours] = useState<number>(8.5);
+
+  useEffect(() => {
+    if (initialUserId !== undefined) {
+      setSelectedUserId(initialUserId);
+    }
+  }, [initialUserId]);
 
   useEffect(() => {
     async function fetchData() {
@@ -44,7 +54,7 @@ export function WorkHoursManager() {
         // Fetch crm_deals to extract WORK_LOGs
         const { data: dealsData, error: dealsErr } = await supabase
           .from("crm_deals")
-          .select("id, title, notes, req_number");
+          .select("*");
         if (dealsErr) throw dealsErr;
         setDeals(dealsData || []);
 

@@ -19,6 +19,7 @@ import {
   PieChart as PieChartIcon,
   Bell as BellIcon,
   Clock,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationManager } from "@/components/IntegrationManager";
@@ -26,6 +27,7 @@ import { CrmAnalytics } from "@/components/CrmAnalytics";
 import { AdminAlertsManager } from "@/components/AdminAlertsManager";
 import { WorkHoursManager } from "@/components/WorkHoursManager";
 import { EditMemberDialog, type MemberProfile } from "@/components/EditMemberDialog";
+import { DailySnapshotModal } from "@/components/DailySnapshotModal";
 import { AdminPanel } from "@/components/AdminPanel";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Wallet } from "lucide-react";
@@ -65,18 +67,18 @@ function AdminPage() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<"analytics" | "alerts" | "users" | "categories" | "integration" | "work_hours">(() => {
-    if (search.tab && ["analytics", "alerts", "users", "categories", "integration", "work_hours"].includes(search.tab)) {
+  const [activeTab, setActiveTab] = useState<"analytics" | "alerts" | "users" | "categories" | "integration">(() => {
+    if (search.tab && ["analytics", "alerts", "users", "categories", "integration"].includes(search.tab)) {
       return search.tab as any;
     }
     const saved = localStorage.getItem("mykaflow_admin_tab");
-    if (saved && ["analytics", "alerts", "users", "categories", "integration", "work_hours"].includes(saved)) {
+    if (saved && ["analytics", "alerts", "users", "categories", "integration"].includes(saved)) {
       return saved as any;
     }
     return "users"; // Default direto para Equipe
   });
 
-  const handleTabChange = (tab: "analytics" | "alerts" | "users" | "categories" | "integration" | "work_hours") => {
+  const handleTabChange = (tab: "analytics" | "alerts" | "users" | "categories" | "integration") => {
     setActiveTab(tab);
     localStorage.setItem("mykaflow_admin_tab", tab);
   };
@@ -84,6 +86,8 @@ function AdminPage() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [selectedUserToEdit, setSelectedUserToEdit] = useState<MemberProfile | null>(null);
+  const [selectedUserForProductivity, setSelectedUserForProductivity] = useState<MemberProfile | null>(null);
+  const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
 
   async function fetchUsers() {
     setUsersLoading(true);
@@ -231,17 +235,7 @@ function AdminPage() {
                   : "text-muted-foreground hover:bg-white/5 hover:text-white"
               }`}
             >
-              <PieChartIcon className="h-3.5 w-3.5" /> Atividades & Gráficos
-            </button>
-            <button
-              onClick={() => handleTabChange("work_hours")}
-              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "work_hours"
-                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Clock className="h-3.5 w-3.5" /> Produtividade
+              <PieChartIcon className="h-3.5 w-3.5" /> Atividades
             </button>
             <button
               onClick={() => handleTabChange("alerts")}
@@ -273,6 +267,20 @@ function AdminPage() {
             >
               <Link2 className="h-3.5 w-3.5" /> Integração
             </button>
+
+            {/* Divisor Visual */}
+            <div className="w-[1px] h-5 bg-white/10 mx-0.5 shrink-0" />
+
+            {/* Botão de Snapshot Comercial do Dia */}
+            <button
+              type="button"
+              onClick={() => setIsSnapshotModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap bg-gradient-to-r from-sky-500/20 via-sky-500/30 to-emerald-500/20 text-sky-300 hover:text-white border border-sky-400/40 hover:border-sky-400 hover:scale-105 shadow-[0_0_15px_rgba(56,189,248,0.25)]"
+              title="Snapshot Comercial do Dia (Resumo Executivo para a Diretoria)"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-sky-300 animate-pulse" />
+              <span>Snapshot</span>
+            </button>
           </nav>
         </header>
 
@@ -281,8 +289,6 @@ function AdminPage() {
             <CrmAnalytics />
           ) : activeTab === "alerts" ? (
             <AdminAlertsManager />
-          ) : activeTab === "work_hours" ? (
-            <WorkHoursManager />
           ) : activeTab === "users" ? (
             <UserList
               profiles={profiles}
@@ -290,6 +296,7 @@ function AdminPage() {
               onRefresh={fetchUsers}
               selectedUserToEdit={selectedUserToEdit}
               setSelectedUserToEdit={setSelectedUserToEdit}
+              setSelectedUserForProductivity={setSelectedUserForProductivity}
             />
           ) : activeTab === "categories" ? (
             <CategoryManager />
@@ -299,7 +306,11 @@ function AdminPage() {
         </div>
       </div>
 
-      {/* Renderizado na raiz do AdminPage para evitar bugs de transform: translateY (float-up) */}
+      <DailySnapshotModal
+        isOpen={isSnapshotModalOpen}
+        onClose={() => setIsSnapshotModalOpen(false)}
+      />
+
       <EditMemberDialog
         isOpen={Boolean(selectedUserToEdit)}
         onClose={() => setSelectedUserToEdit(null)}
@@ -309,6 +320,46 @@ function AdminPage() {
           fetchUsers();
         }}
       />
+
+      {/* Modal de Produtividade */}
+      {selectedUserForProductivity && (
+        <div
+          onClick={() => setSelectedUserForProductivity(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-6xl h-[90vh] max-h-[90vh] flex flex-col rounded-3xl bg-slate-950/95 border border-emerald-500/30 shadow-[0_0_50px_rgba(16,185,129,0.15)] overflow-hidden"
+          >
+            <div className="p-5 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-emerald-950/40 via-slate-950 to-slate-950 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                  <Clock className="h-5 w-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black uppercase tracking-wider text-white flex items-center gap-2">
+                    Produtividade • {selectedUserForProductivity.name}
+                  </h3>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {selectedUserForProductivity.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedUserForProductivity(null)}
+                className="text-white/50 hover:text-white"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <WorkHoursManager initialUserId={selectedUserForProductivity.id} />
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Confirmação global caso necessário */}
     </div>
   );
 }
@@ -319,12 +370,14 @@ function UserList({
   onRefresh,
   selectedUserToEdit,
   setSelectedUserToEdit,
+  setSelectedUserForProductivity,
 }: {
   profiles: any[];
   loading: boolean;
   onRefresh: () => void;
   selectedUserToEdit: MemberProfile | null;
   setSelectedUserToEdit: (user: MemberProfile | null) => void;
+  setSelectedUserForProductivity: (user: MemberProfile | null) => void;
 }) {
   const { user: currentUser } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
@@ -412,9 +465,13 @@ function UserList({
           return (
             <div
               key={p.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all gap-4 group"
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-emerald-500/30 transition-all gap-4 group"
             >
-              <div className="flex items-center gap-4 min-w-0">
+              <div 
+                onClick={() => setSelectedUserForProductivity(p)}
+                className="flex items-center gap-4 min-w-0 flex-1 cursor-pointer"
+                title={`Clique para visualizar os parâmetros e métricas de produtividade de ${p.name}`}
+              >
                 <div
                   className={`p-3 rounded-2xl transition-all shrink-0 ${
                     isAdmin
@@ -434,7 +491,7 @@ function UserList({
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-bold text-sm uppercase tracking-widest text-white truncate">
+                    <p className="font-bold text-sm uppercase tracking-widest text-white group-hover:text-emerald-300 transition-colors truncate">
                       {p.name}
                     </p>
                     {isCurrentUser && (
@@ -463,6 +520,15 @@ function UserList({
               </div>
 
               <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <button
+                  onClick={() => setSelectedUserForProductivity(p)}
+                  className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 border-emerald-500/30 flex items-center gap-1.5 hover:bg-emerald-500/10 cursor-pointer"
+                  title={`Ver métricas de produtividade e horas de ${p.name}`}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>Produtividade</span>
+                </button>
+
                 <button
                   onClick={() => setSelectedUserToEdit(p)}
                   className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-cyan-300 border-cyan-500/30 flex items-center gap-1.5 hover:bg-cyan-500/10 cursor-pointer"
@@ -520,6 +586,18 @@ function CategoryManager() {
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<"income" | "expense">("expense");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description?: string;
+    confirmText?: string;
+    variant?: "danger" | "warning" | "info";
+    onConfirm: () => void;
+    onConfirmWithInput?: (val: string) => void;
+    isInputPrompt?: boolean;
+    inputLabel?: string;
+    inputPlaceholder?: string;
+  } | null>(null);
  
    async function load() {
      setLoading(true);

@@ -375,7 +375,7 @@ function generateNextReqNumber(existingDeals: Deal[], targetDate = new Date()): 
 }
 
 const STAGES: { id: Deal["stage"]; title: string; color: string; border: string; glow: string; bg?: string }[] = [
-  { id: "lead", title: "TAREFAS", color: "text-sky-400", border: "border-sky-500/20", glow: "from-sky-500/10" },
+  { id: "lead", title: "TAREFAS", color: "text-amber-400", border: "border-amber-500/20", glow: "from-amber-500/10" },
   { id: "qualification", title: "ORÇAMENTOS", color: "text-sky-400", border: "border-sky-500/20", glow: "from-sky-500/10" },
   { id: "negotiation", title: "NEGOCIAÇÕES", color: "text-sky-400", border: "border-sky-500/20", glow: "from-sky-500/10" },
   { id: "won", title: "CONTRATOS", color: "text-sky-400", border: "border-sky-500/20", glow: "from-sky-500/10" },
@@ -464,6 +464,30 @@ function getStageDurationLabel(stageIdOrTitle?: string): string {
     return "DURAÇÃO MÉDIA DOS PERDIDOS";
   }
   return `DURAÇÃO MÉDIA EM ${stageIdOrTitle ? stageIdOrTitle.toUpperCase() : "ATIVIDADES"}`;
+}
+
+// Helper para obter a contagem de atividades em aberto formatada por etapa/coluna
+function getStageOpenActivitiesLabel(stageIdOrTitle?: string, count = 0): string {
+  const normalized = (stageIdOrTitle || "").toLowerCase().trim();
+  if (normalized === "lead" || normalized === "tarefas" || normalized.includes("tarefa")) {
+    return count === 1 ? "1 TAREFA EM ABERTO" : `${count} TAREFAS EM ABERTO`;
+  }
+  if (normalized === "qualification" || normalized === "orçamentos" || normalized === "orcamentos" || normalized.includes("orçamento") || normalized.includes("orcamento")) {
+    return count === 1 ? "1 ORÇAMENTO EM ABERTO" : `${count} ORÇAMENTOS EM ABERTO`;
+  }
+  if (normalized === "negotiation" || normalized === "negociações" || normalized === "negociacoes" || normalized.includes("negocia")) {
+    return count === 1 ? "1 NEGOCIAÇÃO EM ABERTO" : `${count} NEGOCIAÇÕES EM ABERTO`;
+  }
+  if (normalized === "won" || normalized === "contratos" || normalized.includes("contrato")) {
+    return count === 1 ? "1 CONTRATO EM ABERTO" : `${count} CONTRATOS EM ABERTO`;
+  }
+  if (normalized === "completed" || normalized === "concluídos" || normalized === "concluidos" || normalized.includes("concl")) {
+    return count === 1 ? "1 TAREFA/ORÇAMENTO CONCLUÍDO" : `${count} CONCLUÍDOS`;
+  }
+  if (normalized === "lost" || normalized === "perdidos" || normalized.includes("perd")) {
+    return count === 1 ? "1 PERDIDO" : `${count} PERDIDOS`;
+  }
+  return count === 1 ? "1 ATIVIDADE EM ABERTO" : `${count} ATIVIDADES EM ABERTO`;
 }
 
 export interface DealQuoteFileInfo {
@@ -1151,7 +1175,8 @@ function CrmDashboard() {
   const [showOffHoursPrompt, setShowOffHoursPrompt] = useState(false);
   const [offHoursInfo, setOffHoursInfo] = useState<WorkScheduleInfo | null>(null);
   const lastPromptTimeRef = useRef<number>(Date.now());
-  const initialPromptCheckedRef = useRef<boolean>(false);
+  const previousScheduleAllowedRef = useRef<boolean | null>(null);
+  const offHoursPromptShownForCurrentPeriodRef = useRef<boolean>(false);
 
   // Saudação dinâmica conforme o horário do dia
   const getGreeting = () => {
@@ -1164,49 +1189,36 @@ function CrmDashboard() {
   useEffect(() => {
     if (!user || loading) return;
 
-    const schedule = isBusinessWorkTime();
+    const checkScheduleAndActivity = () => {
+      const schedule = isBusinessWorkTime();
 
-    // 1. FORA DO EXPEDIENTE (Noite, Almoço, Fim de Semana, Feriados)
-    if (!schedule.allowed) {
-      setShowChooseActivityPrompt(false);
-      // Exibe apenas UMA vez logo após o login informando a situação
-      if (!initialPromptCheckedRef.current) {
-        initialPromptCheckedRef.current = true;
-        setOffHoursInfo(schedule);
-        setShowOffHoursPrompt(true);
-      }
-      return; // NÃO inicia loop de 5 minutos fora do expediente!
-    }
-
-    // 2. DENTRO DO EXPEDIENTE DE TRABALHO
-    setShowOffHoursPrompt(false);
-
-    const hasActiveWork = deals.some((d) => {
-      const active = getDealActiveWorker(d);
-      return Boolean(active && active.userId === user.id);
-    });
-
-    if (hasActiveWork) {
-      lastPromptTimeRef.current = Date.now();
-      setShowChooseActivityPrompt(false);
-      return;
-    }
-
-    // Dispara imediatamente no primeiro acesso durante o expediente se não tiver atividade ativa
-    if (!initialPromptCheckedRef.current) {
-      initialPromptCheckedRef.current = true;
-      lastPromptTimeRef.current = Date.now();
-      setShowChooseActivityPrompt(true);
-      return;
-    }
-
-    // Se NÃO tem atividade em andamento durante o expediente, contabiliza inatividade e verifica os 5 minutos
-    const checkActiveActivity = () => {
-      const currentSchedule = isBusinessWorkTime();
-      if (!currentSchedule.allowed) {
+      // 1. FORA DO EXPEDIENTE (Noite, Almoço, Fim de Semana, Feriados)
+      if (!schedule.allowed) {
         setShowChooseActivityPrompt(false);
-        return;
+
+        // Se acabou de transicionar para fora do expediente ou é a primeira checagem
+        if (previousScheduleAllowedRef.current !== false) {
+          previousScheduleAllowedRef.current = false;
+          offHoursPromptShownForCurrentPeriodRef.current = false;
+        }
+
+        // Exibe apenas UMA vez para este período de fora de expediente / almoço
+        if (!offHoursPromptShownForCurrentPeriodRef.current) {
+          offHoursPromptShownForCurrentPeriodRef.current = true;
+          setOffHoursInfo(schedule);
+          setShowOffHoursPrompt(true);
+        }
+        return; // Fora do expediente NUNCA repete de 5 em 5 minutos!
       }
+
+      // 2. DENTRO DO EXPEDIENTE DE TRABALHO (07h30 às 12h00 e 13h00 às 17h30)
+      setShowOffHoursPrompt(false);
+
+      // Se acabou de transicionar de fora do expediente para o expediente (ex: almoço terminou às 13h00)
+      const justEnteredWorkHours = previousScheduleAllowedRef.current === false;
+      const isFirstCheck = previousScheduleAllowedRef.current === null;
+      previousScheduleAllowedRef.current = true;
+      offHoursPromptShownForCurrentPeriodRef.current = false;
 
       const isWorkingNow = deals.some((d) => {
         const active = getDealActiveWorker(d);
@@ -1219,10 +1231,18 @@ function CrmDashboard() {
         return;
       }
 
-      // Registra 5 segundos de inatividade durante o expediente para auditoria futura
+      // Se acabou de entrar no expediente (ou primeiro acesso no expediente) e não tem atividade ativa:
+      if (isFirstCheck || justEnteredWorkHours) {
+        lastPromptTimeRef.current = Date.now();
+        setShowChooseActivityPrompt(true);
+        return;
+      }
+
+      // Registra 5 segundos de inatividade durante o expediente para auditoria
       const currentUserName = user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || "Usuário";
       recordInactivitySeconds(user.id, currentUserName, 5);
 
+      // Se já se passaram 5 minutos sem iniciar atividade, alerta novamente
       const elapsed = Date.now() - lastPromptTimeRef.current;
       if (elapsed >= 5 * 60 * 1000) {
         lastPromptTimeRef.current = Date.now();
@@ -1230,7 +1250,11 @@ function CrmDashboard() {
       }
     };
 
-    const interval = setInterval(checkActiveActivity, 5000); // Avalia a cada 5 segundos
+    // Executa checagem imediata
+    checkScheduleAndActivity();
+
+    // Mantém avaliação contínua a cada 5 segundos (detecta automaticamente a virada das 13h00 sem precisar de reload)
+    const interval = setInterval(checkScheduleAndActivity, 5000);
     return () => clearInterval(interval);
   }, [user, deals, loading]);
 
@@ -1241,7 +1265,7 @@ function CrmDashboard() {
   };
 
   const handleDismissOffHoursPrompt = () => {
-    // Fecha o aviso único de fora de expediente e não exibe mais durante a sessão
+    // Fecha o aviso único de fora de expediente e não exibe mais durante este período
     setShowOffHoursPrompt(false);
   };
 
@@ -4274,114 +4298,16 @@ function CrmDashboard() {
         }}
         className="relative z-10 h-screen max-h-screen flex flex-col overflow-hidden px-4 pt-3 pb-3 md:px-6"
       >
-      {/* BACKDROP FLUTUANTE COM DESFOQUE SUAVE DO RESTANTE DA PÁGINA (SEM EMPURRAR COMPONENTES) */}
-      {isSideMenuOpen && (
-        <div
-          onClick={() => setIsSideMenuOpen(false)}
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
-        />
-      )}
-
-      {/* MENU LATERAL ESQUERDO FLUTUANTE (OFF-CANVAS) */}
-      <aside
-        onClick={(e) => e.stopPropagation()}
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-950/95 border-r border-white/15 flex flex-col justify-between p-4 backdrop-blur-2xl shadow-2xl transition-transform duration-300 ease-in-out ${
-          isSideMenuOpen ? "translate-x-0" : "-translate-x-full pointer-events-none"
-        }`}
-      >
-        {/* Topo do Menu */}
-        <div className="space-y-4">
-          {/* Topo do Menu: MYKAFLOW GESTÃO COMERCIAL em largura total e ampliado */}
-          <div className="w-full flex flex-col items-center justify-center border-b border-white/10 pb-3 pt-1 select-none">
-            <svg
-              className="w-full h-[46px] overflow-visible select-none drop-shadow-[0_0_15px_rgba(34,211,238,0.35)]"
-              viewBox="0 0 250 46"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <text
-                x="0"
-                y="24"
-                className="font-saira-stencil"
-                fontSize="25"
-                fill="#22d3ee"
-                textLength="250"
-                lengthAdjust="spacing"
-              >
-                MYKAFLOW
-              </text>
-              <text
-                x="0"
-                y="42"
-                fontSize="11"
-                fontWeight="700"
-                fill="#94a3b8"
-                fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-                textLength="250"
-                lengthAdjust="spacing"
-              >
-                GESTÃO COMERCIAL
-              </text>
-            </svg>
-          </div>
-
-          {/* Seção 1: Nova Atividade */}
-          <div className="space-y-2">
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/70 px-1">
-              Nova Atividade
-            </p>
-            
-            <button
-              type="button"
-              onClick={() => {
-                setIsSideMenuOpen(false);
-                openNewRequestModal("interna");
-              }}
-              className="w-full btn-ghost-neon rounded-xl px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2.5 text-muted-foreground hover:text-white border-white/10 hover:border-white/20 hover:bg-white/5 shadow-sm transition-all text-left group"
-            >
-              <Building className="h-4 w-4 text-muted-foreground group-hover:text-white shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="truncate">Tarefa</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsSideMenuOpen(false);
-                openNewRequestModal("externa");
-              }}
-              className="w-full btn-ghost-neon rounded-xl px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2.5 text-muted-foreground hover:text-white border-white/10 hover:border-white/20 hover:bg-white/5 shadow-sm transition-all text-left group"
-            >
-              <Globe className="h-4 w-4 text-muted-foreground group-hover:text-white shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="truncate">Orçamento</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Rodapé do Menu Lateral: Sair (ADM vai para o menu de plataformas; Usuário Comum faz logout) */}
-        <div className="border-t border-white/10 pt-3 mt-4 space-y-2">
-          <button
-            type="button"
-            onClick={handleExit}
-            className="w-full btn-ghost-neon rounded-xl px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2.5 text-muted-foreground hover:text-rose-400 border-white/10 hover:border-rose-500/30 hover:bg-rose-500/10 shadow-sm transition-all text-left group"
-            title={role === "admin" ? "Voltar ao Seletor de Módulos" : "Sair do Sistema"}
+      {/* Header Principal com Tag Centralizada no Topo */}
+      <header className="shrink-0 mb-1 flex items-center justify-between pb-0 relative">
+        <div className="flex items-center gap-3 shrink-0">
+          <Link
+            to="/"
+            className="btn-ghost-neon p-2 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white"
+            title="Voltar ao Seletor de Módulos (Hub Inicial)"
           >
-            <LogOut className="h-4 w-4 text-muted-foreground group-hover:text-rose-400 shrink-0" />
-            <span className="truncate">Sair</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Header com botão do Menu Lateral */}
-      <header className="shrink-0 mb-1 flex items-center justify-between pb-0">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsSideMenuOpen(true)}
-            className="btn-ghost-neon p-2 rounded-xl flex items-center justify-center text-accent hover:text-white border border-accent/30 hover:border-accent/60 bg-accent/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
-            title="Abrir Menu de Ações"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
+            <ChevronLeft className="h-5 w-5" />
+          </Link>
           <Link
             to="/"
             className="flex flex-col select-none justify-center cursor-pointer focus:outline-none"
@@ -4407,6 +4333,98 @@ function CrmDashboard() {
             </svg>
           </Link>
         </div>
+
+        {/* Centro do Cabeçalho: Tag Centralizada de Isolamento / Expansão de Atividade ou Usuário */}
+        {(internalFilterUser !== "ALL" || isolatedStageId) && (() => {
+          const isLead = isolatedStageId === "lead";
+          const isCompleted = isolatedStageId === "completed";
+          const isLost = isolatedStageId === "lost";
+
+          const tagTheme = isLead
+            ? {
+                btn: "bg-amber-950/85 hover:bg-rose-950/80 border border-amber-400/50 hover:border-rose-400/60 shadow-[0_0_20px_rgba(245,158,11,0.35)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]",
+                text: "text-amber-300 group-hover:text-rose-300",
+              }
+            : isCompleted
+            ? {
+                btn: "bg-emerald-950/85 hover:bg-rose-950/80 border border-emerald-400/50 hover:border-rose-400/60 shadow-[0_0_20px_rgba(52,211,153,0.35)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]",
+                text: "text-emerald-300 group-hover:text-rose-300",
+              }
+            : isLost
+            ? {
+                btn: "bg-rose-950/85 hover:bg-rose-950/90 border border-rose-400/50 hover:border-rose-400/60 shadow-[0_0_20px_rgba(244,63,94,0.35)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]",
+                text: "text-rose-300 group-hover:text-rose-200",
+              }
+            : {
+                btn: "bg-sky-950/85 hover:bg-rose-950/80 border border-sky-400/50 hover:border-rose-400/60 shadow-[0_0_20px_rgba(56,189,248,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]",
+                text: "text-sky-300 group-hover:text-rose-300",
+              };
+
+          return (
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-30 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+              {isolatedStageId && internalFilterUser !== "ALL" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsolatedStageId(null);
+                    setInternalFilterUser("ALL");
+                  }}
+                  className={`group inline-flex items-center justify-center px-4 py-1.5 rounded-xl ${tagTheme.btn} backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[38vw]`}
+                  title="Clique para fechar e voltar ao quadro geral"
+                >
+                  <span className={`text-xs sm:text-sm font-black uppercase tracking-wider ${tagTheme.text} leading-none transition-colors group-hover:hidden truncate`}>
+                    {`${STAGES.find((s) => s.id === isolatedStageId)?.title || "ATIVIDADE"} - ${
+                      teamMembers.find((m) => m.id === internalFilterUser)?.display_name ||
+                      teamMembers.find((m) => m.id === internalFilterUser)?.email ||
+                      deals.find((d) => d.assigned_user_id === internalFilterUser)?.assigned_user_name ||
+                      "USUÁRIO"
+                    }`}
+                  </span>
+                  <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
+                    FECHAR
+                  </span>
+                </button>
+              ) : isolatedStageId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsolatedStageId(null);
+                    setInternalFilterUser("ALL");
+                  }}
+                  className={`group inline-flex items-center justify-center px-4 py-1.5 rounded-xl ${tagTheme.btn} backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[38vw]`}
+                  title="Clique para fechar e voltar ao quadro geral"
+                >
+                  <span className={`text-xs sm:text-sm font-black uppercase tracking-wider ${tagTheme.text} leading-none transition-colors group-hover:hidden truncate`}>
+                    {STAGES.find((s) => s.id === isolatedStageId)?.title || "ATIVIDADE"}
+                  </span>
+                  <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
+                    FECHAR
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsolatedStageId(null);
+                    setInternalFilterUser("ALL");
+                  }}
+                  className={`group inline-flex items-center justify-center px-4 py-1.5 rounded-xl ${tagTheme.btn} backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[38vw]`}
+                  title="Clique para fechar e voltar ao quadro geral"
+                >
+                  <span className={`text-xs sm:text-sm font-black uppercase tracking-wider ${tagTheme.text} leading-none transition-colors group-hover:hidden truncate`}>
+                    {teamMembers.find((m) => m.id === internalFilterUser)?.display_name ||
+                      teamMembers.find((m) => m.id === internalFilterUser)?.email ||
+                      deals.find((d) => d.assigned_user_id === internalFilterUser)?.assigned_user_name ||
+                      "USUÁRIO"}
+                  </span>
+                  <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
+                    FECHAR
+                  </span>
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Lado Direito: Calendário de Prazos, Caixa de Entrada de Menções (@usuario), ADM e Sair */}
         <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
@@ -4484,74 +4502,6 @@ function CrmDashboard() {
 
       {/* Quadro de Tarefas / Atividades Kanban com Estilo Futurista Glass e Rolagem Própria por Coluna */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden pt-0">
-        {/* Topo Centralizado das Colunas: Destaque com Letra Maior ao Clicar em Usuário ou Etapa (Muda para FECHAR no hover para voltar ao Quadro Geral) */}
-        {(internalFilterUser !== "ALL" || isolatedStageId) && (() => {
-          return (
-            <div className="shrink-0 flex items-center justify-center w-full py-2 animate-in fade-in slide-in-from-top-1" onClick={(e) => e.stopPropagation()}>
-              {isolatedStageId && internalFilterUser !== "ALL" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsolatedStageId(null);
-                    setInternalFilterUser("ALL");
-                  }}
-                  className="group inline-flex items-center justify-center px-5 py-1.5 rounded-xl bg-sky-950/75 hover:bg-rose-950/60 border border-sky-400/50 hover:border-rose-400/60 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.35)] backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[90vw]"
-                  title="Clique para fechar e voltar ao quadro geral"
-                >
-                  <span className="text-base sm:text-lg font-black uppercase tracking-wider text-sky-300 group-hover:text-rose-300 leading-none transition-colors group-hover:hidden truncate">
-                    {`${STAGES.find((s) => s.id === isolatedStageId)?.title || "ATIVIDADE"} - ${
-                      teamMembers.find((m) => m.id === internalFilterUser)?.display_name ||
-                      teamMembers.find((m) => m.id === internalFilterUser)?.email ||
-                      deals.find((d) => d.assigned_user_id === internalFilterUser)?.assigned_user_name ||
-                      "USUÁRIO"
-                    }`}
-                  </span>
-                  <span className="text-base sm:text-lg font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
-                    FECHAR
-                  </span>
-                </button>
-              ) : isolatedStageId ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsolatedStageId(null);
-                    setInternalFilterUser("ALL");
-                  }}
-                  className="group inline-flex items-center justify-center px-5 py-1.5 rounded-xl bg-sky-950/75 hover:bg-rose-950/60 border border-sky-400/50 hover:border-rose-400/60 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.35)] backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[90vw]"
-                  title="Clique para fechar e voltar ao quadro geral"
-                >
-                  <span className="text-base sm:text-lg font-black uppercase tracking-wider text-sky-300 group-hover:text-rose-300 leading-none transition-colors group-hover:hidden truncate">
-                    {STAGES.find((s) => s.id === isolatedStageId)?.title || "ATIVIDADE"}
-                  </span>
-                  <span className="text-base sm:text-lg font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
-                    FECHAR
-                  </span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsolatedStageId(null);
-                    setInternalFilterUser("ALL");
-                  }}
-                  className="group inline-flex items-center justify-center px-5 py-1.5 rounded-xl bg-sky-950/75 hover:bg-rose-950/60 border border-sky-400/50 hover:border-rose-400/60 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.35)] backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[90vw]"
-                  title="Clique para fechar e voltar ao quadro geral"
-                >
-                  <span className="text-base sm:text-lg font-black uppercase tracking-wider text-sky-300 group-hover:text-rose-300 leading-none transition-colors group-hover:hidden truncate">
-                    {teamMembers.find((m) => m.id === internalFilterUser)?.display_name ||
-                      teamMembers.find((m) => m.id === internalFilterUser)?.email ||
-                      deals.find((d) => d.assigned_user_id === internalFilterUser)?.assigned_user_name ||
-                      "USUÁRIO"}
-                  </span>
-                  <span className="text-base sm:text-lg font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
-                    FECHAR
-                  </span>
-                </button>
-              )}
-            </div>
-          );
-        })()}
-
         {/* Exibição das Colunas (Modo Normal: 5 Colunas de Etapas | Modo Isolado: Colunas Kanban por Usuário Responsável) */}
         {(() => {
           // Helper para buscar tarefas vinculadas a uma atividade primária
@@ -5408,6 +5358,62 @@ function CrmDashboard() {
                 const draggedDeal = draggingDealId ? deals.find((d) => d.id === draggingDealId) : null;
                 const isMovingFromAnotherStage = Boolean(draggedDeal && draggedDeal.stage !== stage.id);
 
+                const isLead = stage.id === "lead";
+                const isCompleted = stage.id === "completed";
+                const isLost = stage.id === "lost";
+                
+                const stageTheme = isLead
+                  ? {
+                      stripGradient: "from-amber-500/40 via-amber-500/20 to-transparent hover:from-amber-500/70",
+                      stripText: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.9)]",
+                      plusBtn: "bg-amber-500/20 text-amber-300 hover:bg-amber-500/35 border border-amber-400/50 hover:border-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.35)]",
+                      textColor: "text-amber-400",
+                      subtextColor: "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.7)]",
+                      dotBg: "bg-amber-400 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.85)]",
+                      hoverHeaderBg: "hover:bg-amber-950/40 hover:border-amber-400/50 hover:shadow-[inset_0_1px_20px_rgba(245,158,11,0.25)]",
+                      searchBorder: "border-amber-400/50",
+                      searchActive: "bg-amber-500/20 text-amber-300 border border-amber-400/40",
+                      searchIcon: "text-amber-400",
+                    }
+                  : isCompleted
+                  ? {
+                      stripGradient: "from-emerald-500/40 via-emerald-500/20 to-transparent hover:from-emerald-500/70",
+                      stripText: "text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.9)]",
+                      plusBtn: "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/35 border border-emerald-400/50 hover:border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.35)]",
+                      textColor: "text-emerald-400",
+                      subtextColor: "text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.7)]",
+                      dotBg: "bg-emerald-400 text-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.85)]",
+                      hoverHeaderBg: "hover:bg-emerald-950/40 hover:border-emerald-400/50 hover:shadow-[inset_0_1px_20px_rgba(52,211,153,0.25)]",
+                      searchBorder: "border-emerald-400/50",
+                      searchActive: "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40",
+                      searchIcon: "text-emerald-400",
+                    }
+                  : isLost
+                  ? {
+                      stripGradient: "from-rose-500/40 via-rose-500/20 to-transparent hover:from-rose-500/70",
+                      stripText: "text-rose-300 drop-shadow-[0_0_8px_rgba(244,63,94,0.9)]",
+                      plusBtn: "bg-rose-500/20 text-rose-300 hover:bg-rose-500/35 border border-rose-400/50 hover:border-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.35)]",
+                      textColor: "text-rose-400",
+                      subtextColor: "text-rose-300 drop-shadow-[0_0_8px_rgba(244,63,94,0.7)]",
+                      dotBg: "bg-rose-400 text-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.85)]",
+                      hoverHeaderBg: "hover:bg-rose-950/40 hover:border-rose-400/50 hover:shadow-[inset_0_1px_20px_rgba(244,63,94,0.25)]",
+                      searchBorder: "border-rose-400/50",
+                      searchActive: "bg-rose-500/20 text-rose-300 border border-rose-400/40",
+                      searchIcon: "text-rose-400",
+                    }
+                  : {
+                      stripGradient: "from-sky-500/40 via-sky-500/20 to-transparent hover:from-sky-500/70",
+                      stripText: "text-sky-300 drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]",
+                      plusBtn: "bg-sky-500/20 text-sky-300 hover:bg-sky-500/35 border border-sky-400/50 hover:border-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.35)]",
+                      textColor: "text-sky-400",
+                      subtextColor: "text-sky-300 drop-shadow-[0_0_8px_rgba(56,189,248,0.7)]",
+                      dotBg: "bg-sky-400 text-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.85)]",
+                      hoverHeaderBg: "hover:bg-sky-950/40 hover:border-sky-400/50 hover:shadow-[inset_0_1px_20px_rgba(56,189,248,0.25)]",
+                      searchBorder: "border-sky-400/50",
+                      searchActive: "bg-sky-500/20 text-sky-300 border border-sky-400/40",
+                      searchIcon: "text-sky-400",
+                    };
+
                 // Renderização da Coluna Oculta / Aba Estreita
                 if (isCollapsed) {
                   return (
@@ -5444,7 +5450,7 @@ function CrmDashboard() {
                         }
                       }}
                       title={`Clique para expandir ${stage.title}\n${getStageDurationLabel(stage.id || stage.title)}: ${avgStageDaysFormatted} ${avgStageDaysFormatted === "1.0" || avgStageDaysFormatted === "1,0" ? "DIA" : "DIAS"}`}
-                      className={`glass group/collapsed flex flex-col items-center justify-between rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all duration-200 h-full max-h-full w-10 sm:w-11 min-w-[40px] sm:min-w-[44px] max-w-[40px] sm:max-w-[44px] py-3 cursor-pointer select-none hover:border-white/40 hover:bg-white/[0.04] ${
+                      className={`glass group/collapsed flex flex-col items-center justify-between rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all duration-200 h-full max-h-full w-12 sm:w-14 min-w-[48px] sm:min-w-[56px] max-w-[48px] sm:max-w-[56px] py-3 cursor-pointer select-none hover:border-white/40 hover:bg-white/[0.04] ${
                         dragOverStageId === stage.id && isMovingFromAnotherStage ? "ring-2 ring-sky-400 border-sky-400 shadow-[0_0_30px_rgba(56,189,248,0.35)] bg-sky-950/40" : ""
                       }`}
                     >
@@ -5484,10 +5490,29 @@ function CrmDashboard() {
                   <div
                     key={stage.id}
                     onClick={(e) => e.stopPropagation()}
-                    className={`glass flex-1 min-w-0 flex flex-col rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all h-full max-h-full ${
+                    className={`glass relative group/column flex-1 min-w-0 flex flex-col rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all h-full max-h-full ${
                       dragOverStageId === stage.id && isMovingFromAnotherStage ? "ring-2 ring-sky-400 border-sky-400 shadow-[0_0_30px_rgba(56,189,248,0.35)] bg-sky-950/25" : ""
                     }`}
                   >
+                    {/* Botão / Faixa Oculta na margem direita de toda a coluna para recolher */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCollapseStage(stage.id);
+                      }}
+                      className={`absolute right-0 top-0 bottom-0 w-11 group/collapse-strip flex flex-col items-center justify-center opacity-0 hover:opacity-100 bg-gradient-to-l ${stageTheme.stripGradient} transition-opacity duration-200 cursor-pointer z-30 select-none`}
+                      title={`Recolher coluna ${stage.title}`}
+                    >
+                      <div className="w-full flex flex-col items-center justify-center gap-2 text-center">
+                        <ChevronsLeft className={`h-4 w-4 mx-auto shrink-0 ${stageTheme.stripText}`} />
+                        <span className={`inline-block text-center text-[10px] font-black uppercase tracking-[0.2em] leading-none ${stageTheme.stripText} [writing-mode:vertical-rl] rotate-180 py-1.5`}>
+                          Recolher
+                        </span>
+                        <ChevronsLeft className={`h-4 w-4 mx-auto shrink-0 ${stageTheme.stripText}`} />
+                      </div>
+                    </button>
+
                     {/* Header da Coluna com Hover Interno */}
                     <div
                       onMouseEnter={() => setHoveredStageHeaderId(stage.id)}
@@ -5498,15 +5523,15 @@ function CrmDashboard() {
                       className={`group/header shrink-0 flex items-center justify-between p-3 border-b select-none cursor-pointer transition-all duration-200 relative overflow-hidden ${
                         isolatedStageId === stage.id
                           ? "border-white/10 bg-gradient-to-b from-rose-500/20 via-rose-950/40 to-transparent hover:bg-rose-500/25 hover:border-rose-400/50 shadow-[inset_0_1px_15px_rgba(244,63,94,0.15)] hover:shadow-[inset_0_1px_20px_rgba(244,63,94,0.3)]"
-                          : `border-white/10 bg-gradient-to-b ${stage.glow} to-transparent hover:bg-sky-950/40 hover:border-sky-400/50 hover:shadow-[inset_0_1px_20px_rgba(56,189,248,0.25)]`
+                          : `border-white/10 bg-gradient-to-b ${stage.glow} to-transparent ${stageTheme.hoverHeaderBg}`
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <div
-                          className={`h-2.5 w-2.5 rounded-full shadow-[0_0_8px_currentColor] shrink-0 transition-colors ${
+                          className={`h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor] shrink-0 transition-transform group-hover/header:scale-110 ${
                             isolatedStageId === stage.id
-                              ? "bg-rose-400 text-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
-                              : `${stage.color.replace("text-", "bg-")} group-hover/header:bg-emerald-400 group-hover/header:text-emerald-400 group-hover/header:shadow-[0_0_8px_rgba(52,211,153,0.8)]`
+                              ? "bg-rose-400 text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.8)]"
+                              : `${stage.color.replace("text-", "bg-")} ${stage.color}`
                           }`}
                         />
                         <div className="min-w-0 flex flex-col justify-center">
@@ -5516,22 +5541,36 @@ function CrmDashboard() {
                           </span>
                           {/* Surge abaixo do título no hover da coluna */}
                           <span
-                            className={`text-[9px] uppercase font-bold tracking-wider hidden group-hover/header:block truncate pointer-events-none animate-in fade-in duration-150 leading-none mt-1 ${
-                              isolatedStageId === stage.id
-                                ? "text-rose-300 drop-shadow-[0_0_8px_rgba(244,63,94,0.7)]"
-                                : "text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.7)]"
-                            }`}
+                            className={`text-[9px] uppercase font-black tracking-wider hidden group-hover/header:block truncate pointer-events-none animate-in fade-in duration-150 leading-none mt-1 ${stageTheme.subtextColor}`}
                           >
-                            {isolatedStageId === stage.id ? "Contrair Atividade" : "Expandir Atividade"}
+                            EXPANDIR ATIVIDADE
                           </span>
                         </div>
                       </div>
                       
                       <div className="flex items-center gap-1.5 shrink-0 relative z-30" onClick={(e) => e.stopPropagation()}>
+                        {/* Botão de Adicionar Nova Atividade (+) ao lado da Lupa */}
+                        {(stage.id === "lead" || stage.id === "qualification") && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (stage.id === "lead") {
+                                openNewRequestModal("interna");
+                              } else {
+                                openNewRequestModal("externa");
+                              }
+                            }}
+                            className={`p-1.5 rounded-lg text-xs transition-all flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 ${stageTheme.plusBtn}`}
+                            title={stage.id === "lead" ? "Adicionar Nova Tarefa (+)" : "Adicionar Novo Orçamento (+)"}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+
                         <div className="relative flex items-center crm-search-box">
                           {isStageSearchOpen ? (
-                            <div className="flex items-center gap-1 bg-black/80 border border-sky-400/50 rounded-lg px-2 py-0.5 animate-in fade-in max-w-[120px] sm:max-w-[140px] shadow-sm">
-                              <Search className="h-3 w-3 text-sky-400 shrink-0" />
+                            <div className={`flex items-center gap-1 bg-black/80 border ${stageTheme.searchBorder} rounded-lg px-2 py-0.5 animate-in fade-in max-w-[120px] sm:max-w-[140px] shadow-sm`}>
+                              <Search className={`h-3 w-3 ${stageTheme.searchIcon} shrink-0`} />
                               <input
                                 type="text"
                                 placeholder="Pesquisar..."
@@ -5570,37 +5609,18 @@ function CrmDashboard() {
                               onClick={() => setOpenSearchStageId(stage.id)}
                               className={`p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 cursor-pointer ${
                                 stageSearchTerms[stage.id]
-                                    ? "bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-sm"
+                                    ? stageTheme.searchActive
                                     : "bg-white/5 text-muted-foreground hover:text-white border border-white/10 hover:border-white/20"
                               }`}
                               title={`Pesquisar em ${stage.title}`}
                             >
                               <Search className="h-3.5 w-3.5" />
                               {stageSearchTerms[stage.id] && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                                <span className={`w-1.5 h-1.5 rounded-full ${stageTheme.textColor.replace("text-", "bg-")} animate-pulse`} />
                               )}
                             </button>
                           )}
                         </div>
-
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white font-mono">
-                          {stageDeals.length}
-                        </span>
-
-                        {/* Botão de Recolher Coluna em Aba Estreita (somente permitido para colunas vazias) */}
-                        {stageDeals.length === 0 && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleCollapseStage(stage.id);
-                            }}
-                            className="p-1.5 rounded-lg text-xs bg-white/5 text-muted-foreground hover:text-white hover:bg-white/15 border border-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-center"
-                            title={`Ocultar coluna vazia ${stage.title}`}
-                          >
-                            <ChevronsLeft className="h-3.5 w-3.5" />
-                          </button>
-                        )}
                       </div>
                     </div>
 
@@ -5634,20 +5654,33 @@ function CrmDashboard() {
                           }
                         }
                       }}
-                      className="flex-1 min-h-0 overflow-y-auto space-y-2 w-full px-1.5 py-1.5 no-scrollbar pb-10"
+                      className="flex-1 min-h-0 overflow-y-auto space-y-2 w-full px-1.5 py-1.5 no-scrollbar pb-14"
                     >
-                      {/* Banner Estético de Duração Média no topo dos cards */}
-                      {hoveredStageHeaderId === stage.id && (
-                        <div className="w-full h-[88px] min-h-[88px] max-h-[88px] rounded-xl border border-sky-400/50 bg-gradient-to-br from-slate-950/98 via-sky-950/70 to-slate-950/95 backdrop-blur-xl px-3 py-2 flex flex-col items-center justify-center text-center shadow-[0_0_25px_rgba(56,189,248,0.3)] animate-in fade-in zoom-in-95 duration-150 select-none shrink-0 mb-2 relative z-20">
-                          <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-[0.16em] text-slate-300 leading-tight">
-                            {getStageDurationLabel(stage.id || stage.title)}
-                          </span>
-                          <div className="w-20 h-[1.5px] bg-gradient-to-r from-transparent via-sky-400 to-transparent my-1.5" />
-                          <span className="font-mono text-sm sm:text-base font-black uppercase tracking-widest text-sky-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.85)] leading-tight">
-                            {avgStageDaysFormatted} {avgStageDaysFormatted === "1,0" ? "DIA" : "DIAS"}
-                          </span>
-                        </div>
-                      )}
+                      {/* Banner Estético de Duração Média e Quantidade no topo dos cards */}
+                      {hoveredStageHeaderId === stage.id && (() => {
+                        const stageTotalValue = stageDeals.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+                        const formattedStageTotalValue = fmtCurrency(stageTotalValue);
+
+                        return (
+                          <div className={`w-full min-h-[96px] max-h-[106px] rounded-xl border ${stageTheme.searchBorder} bg-gradient-to-br from-slate-950/98 via-slate-900/90 to-slate-950/95 backdrop-blur-xl px-3 py-2 flex flex-col items-center justify-center text-center shadow-[0_0_25px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in-95 duration-150 select-none shrink-0 mb-2 relative z-20`}>
+                            <span className={`font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-[0.16em] ${stageTheme.subtextColor} leading-tight`}>
+                              {getStageOpenActivitiesLabel(stage.id || stage.title, stageDeals.length)}
+                            </span>
+                            {stageTotalValue > 0 && (
+                              <span className="font-mono text-[11px] font-black uppercase tracking-wider text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.7)] mt-0.5 leading-tight">
+                                VALOR TOTAL: {formattedStageTotalValue}
+                              </span>
+                            )}
+                            <div className="w-20 h-[1.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent my-1" />
+                            <span className="font-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-300 leading-tight">
+                              {getStageDurationLabel(stage.id || stage.title)}:{" "}
+                              <strong className={`${stageTheme.textColor} font-black text-xs`}>
+                                {avgStageDaysFormatted} {avgStageDaysFormatted === "1,0" ? "DIA" : "DIAS"}
+                              </strong>
+                            </span>
+                          </div>
+                        );
+                      })()}
 
                       {/* Container das atividades com desfoque no hover do cabeçalho */}
                       <div
@@ -5675,28 +5708,27 @@ function CrmDashboard() {
                       </div>
                     </div>
 
-                    {/* Rodapé da Coluna para Etapas com Suporte a Arquivamento (Tarefas, Concluídos, Perdidos) */}
-                    {(stage.id === "lead" || stage.id === "completed" || stage.id === "lost") ? (() => {
-                      const archivedInStage = getArchivedDealsForStage(stage.id as "lead" | "completed" | "lost", deals);
-                      const isLead = stage.id === "lead";
-                      const isCompleted = stage.id === "completed";
-                      const isLost = stage.id === "lost";
+                    {/* Rodapé da Coluna com Desfoque Gradual / Degradê Idêntico para Todas as Colunas */}
+                    <div className="absolute bottom-0 left-0 right-0 p-2 pt-6 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent backdrop-blur-[3px] rounded-b-2xl z-20 pointer-events-none">
+                      {(stage.id === "lead" || stage.id === "completed" || stage.id === "lost") ? (() => {
+                        const archivedInStage = getArchivedDealsForStage(stage.id as "lead" | "completed" | "lost", deals);
+                        const isLead = stage.id === "lead";
+                        const isCompleted = stage.id === "completed";
 
-                      const badgeColor = isLead
-                        ? "text-sky-300 border-sky-400/40 bg-sky-500/15"
-                        : isCompleted
-                        ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/15"
-                        : "text-rose-300 border-rose-500/40 bg-rose-500/15";
+                        const badgeColor = isLead
+                          ? "text-amber-300 border-amber-400/40 bg-amber-500/20"
+                          : isCompleted
+                          ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/20"
+                          : "text-rose-300 border-rose-500/40 bg-rose-500/20";
 
-                      return (
-                        <div className="shrink-0 p-1.5 border-t border-white/10 bg-slate-950/90 backdrop-blur-md rounded-b-2xl relative z-20">
+                        return (
                           <button
                             type="button"
                             onClick={() => {
                               setArchivedFilterStage(stage.id as "lead" | "completed" | "lost");
                               setIsArchivedModalOpen(true);
                             }}
-                            className="w-full py-1.5 px-2.5 rounded-xl border border-white/10 hover:border-white/25 bg-white/[0.03] hover:bg-white/[0.08] transition-all flex items-center justify-between text-xs font-black uppercase tracking-wider text-muted-foreground hover:text-white group cursor-pointer shadow-sm"
+                            className="w-full py-1.5 px-2.5 rounded-xl border border-white/10 hover:border-white/25 bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-md transition-all flex items-center justify-between text-xs font-black uppercase tracking-wider text-muted-foreground hover:text-white group cursor-pointer shadow-lg pointer-events-auto"
                             title={`Ver ${isLead ? "Tarefas" : isCompleted ? "Concluídos" : "Perdidos"} Arquivadas`}
                           >
                             <div className="flex items-center gap-1.5">
@@ -5710,11 +5742,11 @@ function CrmDashboard() {
                               {archivedInStage.length}
                             </span>
                           </button>
-                        </div>
-                      );
-                    })() : (
-                      <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent backdrop-blur-[1px] rounded-b-2xl z-10" />
-                    )}
+                        );
+                      })() : (
+                        <div className="w-full h-[32px]" />
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -9025,7 +9057,7 @@ function CrmDashboard() {
               </div>
 
               <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
-                Você pode navegar, consultar quadros e acompanhar tarefas normalmente mas não pode iniciar atividades fora do horário comercial.
+                Você pode apenas navegar, consultar e acompanhar tarefas.
               </p>
             </div>
           </div>

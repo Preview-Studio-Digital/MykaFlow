@@ -1,4 +1,4 @@
-﻿// src/lib/work-schedule.ts
+// src/lib/work-schedule.ts
 // Regras e utilitários de horários de expediente, almoço, finais de semana e feriados nacionais
 
 export interface WorkScheduleInfo {
@@ -139,7 +139,7 @@ export function isBusinessWorkTime(date: Date = new Date()): WorkScheduleInfo {
       isLunch: true,
       isWeekend: false,
       isHoliday: false,
-      reason: "Horário de almoço e intervalo (12h00 às 13h00).",
+      reason: "HORÁRIO DE ALMOÇO",
       scheduleDescription,
       nextWorkTimeLabel: "Hoje às 13h00",
     };

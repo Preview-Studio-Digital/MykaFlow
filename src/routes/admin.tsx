@@ -20,6 +20,7 @@ import {
   Bell as BellIcon,
   Clock,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationManager } from "@/components/IntegrationManager";
@@ -417,9 +418,17 @@ function UserList({
         setConfirmConfig(null);
         setBusy(targetUserId);
         try {
-          const { error } = await supabase.from("profiles").delete().eq("id", targetUserId);
-          if (error) throw error;
-          await supabase.from("user_roles").delete().eq("user_id", targetUserId);
+          const { error: rpcError } = await supabase.rpc("delete_user_completely", {
+            target_user_id: targetUserId,
+          });
+
+          if (rpcError) {
+            console.warn("Aviso ao excluir via RPC delete_user_completely:", rpcError);
+            await supabase.from("user_roles").delete().eq("user_id", targetUserId);
+            const { error: pErr } = await supabase.from("profiles").delete().eq("id", targetUserId);
+            if (pErr) throw pErr;
+          }
+
           toast.success(`Usuário ${userName.toUpperCase()} excluído com sucesso.`);
           onRefresh();
         } catch (err: any) {
@@ -448,6 +457,14 @@ function UserList({
           <span className="text-[10px] uppercase tracking-widest opacity-50 font-black">
             {profiles.length} Membros
           </span>
+          <button
+            onClick={() => onRefresh()}
+            className="btn-ghost-neon py-2 px-3 text-[10px] rounded-lg cursor-pointer flex items-center gap-1.5 text-sky-400 border-sky-500/30 hover:bg-sky-500/10"
+            title="Sincronizar e recarregar lista de membros"
+          >
+            <RefreshCw className="h-3 w-3" />
+            <span>SINCRONIZAR</span>
+          </button>
           <button
             onClick={() => setShowAdminPanel(!showAdminPanel)}
             className="btn-futuristic py-2 px-4 text-[10px] rounded-lg cursor-pointer"

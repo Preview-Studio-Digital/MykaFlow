@@ -43,9 +43,10 @@ export function AdminPanel({ onSuccess, onCancel }: { onSuccess?: () => void; on
     if (!user) return;
     setBusy(true);
     try {
+      await supabase.from("user_roles").delete().eq("user_id", user.id);
       const { error } = await supabase
         .from("user_roles")
-        .upsert({ user_id: user.id, role: "admin" }, { onConflict: "user_id" });
+        .insert({ user_id: user.id, role: "admin" });
 
       if (error) throw error;
 
@@ -75,10 +76,37 @@ export function AdminPanel({ onSuccess, onCancel }: { onSuccess?: () => void; on
         },
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        if (
+          authError.message?.toLowerCase().includes("already registered") ||
+          authError.message?.toLowerCase().includes("already exists") ||
+          (authError as any).code === "user_already_exists"
+        ) {
+          try {
+            await supabase.rpc("sync_auth_users_to_profiles");
+          } catch (e) {}
 
-      if (authData.user && authData.user.identities && authData.user.identities.length === 0) {
-        throw new Error("Este e-mail já está cadastrado no sistema. Se desejar alterar senha ou permissões, utilize a opção 'Editar Direitos' na lista de equipe.");
+          toast.info(`O e-mail ${email.trim().toLowerCase()} já possui cadastro prévio. Sincronizando equipe...`);
+          setEmail("");
+          setName("");
+          setPassword(genPassword());
+          if (onSuccess) onSuccess();
+          return;
+        }
+        throw authError;
+      }
+
+      if (authData?.user && authData.user.identities && authData.user.identities.length === 0) {
+        try {
+          await supabase.rpc("sync_auth_users_to_profiles");
+        } catch (e) {}
+
+        toast.info(`O e-mail ${email.trim().toLowerCase()} já possui cadastro prévio. Sincronizando equipe...`);
+        setEmail("");
+        setName("");
+        setPassword(genPassword());
+        if (onSuccess) onSuccess();
+        return;
       }
 
       // Mapeia a opção selecionada para o enum válido do banco: 'admin' | 'financeiro' | 'user'
@@ -88,22 +116,23 @@ export function AdminPanel({ onSuccess, onCancel }: { onSuccess?: () => void; on
       if (authData.user) {
         const newUserId = authData.user.id;
 
-        const { error: profError } = await supabase.from("profiles").upsert({
-          id: newUserId,
-          display_name: name.trim().toUpperCase(),
-          email: email.trim().toLowerCase(),
-        });
+        const { error: profError } = await supabase.from("profiles").upsert(
+          {
+            id: newUserId,
+            display_name: name.trim().toUpperCase(),
+            email: email.trim().toLowerCase(),
+          },
+          { onConflict: "id" }
+        );
         if (profError) {
           console.warn("Aviso ao gravar profile:", profError);
         }
 
-        const { error: roleError } = await supabase.from("user_roles").upsert(
-          {
-            user_id: newUserId,
-            role: dbRole,
-          },
-          { onConflict: "user_id" },
-        );
+        await supabase.from("user_roles").delete().eq("user_id", newUserId);
+        const { error: roleError } = await supabase.from("user_roles").insert({
+          user_id: newUserId,
+          role: dbRole,
+        });
         if (roleError) {
           console.warn("Aviso ao gravar user_roles:", roleError);
         }

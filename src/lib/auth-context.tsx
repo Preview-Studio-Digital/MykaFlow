@@ -106,18 +106,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function fetchRole(uid: string) {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", uid)
-        .maybeSingle();
+        .eq("user_id", uid);
 
-      const userRole = (data?.role as Role) ?? "pending";
+      if (error) throw error;
+
+      let userRole: Role = "user";
+      if (data && data.length > 0) {
+        const roles = data.map((r) => r.role as Role);
+        if (roles.includes("admin")) {
+          userRole = "admin";
+        } else if (roles.includes("financeiro")) {
+          userRole = "financeiro";
+        } else if (roles.includes("crm_gestor")) {
+          userRole = "crm_gestor";
+        } else if (roles.includes("crm_vendedor")) {
+          userRole = "crm_vendedor";
+        } else if (roles.includes("user")) {
+          userRole = "user";
+        } else {
+          userRole = (roles[0] as Role) || "user";
+        }
+      }
       setRole(userRole);
       checkNetwork(user, userRole);
     } catch (err) {
       console.error("Auth: Falha ao buscar cargo:", err);
-      setRole("pending");
+      setRole("user");
     } finally {
       setLoading(false);
     }
@@ -139,9 +156,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: rData } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
-      loggedRole = (rData?.role as Role) || "user";
+        .eq("user_id", data.user.id);
+      if (rData && rData.length > 0) {
+        const roles = rData.map((r) => r.role as Role);
+        if (roles.includes("admin")) loggedRole = "admin";
+        else if (roles.includes("financeiro")) loggedRole = "financeiro";
+        else loggedRole = "user";
+      }
     }
 
     // Se não for admin e tentar entrar fora da rede da empresa:

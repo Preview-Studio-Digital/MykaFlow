@@ -94,15 +94,11 @@ export function EditMemberDialog({
       // 2. Atualizar cargo / direitos na tabela user_roles
       const dbRole = role === "admin" ? "admin" : role === "financeiro" ? "financeiro" : "user";
       
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .upsert(
-          {
-            user_id: targetUser!.id,
-            role: dbRole,
-          },
-          { onConflict: "user_id" },
-        );
+      await supabase.from("user_roles").delete().eq("user_id", targetUser!.id);
+      const { error: roleError } = await supabase.from("user_roles").insert({
+        user_id: targetUser!.id,
+        role: dbRole,
+      });
 
       if (roleError) throw roleError;
 

@@ -917,6 +917,7 @@ function getDealAgingStyle(updatedAtStr: string) {
 
 function CrmDashboard() {
   const { user, loading: authLoading, role, signOut } = useAuth();
+  const isAdmin = role === "admin" || (user?.email ? user.email.includes("admin") : false);
   const navigate = useNavigate();
 
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -1107,6 +1108,8 @@ function CrmDashboard() {
   useEffect(() => {
     const checkScheduleAutoStop = async () => {
       if (!user) return;
+      // ADM tem autorização irrestrita para trabalhar normalmente em qualquer horário sem encerramento automático
+      if (isAdmin) return;
       const now = new Date();
 
       for (const deal of deals) {
@@ -1168,7 +1171,7 @@ function CrmDashboard() {
 
     const interval = setInterval(checkScheduleAutoStop, 10000); // Checa a cada 10 segundos
     return () => clearInterval(interval);
-  }, [user, deals]);
+  }, [user, deals, isAdmin]);
 
   // Monitoramento de Atividade: Prompt de Inatividade no Expediente vs Aviso Único Fora do Expediente
   const [showChooseActivityPrompt, setShowChooseActivityPrompt] = useState(false);
@@ -1199,12 +1202,18 @@ function CrmDashboard() {
         // Se acabou de transicionar para fora do expediente ou é a primeira checagem
         if (previousScheduleAllowedRef.current !== false) {
           previousScheduleAllowedRef.current = false;
-          offHoursPromptShownForCurrentPeriodRef.current = false;
         }
 
-        // Exibe apenas UMA vez para este período de fora de expediente / almoço
-        if (!offHoursPromptShownForCurrentPeriodRef.current) {
+        // Chave de período para garantir que só alerte uma única vez neste período/sessão
+        const periodType = schedule.isLunch ? "lunch" : schedule.isWeekend ? "weekend" : schedule.isHoliday ? "holiday" : "off_hours";
+        const todayStr = new Date().toISOString().split("T")[0];
+        const periodKey = `mykaflow_offhours_prompt_${todayStr}_${periodType}_${user.id}`;
+        const alreadyPromptedInSession = sessionStorage.getItem(periodKey) === "true";
+
+        // Exibe apenas UMA vez para este período de fora de expediente
+        if (!offHoursPromptShownForCurrentPeriodRef.current && !alreadyPromptedInSession) {
           offHoursPromptShownForCurrentPeriodRef.current = true;
+          sessionStorage.setItem(periodKey, "true");
           setOffHoursInfo(schedule);
           setShowOffHoursPrompt(true);
         }
@@ -9036,15 +9045,15 @@ function CrmDashboard() {
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 cursor-pointer animate-in fade-in select-none"
         >
           <div
-            onClick={handleDismissOffHoursPrompt}
-            className="glass max-w-md w-full p-8 rounded-3xl border border-sky-400/40 shadow-[0_0_50px_rgba(56,189,248,0.25)] flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 relative overflow-hidden cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+            className="glass max-w-md w-full p-7 rounded-3xl border border-sky-400/40 shadow-[0_0_50px_rgba(56,189,248,0.25)] flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 relative overflow-hidden"
           >
-            <div className="p-3.5 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-400/30 shadow-[0_0_20px_rgba(56,189,248,0.4)]">
-              <Clock className="h-9 w-9 text-sky-400" />
+            <div className={`p-3.5 rounded-2xl ${isAdmin ? "bg-amber-500/20 text-amber-400 border border-amber-400/30 shadow-[0_0_20px_rgba(245,158,11,0.4)]" : "bg-sky-500/20 text-sky-400 border border-sky-400/30 shadow-[0_0_20px_rgba(56,189,248,0.4)]"}`}>
+              {isAdmin ? <ShieldCheck className="h-9 w-9 text-amber-400" /> : <Clock className="h-9 w-9 text-sky-400" />}
             </div>
 
-            <div className="space-y-3">
-              <h2 className="text-base sm:text-lg font-black uppercase tracking-wider text-sky-400">
+            <div className="space-y-3 w-full">
+              <h2 className={`text-base sm:text-lg font-black uppercase tracking-wider ${isAdmin ? "text-amber-400" : "text-sky-400"}`}>
                 {getGreeting()},{" "}
                 <span className="text-white">
                   {user?.user_metadata?.display_name || user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Usuário")}
@@ -9052,14 +9061,43 @@ function CrmDashboard() {
                 !
               </h2>
 
-              <div className="inline-block px-3 py-1 rounded-full bg-sky-950/60 border border-sky-400/40 text-[11px] font-bold uppercase tracking-wider text-sky-300">
+              <div className="inline-block px-3 py-1 rounded-full bg-slate-950/80 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-slate-300">
                 {offHoursInfo.reason}
               </div>
 
-              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
-                Você pode apenas navegar, consultar e acompanhar tarefas.
-              </p>
+              {isAdmin ? (
+                <div className="space-y-2 text-left w-full">
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs leading-relaxed space-y-2 shadow-inner">
+                    <p className="font-black text-amber-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400" />
+                      Acesso de Administrador Autorizado
+                    </p>
+                    <p className="text-[12px] font-medium text-amber-100">
+                      Como <strong>Administrador</strong>, você possui autorização total e irrestrita para trabalhar normalmente na plataforma em qualquer horário, dia ou ocasião.
+                    </p>
+                    <div className="pt-1 text-[11px] text-amber-300/90 space-y-0.5 border-t border-amber-500/20 font-mono">
+                      <p>✓ Início e controle de atividades liberados</p>
+                      <p>✓ Cronômetro ativo sem encerramento automático</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
+                  Você pode apenas navegar, consultar e acompanhar tarefas.
+                </p>
+              )}
             </div>
+
+            <button
+              onClick={handleDismissOffHoursPrompt}
+              className={`w-full py-2.5 px-4 rounded-xl font-black uppercase tracking-wider text-xs shadow-lg transition-all cursor-pointer ${
+                isAdmin
+                  ? "bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-500/20"
+                  : "bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-sky-500/20"
+              }`}
+            >
+              {isAdmin ? "Entendido, Prosseguir" : "Entendido"}
+            </button>
           </div>
         </div>
       )}

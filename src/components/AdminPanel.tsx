@@ -1,8 +1,24 @@
 import { useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { ShieldCheck, RefreshCw, ShieldAlert } from "lucide-react";
+import { ShieldCheck, RefreshCw, ShieldAlert, UserPlus, X } from "lucide-react";
+
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL || "https://rbrqcncojnzmvebtznaf.supabase.co";
+const supabaseAnonKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJicnFjbmNvam56bXZlYnR6bmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5Nzg2MTYsImV4cCI6MjA5MzkxOTk1MH0.AJArYP7yHBiNu8GgxZYl4Bcga378drJMK75i32zvQAs";
+
+// Cliente isolado com persistSession: false para não desconectar/sobrescrever o Administrador logado
+const isolatedAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});
 
 function genPassword(len = 14) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
@@ -13,7 +29,7 @@ function genPassword(len = 14) {
   return p;
 }
 
-export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
+export function AdminPanel({ onSuccess, onCancel }: { onSuccess?: () => void; onCancel?: () => void }) {
   const { user, role, fetchRole } = useAuth();
   const isAdmin = role === "admin";
 
@@ -22,7 +38,6 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
   const [roleOption, setRoleOption] = useState<"admin" | "financeiro" | "crm">("crm");
   const [password, setPassword] = useState(genPassword());
   const [busy, setBusy] = useState(false);
-  const [lastCreated, setLastCreated] = useState<{ email: string; password: string } | null>(null);
 
   async function handlePromote() {
     if (!user) return;
@@ -46,44 +61,52 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!name.trim() || !email.trim()) {
+      return toast.error("Preencha todos os campos obrigatórios.");
+    }
     setBusy(true);
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
+      // 1. Criar credenciais no Supabase Auth sem alterar a sessão do Administrador
+      const { data: authData, error: authError } = await isolatedAuthClient.auth.signUp({
+        email: email.trim().toLowerCase(),
         password,
         options: {
-          data: { display_name: name },
+          data: { display_name: name.trim().toUpperCase() },
         },
       });
 
       if (authError) throw authError;
 
+      // 2. Gravar perfil e permissão utilizando o cliente autenticado do Administrador
       if (authData.user) {
+        const newUserId = authData.user.id;
+
         await supabase.from("profiles").upsert({
-          id: authData.user.id,
-          display_name: name.toUpperCase(),
-          email: email,
+          id: newUserId,
+          display_name: name.trim().toUpperCase(),
+          email: email.trim().toLowerCase(),
         });
 
         await supabase.from("user_roles").upsert(
           {
-            user_id: authData.user.id,
+            user_id: newUserId,
             role: roleOption,
           },
           { onConflict: "user_id" },
         );
       }
 
-      toast.success("Usuário criado com sucesso!");
-      setLastCreated({ email, password });
+      toast.success(`Novo usuário ${name.trim().toUpperCase()} criado com sucesso!`);
       setEmail("");
       setName("");
       setPassword(genPassword());
+
+      // Retorna imediatamente para a tela de equipe
       if (onSuccess) {
-        setTimeout(() => onSuccess(), 500);
+        onSuccess();
       }
     } catch (err: any) {
-      console.error("Erro ao criar:", err);
+      console.error("Erro ao criar usuário:", err);
       toast.error(`Erro ao criar usuário: ${err.message || "Falha na conexão"}`);
     } finally {
       setBusy(false);
@@ -91,24 +114,47 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
   }
 
   return (
-    <div className="glass rounded-2xl p-6 space-y-6">
+    <div className="glass rounded-2xl p-6 space-y-6 border border-sky-400/30 bg-slate-950/80 backdrop-blur-xl">
       <div className="space-y-4">
-        <h3 className="text-lg font-bold tracking-widest text-gradient flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5" /> Painel ADM
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2 text-white">
+            <div className="p-1.5 rounded-lg bg-sky-500/15 border border-sky-400/30 text-sky-400">
+              <UserPlus className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                Cadastrar Novo Membro
+              </h3>
+              <p className="text-[10px] text-muted-foreground">
+                Crie um novo acesso para a equipe sem deslogar da sua conta.
+              </p>
+            </div>
           </div>
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full border ${
-              isAdmin
-                ? "border-accent text-accent"
-                : role
-                  ? "border-red-500 text-red-500"
-                  : "border-white/20 text-muted-foreground"
-            }`}
-          >
-            {role?.toUpperCase() || "CARREGANDO..."}
-          </span>
-        </h3>
+
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                isAdmin
+                  ? "border-sky-400 text-sky-300 bg-sky-500/15"
+                  : role
+                    ? "border-red-500 text-red-500 bg-red-500/10"
+                    : "border-white/20 text-muted-foreground"
+              }`}
+            >
+              ADM LOGADO: {user?.email}
+            </span>
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="btn-ghost-neon p-1.5 rounded-lg text-muted-foreground hover:text-white cursor-pointer"
+                title="Fechar formulário"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
 
         {role !== "admin" && (
           <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 space-y-3">
@@ -122,7 +168,7 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
             <button
               onClick={handlePromote}
               disabled={busy}
-              className="w-full py-2 bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest"
+              className="w-full py-2 bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest cursor-pointer"
             >
               {busy ? "Processando..." : "Tornar-me Administrador"}
             </button>
@@ -130,67 +176,95 @@ export function AdminPanel({ onSuccess }: { onSuccess?: () => void }) {
         )}
 
         <form onSubmit={submit} className="space-y-3">
-          <input
-            required
-            placeholder="Nome Completo"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="input-futuristic w-full rounded-lg px-3 py-2 outline-none uppercase font-bold"
-          />
-          <input
-            required
-            type="email"
-            placeholder="E-mail de Acesso"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="input-futuristic w-full rounded-lg px-3 py-2 outline-none font-mono"
-          />
-          <select
-            value={roleOption}
-            onChange={(e) => setRoleOption(e.target.value as any)}
-            className="input-futuristic w-full rounded-lg px-3 py-2 outline-none bg-black/80 font-bold uppercase text-xs cursor-pointer"
-          >
-            <option value="admin" className="bg-slate-900 font-bold text-accent">
-              ADMINISTRADOR
-            </option>
-            <option value="financeiro" className="bg-slate-900 font-bold text-emerald-400">
-              FINANCEIRO
-            </option>
-            <option value="crm" className="bg-slate-900 font-bold text-sky-400">
-              COMERCIAL
-            </option>
-          </select>
-          <div className="flex gap-2">
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+              Nome Completo do Usuário
+            </label>
             <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input-futuristic flex-1 rounded-lg px-3 py-2 font-mono text-xs outline-none"
+              required
+              placeholder="Ex: JOÃO SILVA"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="input-futuristic w-full rounded-xl px-3 py-2.5 outline-none uppercase font-bold text-xs"
             />
-            <button
-              type="button"
-              onClick={() => setPassword(genPassword())}
-              className="btn-ghost-neon px-2 rounded-lg"
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+              E-mail de Acesso
+            </label>
+            <input
+              required
+              type="email"
+              placeholder="joao@empresa.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input-futuristic w-full rounded-xl px-3 py-2.5 outline-none font-mono text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+              Perfil de Permissão
+            </label>
+            <select
+              value={roleOption}
+              onChange={(e) => setRoleOption(e.target.value as any)}
+              className="input-futuristic w-full rounded-xl px-3 py-2.5 outline-none bg-black/80 font-bold uppercase text-xs cursor-pointer"
             >
-              <RefreshCw className="h-4 w-4" />
+              <option value="crm" className="bg-slate-900 font-bold text-sky-400">
+                COMERCIAL (CRM)
+              </option>
+              <option value="financeiro" className="bg-slate-900 font-bold text-emerald-400">
+                FINANCEIRO
+              </option>
+              <option value="admin" className="bg-slate-900 font-bold text-accent">
+                ADMINISTRADOR
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+              Senha Provisória
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input-futuristic flex-1 rounded-xl px-3 py-2.5 font-mono text-xs outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setPassword(genPassword())}
+                className="btn-ghost-neon px-3 rounded-xl flex items-center gap-1 text-xs cursor-pointer"
+                title="Gerar nova senha"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="btn-ghost-neon px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Cancelar
+              </button>
+            )}
+            <button
+              disabled={busy}
+              type="submit"
+              className="btn-futuristic px-6 py-2.5 rounded-xl text-xs uppercase font-black text-slate-950 flex items-center gap-1.5 shadow-lg shadow-sky-400/20 cursor-pointer"
+            >
+              <UserPlus className="h-4 w-4" />
+              <span>{busy ? "Criando Usuário..." : "Criar Acesso"}</span>
             </button>
           </div>
-          <button
-            disabled={busy}
-            type="submit"
-            className="btn-futuristic w-full rounded-lg py-3 text-xs uppercase font-bold"
-          >
-            {busy ? "Criando..." : "Criar Acesso"}
-          </button>
         </form>
-
-        {lastCreated && (
-          <div className="p-3 rounded-lg bg-accent/10 border border-accent/30 text-[10px] font-mono">
-            <p className="text-accent uppercase mb-1">Sucesso!</p>
-            <p>
-              {lastCreated.email} / {lastCreated.password}
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

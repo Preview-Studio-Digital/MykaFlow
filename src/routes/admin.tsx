@@ -26,9 +26,17 @@ import { CrmAnalytics } from "@/components/CrmAnalytics";
 import { AdminAlertsManager } from "@/components/AdminAlertsManager";
 import { WorkHoursManager } from "@/components/WorkHoursManager";
 import { EditMemberDialog, type MemberProfile } from "@/components/EditMemberDialog";
+import { AdminPanel } from "@/components/AdminPanel";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { Wallet } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      from: (search.from as string) || "",
+      tab: (search.tab as string) || "",
+    };
+  },
   component: AdminPage,
 });
 
@@ -42,7 +50,36 @@ interface Category {
 
 function AdminPage() {
   const { user, role, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"analytics" | "alerts" | "users" | "categories" | "integration" | "work_hours">("analytics");
+  const search = Route.useSearch();
+  const navigate = useNavigate();
+
+  const handleBack = () => {
+    if (search.from === "crm") {
+      navigate({ to: "/crm" });
+    } else if (search.from === "financeiro") {
+      navigate({ to: "/financeiro" });
+    } else if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      navigate({ to: "/" });
+    }
+  };
+
+  const [activeTab, setActiveTab] = useState<"analytics" | "alerts" | "users" | "categories" | "integration" | "work_hours">(() => {
+    if (search.tab && ["analytics", "alerts", "users", "categories", "integration", "work_hours"].includes(search.tab)) {
+      return search.tab as any;
+    }
+    const saved = localStorage.getItem("mykaflow_admin_tab");
+    if (saved && ["analytics", "alerts", "users", "categories", "integration", "work_hours"].includes(saved)) {
+      return saved as any;
+    }
+    return "users"; // Default direto para Equipe
+  });
+
+  const handleTabChange = (tab: "analytics" | "alerts" | "users" | "categories" | "integration" | "work_hours") => {
+    setActiveTab(tab);
+    localStorage.setItem("mykaflow_admin_tab", tab);
+  };
 
   const [profiles, setProfiles] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -139,13 +176,20 @@ function AdminPage() {
       <div className="w-full flex-1 flex flex-col min-h-0">
         <header className="mb-3 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="btn-ghost-neon p-2 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white"
-              title="Voltar ao Seletor de Módulos (Hub Inicial)"
+            <button
+              type="button"
+              onClick={handleBack}
+              className="btn-ghost-neon p-2 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white cursor-pointer"
+              title={
+                search.from === "crm"
+                  ? "Voltar para Gestão Comercial"
+                  : search.from === "financeiro"
+                  ? "Voltar para Módulo Financeiro"
+                  : "Voltar"
+              }
             >
               <ChevronLeft className="h-5 w-5" />
-            </Link>
+            </button>
             <div className="flex flex-col justify-center">
               <svg
                 viewBox="0 0 200 26"
@@ -170,37 +214,7 @@ function AdminPage() {
 
           <nav className="flex items-center gap-1.5 p-1 rounded-2xl bg-white/5 border border-white/10 overflow-x-auto max-w-full no-scrollbar shrink-0">
             <button
-              onClick={() => setActiveTab("analytics")}
-              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "analytics"
-                  ? "bg-sky-500 text-white shadow-lg shadow-sky-500/25"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <PieChartIcon className="h-3.5 w-3.5" /> Atividades & Gráficos
-            </button>
-            <button
-              onClick={() => setActiveTab("work_hours")}
-              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "work_hours"
-                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Clock className="h-3.5 w-3.5" /> Horas de Trabalho
-            </button>
-            <button
-              onClick={() => setActiveTab("alerts")}
-              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "alerts"
-                  ? "bg-amber-500 text-black font-black shadow-lg shadow-amber-500/25"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <BellIcon className="h-3.5 w-3.5" /> Alertas & Auditoria
-            </button>
-            <button
-              onClick={() => setActiveTab("users")}
+              onClick={() => handleTabChange("users")}
               className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === "users"
                   ? "bg-primary text-white shadow-lg shadow-primary/20"
@@ -210,7 +224,37 @@ function AdminPage() {
               <Users className="h-3.5 w-3.5" /> Equipe
             </button>
             <button
-              onClick={() => setActiveTab("categories")}
+              onClick={() => handleTabChange("analytics")}
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "analytics"
+                  ? "bg-sky-500 text-white shadow-lg shadow-sky-500/25"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <PieChartIcon className="h-3.5 w-3.5" /> Atividades & Gráficos
+            </button>
+            <button
+              onClick={() => handleTabChange("work_hours")}
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "work_hours"
+                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Clock className="h-3.5 w-3.5" /> Produtividade
+            </button>
+            <button
+              onClick={() => handleTabChange("alerts")}
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "alerts"
+                  ? "bg-amber-500 text-black font-black shadow-lg shadow-amber-500/25"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <BellIcon className="h-3.5 w-3.5" /> Alertas
+            </button>
+            <button
+              onClick={() => handleTabChange("categories")}
               className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === "categories"
                   ? "bg-primary text-white shadow-lg shadow-primary/20"
@@ -220,7 +264,7 @@ function AdminPage() {
               <FolderTree className="h-3.5 w-3.5" /> Categorias
             </button>
             <button
-              onClick={() => setActiveTab("integration")}
+              onClick={() => handleTabChange("integration")}
               className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === "integration"
                   ? "bg-accent text-white shadow-lg shadow-accent/20"
@@ -285,21 +329,39 @@ function UserList({
   const { user: currentUser } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: React.ReactNode;
+    confirmText?: string;
+    variant?: "danger" | "warning" | "info";
+    requireKeyword?: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
 
-  async function handleDeleteUser(targetUserId: string, userName: string) {
-    if (!confirm(`Tem certeza que deseja EXCLUIR DEFINITIVAMENTE o usuário ${userName.toUpperCase()}?`)) return;
-    setBusy(targetUserId);
-    try {
-      const { error } = await supabase.from("profiles").delete().eq("id", targetUserId);
-      if (error) throw error;
-      await supabase.from("user_roles").delete().eq("user_id", targetUserId);
-      toast.success(`Usuário ${userName.toUpperCase()} excluído com sucesso.`);
-      onRefresh();
-    } catch (err: any) {
-      toast.error(`Erro ao excluir: ${err.message || "Erro desconhecido"}`);
-    } finally {
-      setBusy(null);
-    }
+  function handleDeleteUser(targetUserId: string, userName: string) {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Excluir Usuário",
+      description: `Tem certeza que deseja EXCLUIR DEFINITIVAMENTE o usuário ${userName.toUpperCase()}?\n\nEsta ação removerá todos os direitos de acesso e dados do perfil do sistema.`,
+      confirmText: "Excluir Usuário",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        setBusy(targetUserId);
+        try {
+          const { error } = await supabase.from("profiles").delete().eq("id", targetUserId);
+          if (error) throw error;
+          await supabase.from("user_roles").delete().eq("user_id", targetUserId);
+          toast.success(`Usuário ${userName.toUpperCase()} excluído com sucesso.`);
+          onRefresh();
+        } catch (err: any) {
+          toast.error(`Erro ao excluir: ${err.message || "Erro desconhecido"}`);
+        } finally {
+          setBusy(null);
+        }
+      },
+    });
   }
 
   if (loading)
@@ -315,7 +377,7 @@ function UserList({
         <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase">
           <Users className="h-5 w-5 text-accent" /> Gestão de Equipe & Permissões
         </h3>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="text-[10px] uppercase tracking-widest opacity-50 font-black">
             {profiles.length} Membros
           </span>
@@ -330,7 +392,13 @@ function UserList({
 
       {showAdminPanel && (
         <div className="mb-6 animate-in slide-in-from-top-4">
-          <AdminPanel onSuccess={() => { setShowAdminPanel(false); onRefresh(); }} />
+          <AdminPanel
+            onSuccess={() => {
+              setShowAdminPanel(false);
+              onRefresh();
+            }}
+            onCancel={() => setShowAdminPanel(false)}
+          />
         </div>
       )}
 
@@ -385,7 +453,7 @@ function UserList({
                           : "bg-sky-500/20 text-sky-300 border-sky-500/40"
                       }`}
                     >
-                      {isAdmin ? "🛡️ ADM" : isFinance ? "💵 FINANCEIRO" : "👥 COMERCIAL"}
+                      {isAdmin ? "🛡️ ADMINISTRADOR" : isFinance ? "💵 FINANCEIRO" : "👥 COMERCIAL"}
                     </span>
                   </div>
                   <p className="text-[10px] text-muted-foreground font-mono opacity-70 mt-0.5 truncate">
@@ -418,6 +486,21 @@ function UserList({
           );
         })}
       </div>
+
+      {/* Modal Futurista de Confirmação */}
+      {confirmConfig && (
+        <ConfirmModal
+          isOpen={confirmConfig.isOpen}
+          onClose={() => setConfirmConfig(null)}
+          onConfirm={confirmConfig.onConfirm}
+          title={confirmConfig.title}
+          description={confirmConfig.description}
+          confirmText={confirmConfig.confirmText}
+          variant={confirmConfig.variant || "danger"}
+          requireKeyword={confirmConfig.requireKeyword}
+          isLoading={busy !== null}
+        />
+      )}
     </div>
   );
 }
@@ -464,48 +547,78 @@ function CategoryManager() {
        toast.error(error.message);
        return;
      }
-     toast.success("Categoria adicionada");
+     toast.success("Categoria adicionada com sucesso!");
      setNewName("");
      load();
    }
  
-   async function handleDelete(id: string) {
-     if (!confirm("Excluir categoria? Subcategorias vinculadas também serão removidas.")) return;
-     const { error } = await supabase.from("financial_categories").delete().eq("id", id);
-     if (error) {
-       toast.error(error.message);
-       return;
-     }
-     toast.success("Excluída");
-     load();
-   }
- 
-   async function handleAddSub(categoryId: string) {
-     if (!user) return;
-     const name = prompt("Nome da nova subcategoria:");
-     if (!name?.trim()) return;
-     const { error } = await supabase.from("financial_subcategories").insert({
-       name: name.trim().toUpperCase(),
-       category_id: categoryId,
-       user_id: user.id,
+   function handleDelete(id: string) {
+     setConfirmConfig({
+       isOpen: true,
+       title: "Excluir Categoria",
+       description: "Deseja realmente excluir esta categoria? As subcategorias vinculadas a ela também serão removidas.",
+       confirmText: "Excluir",
+       variant: "danger",
+       onConfirm: async () => {
+         setConfirmConfig(null);
+         const { error } = await supabase.from("financial_categories").delete().eq("id", id);
+         if (error) {
+           toast.error(error.message);
+           return;
+         }
+         toast.success("Categoria excluída com sucesso!");
+         load();
+       },
      });
-     if (error) {
-       toast.error(error.message);
-       return;
-     }
-     toast.success("Subcategoria adicionada");
-     load();
    }
  
-   async function handleDeleteSub(id: string) {
-     if (!confirm("Excluir subcategoria?")) return;
-     const { error } = await supabase.from("financial_subcategories").delete().eq("id", id);
-     if (error) {
-       toast.error(error.message);
-       return;
-     }
-     toast.success("Subcategoria excluída");
-     load();
+   function handleAddSub(categoryId: string) {
+     if (!user) return;
+     setConfirmConfig({
+       isOpen: true,
+       title: "Nova Subcategoria",
+       description: "Digite o nome da nova subcategoria para adicionar a esta categoria:",
+       confirmText: "Adicionar",
+       variant: "info",
+       isInputPrompt: true,
+       inputLabel: "Nome da Subcategoria",
+       inputPlaceholder: "Ex: COMBUSTÍVEL, SOFTWARES, ALUGUEL...",
+       onConfirmWithInput: async (name: string) => {
+         if (!name.trim()) return;
+         setConfirmConfig(null);
+         const { error } = await supabase.from("financial_subcategories").insert({
+           name: name.trim().toUpperCase(),
+           category_id: categoryId,
+           user_id: user.id,
+         });
+         if (error) {
+           toast.error(error.message);
+           return;
+         }
+         toast.success("Subcategoria adicionada com sucesso!");
+         load();
+       },
+     });
+   }
+ 
+   function handleDeleteSub(id: string) {
+     setConfirmConfig({
+       isOpen: true,
+       title: "Excluir Subcategoria",
+       description: "Deseja realmente excluir esta subcategoria?",
+       confirmText: "Excluir",
+       variant: "danger",
+       onConfirm: async () => {
+         setConfirmConfig(null);
+         const { error } = await supabase.from("financial_subcategories").delete().eq("id", id);
+         if (error) {
+           toast.error(error.message);
+           return;
+         }
+         toast.success("Subcategoria excluída com sucesso!");
+         load();
+       },
+     });
    }
  
    const incomeCategories = categories.filter((c) => c.type === "income");
@@ -680,6 +793,23 @@ function CategoryManager() {
            </div>
          </div>
        )}
+ 
+       {/* Modal Futurista de Confirmação & Criação */}
+       {confirmConfig && (
+         <ConfirmModal
+           isOpen={confirmConfig.isOpen}
+           onClose={() => setConfirmConfig(null)}
+           onConfirm={confirmConfig.onConfirm}
+           onConfirmWithInput={confirmConfig.onConfirmWithInput}
+           title={confirmConfig.title}
+           description={confirmConfig.description}
+           confirmText={confirmConfig.confirmText}
+           variant={confirmConfig.variant || "danger"}
+           isInputPrompt={confirmConfig.isInputPrompt}
+           inputLabel={confirmConfig.inputLabel}
+           inputPlaceholder={confirmConfig.inputPlaceholder}
+         />
+       )}
      </div>
-  );
-}
+   );
+ }

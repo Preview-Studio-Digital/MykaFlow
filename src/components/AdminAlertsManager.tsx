@@ -242,7 +242,7 @@ export function AdminAlertsManager() {
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center text-muted-foreground uppercase tracking-widest text-xs">
-        Carregando Central de Alertas e Auditoria ADM...
+        Carregando Central de Alertas ADM...
       </div>
     );
   }
@@ -259,7 +259,7 @@ export function AdminAlertsManager() {
             <div>
               <div className="flex items-center gap-2.5">
                 <h2 className="text-xl font-black uppercase tracking-wider text-white">
-                  Central de Alertas & Auditoria ADM
+                  Central de Alertas ADM
                 </h2>
                 {totalAlertsCount > 0 ? (
                   <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white font-mono font-black text-xs shadow-md animate-pulse">

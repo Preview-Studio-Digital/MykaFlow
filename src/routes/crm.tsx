@@ -89,6 +89,7 @@ import {
   recordActivitySessionAudit,
   recordInactivitySeconds,
 } from "@/lib/work-time-tracker";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 export const Route = createFileRoute("/crm")({
   component: CrmDashboard,
@@ -161,7 +162,7 @@ export interface DealMention {
 }
 
 // Helper para obter todas as menções vinculadas a um deal
-export function getDealMentions(deal: Deal | null): DealMention[] {
+function getDealMentions(deal: Deal | null): DealMention[] {
   if (!deal || !deal.notes) return [];
   const mentions: DealMention[] = [];
   try {
@@ -182,7 +183,7 @@ export function getDealMentions(deal: Deal | null): DealMention[] {
 }
 
 // Helper para obter todas as respostas de menções de um deal
-export function getDealMentionReplies(deal: Deal | null): DealMentionReply[] {
+function getDealMentionReplies(deal: Deal | null): DealMentionReply[] {
   if (!deal || !deal.notes) return [];
   const replies: DealMentionReply[] = [];
   try {
@@ -214,7 +215,7 @@ export interface DealSubtaskCompletion {
 }
 
 // Helper para obter todas as conclusões de tarefas vinculadas registradas na atividade mãe
-export function getDealSubtaskCompletions(deal: Deal | null): DealSubtaskCompletion[] {
+function getDealSubtaskCompletions(deal: Deal | null): DealSubtaskCompletion[] {
   if (!deal || !deal.notes) return [];
   const completions: DealSubtaskCompletion[] = [];
   try {
@@ -235,7 +236,7 @@ export function getDealSubtaskCompletions(deal: Deal | null): DealSubtaskComplet
 }
 
 // Helper para obter a data da última visualização do responsável da atividade
-export function getResponsibleLastSeen(deal: Deal | null): string | null {
+function getResponsibleLastSeen(deal: Deal | null): string | null {
   if (!deal || !deal.notes) return null;
   const match = deal.notes.match(/\[RESPONSIBLE_LAST_SEEN:(.*?)\]/);
   return match ? match[1] : null;
@@ -253,7 +254,7 @@ export interface DealTimeSession {
 }
 
 // Helper para obter a sessão ativa de trabalho do deal
-export function getDealActiveWorker(deal: Deal | null): { userId: string; userName: string; startedAt: string } | null {
+function getDealActiveWorker(deal: Deal | null): { userId: string; userName: string; startedAt: string } | null {
   if (!deal) return null;
   if (deal.notes && deal.notes.includes("[WORK_ACTIVE:")) {
     try {
@@ -274,7 +275,7 @@ export function getDealActiveWorker(deal: Deal | null): { userId: string; userNa
 }
 
 // Helper para obter o histórico completo de sessões de trabalho do deal
-export function getDealWorkSessions(deal: Deal | null): DealTimeSession[] {
+function getDealWorkSessions(deal: Deal | null): DealTimeSession[] {
   if (!deal || !deal.notes) return [];
   const sessions: DealTimeSession[] = [];
   try {
@@ -290,7 +291,7 @@ export function getDealWorkSessions(deal: Deal | null): DealTimeSession[] {
 }
 
 // Helper para calcular o tempo total trabalhado (em segundos)
-export function getDealTotalWorkSeconds(deal: Deal | null): number {
+function getDealTotalWorkSeconds(deal: Deal | null): number {
   if (!deal) return 0;
   const sessions = getDealWorkSessions(deal);
   let total = sessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
@@ -303,7 +304,7 @@ export function getDealTotalWorkSeconds(deal: Deal | null): number {
 }
 
 // Helper para formatar segundos em "00h 00m 00s" ou "00h 00m"
-export function formatDurationHoursMinutes(totalSeconds: number): string {
+function formatDurationHoursMinutes(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
@@ -436,9 +437,33 @@ function formatPhone(value: string): string {
 }
 
 // Helper padronizado para remover prefixos de categoria (ex: [REQ. INTERNA], [TAREFA], [ORÇAMENTO], etc.)
-export function getCleanDealTitle(title: string | undefined | null): string {
+function getCleanDealTitle(title: string | undefined | null): string {
   if (!title) return "";
   return title.replace(/^\[[^\]]+\]\s*/i, "").trim().toUpperCase();
+}
+
+// Helper para obter o título gramatical correto da duração média por etapa/coluna
+function getStageDurationLabel(stageIdOrTitle?: string): string {
+  const normalized = (stageIdOrTitle || "").toLowerCase().trim();
+  if (normalized === "lead" || normalized === "tarefas" || normalized.includes("tarefa")) {
+    return "DURAÇÃO MÉDIA DAS TAREFAS";
+  }
+  if (normalized === "qualification" || normalized === "orçamentos" || normalized === "orcamentos" || normalized.includes("orçamento") || normalized.includes("orcamento")) {
+    return "DURAÇÃO MÉDIA DOS ORÇAMENTOS";
+  }
+  if (normalized === "negotiation" || normalized === "negociações" || normalized === "negociacoes" || normalized.includes("negocia")) {
+    return "DURAÇÃO MÉDIA DAS NEGOCIAÇÕES";
+  }
+  if (normalized === "won" || normalized === "contratos" || normalized.includes("contrato")) {
+    return "DURAÇÃO MÉDIA DOS CONTRATOS";
+  }
+  if (normalized === "completed" || normalized === "concluídos" || normalized === "concluidos" || normalized.includes("concl")) {
+    return "DURAÇÃO MÉDIA DOS CONCLUÍDOS";
+  }
+  if (normalized === "lost" || normalized === "perdidos" || normalized.includes("perd")) {
+    return "DURAÇÃO MÉDIA DOS PERDIDOS";
+  }
+  return `DURAÇÃO MÉDIA EM ${stageIdOrTitle ? stageIdOrTitle.toUpperCase() : "ATIVIDADES"}`;
 }
 
 export interface DealQuoteFileInfo {
@@ -449,7 +474,7 @@ export interface DealQuoteFileInfo {
 }
 
 // Helper para extrair informações do arquivo de orçamento oficial e dados parseados
-export function getDealQuoteFile(deal: Deal | null, _historyList?: DealHistoryItem[]): DealQuoteFileInfo | null {
+function getDealQuoteFile(deal: Deal | null, _historyList?: DealHistoryItem[]): DealQuoteFileInfo | null {
   if (!deal) return null;
 
   let extractedFromNotes: ExtractedQuoteData | null = null;
@@ -713,12 +738,24 @@ function getInternalDeadlineStyle(deadlineStr?: string | null) {
   };
 }
 
+// Helper para identificar a etapa de origem de uma atividade arquivada ('lead' | 'completed' | 'lost')
+function getArchivedOriginStage(deal: Deal): "lead" | "completed" | "lost" {
+  if (deal.notes?.includes("ORIGIN_STAGE:lost")) return "lost";
+  if (deal.notes?.includes("ORIGIN_STAGE:completed")) return "completed";
+  if (deal.notes?.includes("ORIGIN_STAGE:lead")) return "lead";
+  // Fallback para itens legados:
+  if (deal.title.includes("[TAREFA]") || deal.title.includes("[REQ. INTERNA]") || !deal.customer_id) {
+    return "lead";
+  }
+  return "completed";
+}
+
 // Algoritmo de Cores Vivas de Inatividade (Fundo Preenchido e Visível):
 // 1º dia (0 a <1 d): Verde Vivo ("atualização hoje")
 // 2º dia (1 a <2 d): Verde-Lima / Amarelado ("há 2 dias")
 // 3º dia (2 a <3 d): Amarelo Intenso ("há 3 dias")
 // Helper para cálculo de dias civis / efetivos (comparação por data calendário, desconsiderando horas corridas)
-export function getEffectiveCalendarDays(dateStrOrTimestamp?: string | number | Date | null): number {
+function getEffectiveCalendarDays(dateStrOrTimestamp?: string | number | Date | null): number {
   if (!dateStrOrTimestamp) return 0;
   try {
     const d = new Date(dateStrOrTimestamp);
@@ -1303,6 +1340,7 @@ function CrmDashboard() {
   // Modal / Gaveta de Requisições Internas Arquivadas
   const [isArchivedModalOpen, setIsArchivedModalOpen] = useState(false);
   const [archivedSearchTerm, setArchivedSearchTerm] = useState("");
+  const [archivedFilterStage, setArchivedFilterStage] = useState<"lead" | "completed" | "lost" | "ALL">("ALL");
 
   // Menu Lateral Flutuante / Off-Canvas
   const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
@@ -1546,7 +1584,7 @@ function CrmDashboard() {
             }
           }
           if (!parentId) {
-            const match = deal.notes.match(/Tarefa vinculada a:\s*(.*?)\s*\(Nº\s*([0-9.]+)\)/i);
+            const match = deal.notes.match(/(?:Tarefa|Atividade)\s*vinculada\s*a:\s*(.*?)\s*\(Nº\s*([0-9.]+)\)/i);
             if (match) {
               parentReq = match[2].trim();
             }
@@ -1660,8 +1698,8 @@ function CrmDashboard() {
       }
     }
 
-    // 2. Regex nos notes: Tarefa vinculada a: ... (Nº ...)
-    const match = deal.notes.match(/Tarefa vinculada a:\s*(.*?)\s*\(Nº\s*([0-9.]+)\)/i);
+    // 2. Regex nos notes: Tarefa/Atividade vinculada a: ... (Nº ...)
+    const match = deal.notes.match(/(?:Tarefa|Atividade)\s*vinculada\s*a:\s*(.*?)\s*\(Nº\s*([0-9.]+)\)/i);
     if (match) {
       const title = match[1].trim();
       const reqNumber = match[2].trim();
@@ -1675,6 +1713,15 @@ function CrmDashboard() {
     }
 
     return null;
+  };
+
+  // Helper para obter atividades arquivadas pertencentes a uma coluna específica (Tarefas, Concluídos, Perdidos)
+  const getArchivedDealsForStage = (stageId: "lead" | "completed" | "lost", allDeals: Deal[]) => {
+    return allDeals.filter((d) => {
+      if (d.stage !== "archived") return false;
+      if (getParentDealInfo(d)) return false;
+      return getArchivedOriginStage(d) === stageId;
+    });
   };
 
   // Helper para obter o cliente de um deal (incluindo herança de atividade primária)
@@ -2421,49 +2468,64 @@ function CrmDashboard() {
   }
 
   const [isDeletingDeal, setIsDeletingDeal] = useState<boolean>(false);
+  const [crmConfirmConfig, setCrmConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: "danger" | "warning" | "info" | "success";
+    requireKeyword?: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
 
-  async function handleDeleteDeal(deal: Deal) {
+  function handleDeleteDeal(deal: Deal) {
     if (role !== "admin") {
       return toast.error("Apenas administradores podem remover requisições do sistema");
     }
 
     const reqNum = getDealReqNumber(deal, deals);
     const cleanTitle = deal.title.replace(/^\[REQ\.\s*(INTERNA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "");
-    const confirmDelete = window.confirm(
-      `Tem certeza que deseja excluir permanentemente a Requisição Nº ${reqNum} ("${cleanTitle}")?\n\nEsta ação removerá a requisição e todo o seu histórico e não poderá ser desfeita.`
-    );
 
-    if (!confirmDelete) return;
+    setCrmConfirmConfig({
+      isOpen: true,
+      title: `Excluir Requisição Nº ${reqNum}`,
+      description: `Tem certeza que deseja excluir permanentemente a Requisição Nº ${reqNum} ("${cleanTitle}")?\n\nEsta ação removerá a requisição e todo o seu histórico e não poderá ser desfeita.`,
+      confirmText: "Excluir Definitivamente",
+      variant: "danger",
+      onConfirm: async () => {
+        setCrmConfirmConfig(null);
+        setIsDeletingDeal(true);
+        try {
+          // 1. Remove histórico vinculado
+          try {
+            await supabase
+              .from("crm_deal_history")
+              .delete()
+              .eq("deal_id", deal.id);
+          } catch (hErr) {
+            console.warn("Aviso ao remover histórico da requisição:", hErr);
+          }
 
-    setIsDeletingDeal(true);
-    try {
-      // 1. Remove histórico vinculado
-      try {
-        await supabase
-          .from("crm_deal_history")
-          .delete()
-          .eq("deal_id", deal.id);
-      } catch (hErr) {
-        console.warn("Aviso ao remover histórico da requisição:", hErr);
-      }
+          // 2. Remove a requisição do CRM
+          const { error } = await supabase
+            .from("crm_deals")
+            .delete()
+            .eq("id", deal.id);
 
-      // 2. Remove a requisição do CRM
-      const { error } = await supabase
-        .from("crm_deals")
-        .delete()
-        .eq("id", deal.id);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      // 3. Atualiza estado local
-      setDeals((prev) => prev.filter((d) => d.id !== deal.id));
-      setSelectedDealForHistory(null);
-      toast.success(`Requisição Nº ${reqNum} excluída com sucesso!`);
-    } catch (err: any) {
-      toast.error("Erro ao excluir requisição: " + (err.message || "Tente novamente"));
-    } finally {
-      setIsDeletingDeal(false);
-    }
+          // 3. Atualiza estado local
+          setDeals((prev) => prev.filter((d) => d.id !== deal.id));
+          setSelectedDealForHistory(null);
+          toast.success(`Requisição Nº ${reqNum} excluída com sucesso!`);
+        } catch (err: any) {
+          toast.error("Erro ao excluir requisição: " + (err.message || "Tente novamente"));
+        } finally {
+          setIsDeletingDeal(false);
+        }
+      },
+    });
   }
 
   // Notificação Automática para Atividade Mãe quando uma Tarefa Vinculada é Concluída
@@ -2484,7 +2546,7 @@ function CrmDashboard() {
       }
 
       if (!parentDealId && completedDeal.notes) {
-        const match = completedDeal.notes.match(/Tarefa vinculada a:\s*(.*?)\s*\(Nº\s*([0-9.]+)\)/i);
+        const match = completedDeal.notes.match(/(?:Tarefa|Atividade)\s*vinculada\s*a:\s*(.*?)\s*\(Nº\s*([0-9.]+)\)/i);
         if (match && match[2]) {
           const found = deals.find((d) => getDealReqNumber(d, deals) === match[2]);
           if (found) parentDealId = found.id;
@@ -2521,10 +2583,10 @@ function CrmDashboard() {
     e.preventDefault();
     if (!selectedDealForHistory) return;
     if (!subtaskTitle.trim()) {
-      return toast.error("Informe o título da tarefa.");
+      return toast.error("Informe o título da vinculada.");
     }
     if (!subtaskAssignedTo) {
-      return toast.error("Selecione o responsável pela tarefa.");
+      return toast.error("Selecione o responsável pela vinculada.");
     }
 
     setIsCreatingSubtask(true);
@@ -2556,7 +2618,7 @@ function CrmDashboard() {
         assigned_user_id: subtaskAssignedTo,
         expected_close_date: subtaskDeadline || null,
         notes: [
-          `${parentDealTag} Tarefa vinculada a: ${parentCleanTitle} (Nº ${parentReqNum})`,
+          `${parentDealTag} Atividade vinculada a: ${parentCleanTitle} (Nº ${parentReqNum})`,
           subtaskNotesFormatted,
         ].filter(Boolean).join("\n"),
       };
@@ -2569,23 +2631,23 @@ function CrmDashboard() {
 
       if (error) throw error;
 
-      // 1. Cria histórico da própria nova tarefa
+      // 1. Cria histórico da própria nova vinculada
       try {
         await supabase.from("crm_deal_history").insert({
           deal_id: createdData.id,
           user_id: user?.id,
           user_name: creatorName,
           action_type: "created",
-          description: `Tarefa criada a partir da atividade "${selectedDealForHistory.title}" e direcionada para ${assignedName}.`,
+          description: `Vinculada criada a partir da atividade "${selectedDealForHistory.title}" e direcionada para ${assignedName}.`,
         });
       } catch (hErr) {
-        console.warn("Aviso ao criar histórico da subtarefa:", hErr);
+        console.warn("Aviso ao criar histórico da vinculada:", hErr);
       }
 
-      // 2. Monta o texto limpo da criação da tarefa e insere na lista de logs imutáveis
-      const subtaskText = `${creatorName} criou a tarefa "${subtaskTitle.trim().toUpperCase()}" para o ${assignedName}.`;
+      // 2. Monta o texto limpo da criação da vinculada e insere na lista de logs imutáveis
+      const subtaskText = `${creatorName} criou a vinculada "${subtaskTitle.trim().toUpperCase()}" para o ${assignedName}.`;
 
-      // Adiciona a nova tarefa na lista local de deals
+      // Adiciona a nova vinculada na lista local de deals
       const newDealItem: Deal = {
         ...createdData,
         req_number: createdData.req_number || generatedReqNumber,
@@ -2608,9 +2670,9 @@ function CrmDashboard() {
       setIsSubtaskModalOpen(false);
       setModalUpdateTab("comment");
 
-      toast.success(`Tarefa criada! O registro foi inserido no campo de Nova Atualização.`);
+      toast.success(`Vinculada criada! O registro foi inserido no campo de Nova Atualização.`);
     } catch (err: any) {
-      toast.error("Erro ao criar tarefa vinculada: " + (err.message || "Tente novamente"));
+      toast.error("Erro ao criar vinculada: " + (err.message || "Tente novamente"));
     } finally {
       setIsCreatingSubtask(false);
     }
@@ -3021,238 +3083,265 @@ function CrmDashboard() {
   };
 
   // Remover Arquivo de Orçamento Oficial
-  async function handleRemoveQuoteFile() {
+  function handleRemoveQuoteFile() {
     if (!selectedDealForHistory) return;
-    const confirmRemove = window.confirm("Deseja remover o arquivo de orçamento anexado?");
-    if (!confirmRemove) return;
+    setCrmConfirmConfig({
+      isOpen: true,
+      title: "Remover Orçamento",
+      description: "Deseja remover o arquivo de orçamento anexado a esta requisição?",
+      confirmText: "Remover Arquivo",
+      variant: "warning",
+      onConfirm: async () => {
+        setCrmConfirmConfig(null);
+        try {
+          const nowIso = new Date().toISOString();
+          const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+          const cleanNotes = (selectedDealForHistory.notes || "").replace(/\[QUOTE_FILE:.*?\]\s*/g, "").trim();
 
-    try {
-      const nowIso = new Date().toISOString();
-      const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-      const cleanNotes = (selectedDealForHistory.notes || "").replace(/\[QUOTE_FILE:.*?\]\s*/g, "").trim();
+          try {
+            await supabase
+              .from("crm_deals")
+              .update({
+                quote_file_url: null,
+                quote_file_name: null,
+                quote_file_uploaded_at: null,
+                notes: cleanNotes || null,
+                updated_at: nowIso,
+              })
+              .eq("id", selectedDealForHistory.id);
+          } catch {
+            await supabase
+              .from("crm_deals")
+              .update({
+                notes: cleanNotes || null,
+                updated_at: nowIso,
+              })
+              .eq("id", selectedDealForHistory.id);
+          }
 
-      try {
-        await supabase
-          .from("crm_deals")
-          .update({
+          await registerHistoryEntry(
+            selectedDealForHistory.id,
+            "quote_file_removed",
+            `${userName} removeu o documento de orçamento.`
+          );
+
+          const updatedDeal: Deal = {
+            ...selectedDealForHistory,
             quote_file_url: null,
             quote_file_name: null,
             quote_file_uploaded_at: null,
-            notes: cleanNotes || null,
+            notes: cleanNotes || undefined,
             updated_at: nowIso,
-          })
-          .eq("id", selectedDealForHistory.id);
-      } catch {
-        await supabase
-          .from("crm_deals")
-          .update({
-            notes: cleanNotes || null,
-            updated_at: nowIso,
-          })
-          .eq("id", selectedDealForHistory.id);
-      }
+          };
 
-      await registerHistoryEntry(
-        selectedDealForHistory.id,
-        "quote_file_removed",
-        `${userName} removeu o documento de orçamento.`
-      );
+          setSelectedDealForHistory(updatedDeal);
+          setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
 
-      const updatedDeal: Deal = {
-        ...selectedDealForHistory,
-        quote_file_url: null,
-        quote_file_name: null,
-        quote_file_uploaded_at: null,
-        notes: cleanNotes || undefined,
-        updated_at: nowIso,
-      };
+          // Insere linha imutável no bloco de atualização do card expandido
+          const removeQuoteText = `${userName} removeu o orçamento anexado.`;
+          appendAutoLog(removeQuoteText);
 
-      setSelectedDealForHistory(updatedDeal);
-      setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
-
-      // Insere linha imutável no bloco de atualização do card expandido
-      const removeQuoteText = `${userName} removeu o orçamento anexado.`;
-      appendAutoLog(removeQuoteText);
-
-      toast.success("Orçamento removido.");
-    } catch (err: any) {
-      toast.error("Erro ao remover: " + err.message);
-    }
+          toast.success("Orçamento removido.");
+        } catch (err: any) {
+          toast.error("Erro ao remover: " + err.message);
+        }
+      },
+    });
   }
 
-  // Concluir Tarefa Vinculada (Fecha e armazena como concluída, gera linhas automáticas na tarefa e na atividade mãe)
-  async function handleCompleteSubtask(deal: Deal) {
+  // Concluir Vinculada (Fecha e armazena como concluída, gera linhas automáticas na vinculada e na atividade mãe)
+  function handleCompleteSubtask(deal: Deal) {
     if (!newComment.trim()) {
-      toast.error("É obrigatório preencher o campo de atualização com o andamento/conclusão da tarefa.");
+      toast.error("É obrigatório preencher o campo de atualização com o andamento/conclusão da vinculada.");
       return;
     }
 
     const reqNum = getDealReqNumber(deal, deals);
     const cleanTitle = getCleanDealTitle(deal.title);
 
-    const confirmComplete = window.confirm(
-      `Deseja concluir a Tarefa Vinculada Nº ${reqNum} ("${cleanTitle}")?\n\nEla será fechada e armazenada como concluída, e a atividade vinculada principal receberá a notificação de conclusão.`
-    );
-    if (!confirmComplete) return;
+    setCrmConfirmConfig({
+      isOpen: true,
+      title: `Concluir Vinculada Nº ${reqNum}`,
+      description: `Deseja concluir a Vinculada Nº ${reqNum} ("${cleanTitle}")?\n\nEla será fechada e armazenada como concluída, e a atividade principal receberá a notificação de conclusão.`,
+      confirmText: "Concluir e Armazenar",
+      variant: "success",
+      onConfirm: async () => {
+        setCrmConfirmConfig(null);
+        try {
+          const nowIso = new Date().toISOString();
+          const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+          const completionText = newComment.trim();
 
-    try {
-      const nowIso = new Date().toISOString();
-      const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-      const completionText = newComment.trim();
+          // 1. Linha automática imutável da conclusão na vinculada
+          const autoLogLine = `${userName} concluiu a vinculada "${cleanTitle}".`;
+          const combinedNotesText = [...autoGeneratedLogs, autoLogLine, completionText].filter(Boolean).join("\n\n");
 
-      // 1. Linha automática imutável da conclusão na tarefa
-      const autoLogLine = `${userName} concluiu a tarefa vinculada "${cleanTitle}".`;
-      const combinedNotesText = [...autoGeneratedLogs, autoLogLine, completionText].filter(Boolean).join("\n\n");
+          const { error } = await supabase
+            .from("crm_deals")
+            .update({
+              stage: "archived",
+              notes: combinedNotesText,
+              updated_at: nowIso,
+            })
+            .eq("id", deal.id);
 
-      const { error } = await supabase
-        .from("crm_deals")
-        .update({
-          stage: "archived",
-          notes: combinedNotesText,
-          updated_at: nowIso,
-        })
-        .eq("id", deal.id);
+          if (error) throw error;
 
-      if (error) throw error;
+          await registerHistoryEntry(
+            deal.id,
+            "subtask_completed",
+            `Vinculada concluída por ${userName}. Atualização: "${completionText}"`
+          );
 
-      await registerHistoryEntry(
-        deal.id,
-        "subtask_completed",
-        `Tarefa vinculada concluída por ${userName}. Atualização: "${completionText}"`
-      );
+          // 2. Notifica a atividade principal vinculada e insere a conclusão com tag de notificação sem alterar o updated_at / coloração
+          const parentInfo = getParentDealInfo(deal);
+          const parentDeal = parentInfo?.deal || deals.find((d) => d.id === parentInfo?.id || getDealReqNumber(d, deals) === parentInfo?.reqNumber);
 
-      // 2. Notifica a atividade principal vinculada e insere a conclusão com tag de notificação sem alterar o updated_at / coloração
-      const parentInfo = getParentDealInfo(deal);
-      const parentDeal = parentInfo?.deal || deals.find((d) => d.id === parentInfo?.id || getDealReqNumber(d, deals) === parentInfo?.reqNumber);
+          if (parentDeal) {
+            const subtaskCompletionObj: DealSubtaskCompletion = {
+              id: crypto.randomUUID(),
+              subtaskId: deal.id,
+              subtaskTitle: cleanTitle,
+              reqNumber: reqNum,
+              userName: userName,
+              user_id: user?.id || "",
+              completionText: completionText,
+              created_at: nowIso,
+            };
+            const completionTag = `[SUBTASK_COMPLETION:${JSON.stringify(subtaskCompletionObj)}]`;
+            const parentAutoLog = `${userName} concluiu a vinculada "${cleanTitle}" (Nº ${reqNum}).`;
+            const updatedParentNotes = parentDeal.notes
+              ? `${completionTag}\n${parentDeal.notes}\n\n${parentAutoLog}`
+              : `${completionTag}\n${parentAutoLog}`;
 
-      if (parentDeal) {
-        const subtaskCompletionObj: DealSubtaskCompletion = {
-          id: crypto.randomUUID(),
-          subtaskId: deal.id,
-          subtaskTitle: cleanTitle,
-          reqNumber: reqNum,
-          userName: userName,
-          user_id: user?.id || "",
-          completionText: completionText,
-          created_at: nowIso,
-        };
-        const completionTag = `[SUBTASK_COMPLETION:${JSON.stringify(subtaskCompletionObj)}]`;
-        const parentAutoLog = `${userName} concluiu a tarefa vinculada "${cleanTitle}" (Nº ${reqNum}).`;
-        const updatedParentNotes = parentDeal.notes
-          ? `${completionTag}\n${parentDeal.notes}\n\n${parentAutoLog}`
-          : `${completionTag}\n${parentAutoLog}`;
+            // Atualiza no banco SEM mudar updated_at para preservar a coloração de follow-up da atividade mãe
+            await supabase
+              .from("crm_deals")
+              .update({
+                notes: updatedParentNotes,
+              })
+              .eq("id", parentDeal.id);
 
-        // Atualiza no banco SEM mudar updated_at para preservar a coloração de follow-up da atividade mãe
-        await supabase
-          .from("crm_deals")
-          .update({
-            notes: updatedParentNotes,
-          })
-          .eq("id", parentDeal.id);
+            await registerHistoryEntry(
+              parentDeal.id,
+              "subtask_completed",
+              `${parentAutoLog} Atualização: "${completionText}"`
+            );
 
-        await registerHistoryEntry(
-          parentDeal.id,
-          "subtask_completed",
-          `${parentAutoLog} Atualização: "${completionText}"`
-        );
+            // Atualiza o estado da atividade pai na lista local mantendo updated_at intacto
+            setDeals((prev) =>
+              prev.map((d) =>
+                d.id === parentDeal.id
+                  ? {
+                      ...d,
+                      notes: updatedParentNotes,
+                    }
+                  : d
+              )
+            );
+          }
 
-        // Atualiza o estado da atividade pai na lista local mantendo updated_at intacto
-        setDeals((prev) =>
-          prev.map((d) =>
-            d.id === parentDeal.id
-              ? {
-                  ...d,
-                  notes: updatedParentNotes,
-                }
-              : d
-          )
-        );
-      }
+          setDeals((prev) =>
+            prev.map((d) =>
+              d.id === deal.id
+                ? { ...d, stage: "archived", notes: combinedNotesText, latest_update_author: userName, updated_at: nowIso }
+                : d
+            )
+          );
 
-      setDeals((prev) =>
-        prev.map((d) =>
-          d.id === deal.id
-            ? { ...d, stage: "archived", notes: combinedNotesText, latest_update_author: userName, updated_at: nowIso }
-            : d
-        )
-      );
-
-      setNewComment("");
-      setAutoGeneratedLogs([]);
-      setSelectedDealForHistory(null);
-      toast.success(`Tarefa Vinculada Nº ${reqNum} concluída com sucesso!`);
-    } catch (err: any) {
-      toast.error(`Erro ao concluir tarefa: ${err.message || "Erro desconhecido"}`);
-    }
+          setNewComment("");
+          setAutoGeneratedLogs([]);
+          setSelectedDealForHistory(null);
+          toast.success(`Vinculada Nº ${reqNum} concluída com sucesso!`);
+        } catch (err: any) {
+          toast.error(`Erro ao concluir vinculada: ${err.message || "Erro desconhecido"}`);
+        }
+      },
+    });
   }
 
-  // Arquivar Tarefa (Armazena os cards em categoria de arquivo sem excluir)
-  async function handleArchiveDeal(deal: Deal) {
+  // Arquivar Atividade (Armazena os cards em categoria de arquivo das colunas Tarefas, Concluídos ou Perdidos)
+  function handleArchiveDeal(deal: Deal) {
     if (!newComment.trim()) {
       toast.error("Preencha o campo Nova Atualização antes de arquivar a atividade.");
       return;
     }
 
     const reqNum = getDealReqNumber(deal, deals);
-    const cleanTitle = deal.title.replace(/^\[(REQ\.\s*INTERNA|TAREFA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "");
+    const cleanTitle = getCleanDealTitle(deal.title);
+    const originStage = deal.stage === "archived" ? getArchivedOriginStage(deal) : (deal.stage as "lead" | "completed" | "lost");
+    const typeLabel =
+      originStage === "lead" ? "Tarefa" : originStage === "completed" ? "Atividade Concluída" : "Atividade Perdida";
+    const destColumnName =
+      originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos";
 
-    const confirmArchive = window.confirm(
-      `Deseja arquivar a Tarefa Nº ${reqNum} ("${cleanTitle}")?\n\nEla sairá do quadro ativo e ficará armazenada na gaveta de "Arquivadas" com todo o seu histórico preservado.`
-    );
-    if (!confirmArchive) return;
+    setCrmConfirmConfig({
+      isOpen: true,
+      title: `Arquivar ${typeLabel} Nº ${reqNum}`,
+      description: `Deseja arquivar a ${typeLabel} Nº ${reqNum} ("${cleanTitle}")?\n\nEla sairá do quadro ativo e ficará armazenada no rodapé de "ARQUIVADAS" da coluna de ${destColumnName} com todo o seu histórico preservado.`,
+      confirmText: "Arquivar Atividade",
+      variant: "danger",
+      onConfirm: async () => {
+        setCrmConfirmConfig(null);
+        try {
+          const nowIso = new Date().toISOString();
+          const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+          const userNotes = newComment.trim();
+          const taggedNotes = `<!-- ORIGIN_STAGE:${originStage} -->\n${userNotes}`;
 
-    try {
-      const nowIso = new Date().toISOString();
-      const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-      const finalNotes = newComment.trim();
+          const { error } = await supabase
+            .from("crm_deals")
+            .update({
+              stage: "archived",
+              notes: taggedNotes,
+              updated_at: nowIso,
+            })
+            .eq("id", deal.id);
 
-      const { error } = await supabase
-        .from("crm_deals")
-        .update({
-          stage: "archived",
-          notes: finalNotes,
-          updated_at: nowIso,
-        })
-        .eq("id", deal.id);
+          if (error) throw error;
 
-      if (error) throw error;
+          await registerHistoryEntry(
+            deal.id,
+            "archived",
+            `${typeLabel} arquivada por ${userName}. [ORIGIN_STAGE:${originStage}]. Atualização final: "${userNotes}"`
+          );
 
-      await registerHistoryEntry(
-        deal.id,
-        "archived",
-        `Tarefa arquivada por ${userName}. Atualização final: "${finalNotes}"`
-      );
+          // Notifica a atividade mãe se esta for uma subtarefa vinculada
+          await notifyParentDealIfSubtask(deal, userNotes);
 
-      // Notifica a atividade mãe se esta for uma subtarefa vinculada
-      await notifyParentDealIfSubtask(deal, finalNotes);
+          setDeals((prev) =>
+            prev.map((d) =>
+              d.id === deal.id
+                ? { ...d, stage: "archived", notes: taggedNotes, latest_update_author: userName, updated_at: nowIso }
+                : d
+            )
+          );
 
-      setDeals((prev) =>
-        prev.map((d) =>
-          d.id === deal.id
-            ? { ...d, stage: "archived", notes: finalNotes, latest_update_author: userName, updated_at: nowIso }
-            : d
-        )
-      );
-
-      setNewComment("");
-      setReassignTo("");
-      setSelectedDealForHistory(null);
-      toast.success(`Tarefa Nº ${reqNum} arquivada com sucesso!`);
-    } catch (err: any) {
-      toast.error(`Erro ao arquivar tarefa: ${err.message || "Erro desconhecido"}`);
-    }
+          setNewComment("");
+          toast.success(`${typeLabel} Nº ${reqNum} arquivada com sucesso!`);
+        } catch (err: any) {
+          toast.error("Erro ao arquivar atividade: " + (err.message || "Tente novamente"));
+        }
+      },
+    });
   }
 
-  // Desarquivar / Restaurar Tarefa ao Quadro Ativo
+  // Desarquivar / Restaurar Atividade ao seu Quadro de Origem (Tarefas, Concluídos ou Perdidos)
   async function handleUnarchiveDeal(deal: Deal) {
     const reqNum = getDealReqNumber(deal, deals);
+    const originStage = getArchivedOriginStage(deal);
+    const destColumnName =
+      originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos";
+    const typeLabel =
+      originStage === "lead" ? "Tarefa" : originStage === "completed" ? "Atividade Concluída" : "Atividade Perdida";
+
     try {
       const nowIso = new Date().toISOString();
       const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
 
       const { error } = await supabase
         .from("crm_deals")
-        .update({ stage: "lead", updated_at: nowIso })
+        .update({ stage: originStage, updated_at: nowIso })
         .eq("id", deal.id);
 
       if (error) throw error;
@@ -3260,21 +3349,21 @@ function CrmDashboard() {
       await registerHistoryEntry(
         deal.id,
         "unarchived",
-        `Tarefa desarquivada e restaurada ao quadro ativo por ${userName}.`
+        `${typeLabel} desarquivada e restaurada à coluna ${destColumnName} por ${userName}.`
       );
 
       setDeals((prev) =>
         prev.map((d) =>
           d.id === deal.id
-            ? { ...d, stage: "lead", updated_at: nowIso }
+            ? { ...d, stage: originStage, updated_at: nowIso }
             : d
         )
       );
 
       setSelectedDealForHistory(null);
-      toast.success(`Requisição Nº ${reqNum} restaurada ao quadro com sucesso!`);
+      toast.success(`${typeLabel} Nº ${reqNum} restaurada para a coluna de ${destColumnName}!`);
     } catch (err: any) {
-      toast.error("Erro ao desarquivar requisição: " + (err.message || "Tente novamente"));
+      toast.error("Erro ao desarquivar: " + (err.message || "Tente novamente"));
     }
   }
 
@@ -4002,22 +4091,41 @@ function CrmDashboard() {
     );
   }, [deals, returnedHistoryList]);
 
-  const totalAdminAlerts = overdueAlerts.length + returnedAlerts.length;
-
   const totalArchivedCount = useMemo(() => {
-    return visibleDeals.filter((d) => d.stage === "archived").length;
+    return visibleDeals.filter(
+      (d) => d.stage === "archived" && !getParentDealInfo(d)
+    ).length;
   }, [visibleDeals]);
 
   const archivedDealsList = useMemo(() => {
-    return visibleDeals.filter(
-      (d) =>
-        d.stage === "archived" &&
-        (!archivedSearchTerm.trim() ||
-          d.title.toLowerCase().includes(archivedSearchTerm.toLowerCase()) ||
-          getDealReqNumber(d, deals).toLowerCase().includes(archivedSearchTerm.toLowerCase()) ||
-          (d.notes && d.notes.toLowerCase().includes(archivedSearchTerm.toLowerCase())))
-    );
-  }, [visibleDeals, archivedSearchTerm, deals]);
+    return visibleDeals.filter((d) => {
+      if (d.stage !== "archived" || getParentDealInfo(d)) return false;
+
+      if (archivedFilterStage !== "ALL") {
+        const origin = getArchivedOriginStage(d);
+        if (origin !== archivedFilterStage) return false;
+      }
+
+      if (archivedSearchTerm.trim()) {
+        const term = archivedSearchTerm.toLowerCase();
+        const title = d.title.toLowerCase();
+        const reqNum = getDealReqNumber(d, deals).toLowerCase();
+        const notes = (d.notes || "").toLowerCase();
+        const assigned = (d.assigned_user_name || "").toLowerCase();
+        const custName = (d.customer_name || "").toLowerCase();
+
+        return (
+          title.includes(term) ||
+          reqNum.includes(term) ||
+          notes.includes(term) ||
+          assigned.includes(term) ||
+          custName.includes(term)
+        );
+      }
+
+      return true;
+    });
+  }, [visibleDeals, archivedSearchTerm, archivedFilterStage, deals]);
 
   // Lista de Menções e Respostas do Usuário Logado
   const userMentionsData = useMemo(() => {
@@ -4247,36 +4355,6 @@ function CrmDashboard() {
               <span className="truncate">Orçamento</span>
             </button>
           </div>
-
-          {/* Separador */}
-          <div className="border-t border-white/10 pt-2" />
-
-          {/* Seção 2: Repositório */}
-          <div className="space-y-1.5">
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/70 px-1">
-              Repositório
-            </p>
-
-
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsSideMenuOpen(false);
-                setIsArchivedModalOpen(true);
-              }}
-              className="w-full btn-ghost-neon rounded-xl px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center justify-between gap-2 text-muted-foreground hover:text-white border-white/10 hover:border-white/20 hover:bg-white/5 shadow-sm transition-all text-left group"
-              title="Visualizar repositório de atividades arquivadas"
-            >
-              <div className="flex items-center gap-2.5 truncate">
-                <FolderArchive className="h-4 w-4 text-muted-foreground group-hover:text-white shrink-0" />
-                <span className="truncate">Arquivadas</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-md bg-white/10 text-white font-mono text-[10px] font-bold border border-white/15 shrink-0">
-                {totalArchivedCount}
-              </span>
-            </button>
-          </div>
         </div>
 
         {/* Rodapé do Menu Lateral: Sair (ADM vai para o menu de plataformas; Usuário Comum faz logout) */}
@@ -4385,6 +4463,7 @@ function CrmDashboard() {
               {role === "admin" && (
                 <Link
                   to="/admin"
+                  search={{ from: "crm" }}
                   className="btn-ghost-neon rounded-lg px-3.5 py-2 text-xs flex items-center gap-1.5 text-accent hover:text-accent-foreground"
                 >
                   <ShieldCheck className="h-4 w-4" /> ADM
@@ -5231,7 +5310,7 @@ function CrmDashboard() {
                           {hoveredUserSubcolId === group.id && (
                             <div className="w-full h-[88px] min-h-[88px] max-h-[88px] rounded-xl border border-sky-400/50 bg-gradient-to-br from-slate-950/98 via-sky-950/70 to-slate-950/95 backdrop-blur-xl px-3 py-2 flex flex-col items-center justify-center text-center shadow-[0_0_25px_rgba(56,189,248,0.3)] animate-in fade-in zoom-in-95 duration-150 select-none shrink-0 mb-2 relative z-20">
                               <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-[0.16em] text-slate-300 leading-tight">
-                                DURAÇÃO MÉDIA DAS ATIVIDADES
+                                {getStageDurationLabel(currentStage?.id || currentStage?.title)}
                               </span>
                               <div className="w-20 h-[1.5px] bg-gradient-to-r from-transparent via-sky-400 to-transparent my-1.5" />
                               <span className="font-mono text-sm sm:text-base font-black uppercase tracking-widest text-sky-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.85)] leading-tight">
@@ -5364,7 +5443,7 @@ function CrmDashboard() {
                           }
                         }
                       }}
-                      title={`Clique para expandir ${stage.title}\nDuração média da atividade em ${stage.title}: ${avgStageDaysFormatted} ${avgStageDaysFormatted === "1.0" ? "DIA" : "DIAS"}`}
+                      title={`Clique para expandir ${stage.title}\n${getStageDurationLabel(stage.id || stage.title)}: ${avgStageDaysFormatted} ${avgStageDaysFormatted === "1.0" || avgStageDaysFormatted === "1,0" ? "DIA" : "DIAS"}`}
                       className={`glass group/collapsed flex flex-col items-center justify-between rounded-2xl border ${stage.border} ${stage.bg || ""} overflow-hidden shadow-xl transition-all duration-200 h-full max-h-full w-10 sm:w-11 min-w-[40px] sm:min-w-[44px] max-w-[40px] sm:max-w-[44px] py-3 cursor-pointer select-none hover:border-white/40 hover:bg-white/[0.04] ${
                         dragOverStageId === stage.id && isMovingFromAnotherStage ? "ring-2 ring-sky-400 border-sky-400 shadow-[0_0_30px_rgba(56,189,248,0.35)] bg-sky-950/40" : ""
                       }`}
@@ -5561,7 +5640,7 @@ function CrmDashboard() {
                       {hoveredStageHeaderId === stage.id && (
                         <div className="w-full h-[88px] min-h-[88px] max-h-[88px] rounded-xl border border-sky-400/50 bg-gradient-to-br from-slate-950/98 via-sky-950/70 to-slate-950/95 backdrop-blur-xl px-3 py-2 flex flex-col items-center justify-center text-center shadow-[0_0_25px_rgba(56,189,248,0.3)] animate-in fade-in zoom-in-95 duration-150 select-none shrink-0 mb-2 relative z-20">
                           <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-[0.16em] text-slate-300 leading-tight">
-                            DURAÇÃO MÉDIA DAS ATIVIDADES
+                            {getStageDurationLabel(stage.id || stage.title)}
                           </span>
                           <div className="w-20 h-[1.5px] bg-gradient-to-r from-transparent via-sky-400 to-transparent my-1.5" />
                           <span className="font-mono text-sm sm:text-base font-black uppercase tracking-widest text-sky-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.85)] leading-tight">
@@ -5596,8 +5675,46 @@ function CrmDashboard() {
                       </div>
                     </div>
 
-                    {/* Efeito desfoque suave e gradiente na base da coluna com altura ampliada */}
-                    <div className="absolute bottom-0 left-0 right-0 h-14 pointer-events-none bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent backdrop-blur-[2px] rounded-b-2xl z-10" />
+                    {/* Rodapé da Coluna para Etapas com Suporte a Arquivamento (Tarefas, Concluídos, Perdidos) */}
+                    {(stage.id === "lead" || stage.id === "completed" || stage.id === "lost") ? (() => {
+                      const archivedInStage = getArchivedDealsForStage(stage.id as "lead" | "completed" | "lost", deals);
+                      const isLead = stage.id === "lead";
+                      const isCompleted = stage.id === "completed";
+                      const isLost = stage.id === "lost";
+
+                      const badgeColor = isLead
+                        ? "text-sky-300 border-sky-400/40 bg-sky-500/15"
+                        : isCompleted
+                        ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/15"
+                        : "text-rose-300 border-rose-500/40 bg-rose-500/15";
+
+                      return (
+                        <div className="shrink-0 p-1.5 border-t border-white/10 bg-slate-950/90 backdrop-blur-md rounded-b-2xl relative z-20">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setArchivedFilterStage(stage.id as "lead" | "completed" | "lost");
+                              setIsArchivedModalOpen(true);
+                            }}
+                            className="w-full py-1.5 px-2.5 rounded-xl border border-white/10 hover:border-white/25 bg-white/[0.03] hover:bg-white/[0.08] transition-all flex items-center justify-between text-xs font-black uppercase tracking-wider text-muted-foreground hover:text-white group cursor-pointer shadow-sm"
+                            title={`Ver ${isLead ? "Tarefas" : isCompleted ? "Concluídos" : "Perdidos"} Arquivadas`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <FolderArchive className="h-3.5 w-3.5 text-muted-foreground group-hover:text-white transition-colors" />
+                              <span className="text-[10px] sm:text-[11px] font-black tracking-widest text-slate-300 group-hover:text-white">
+                                ARQUIVADAS
+                              </span>
+                            </div>
+
+                            <span className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-full border ${badgeColor} transition-transform group-hover:scale-105`}>
+                              {archivedInStage.length}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })() : (
+                      <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent backdrop-blur-[1px] rounded-b-2xl z-10" />
+                    )}
                   </div>
                 );
               })}
@@ -5675,17 +5792,25 @@ function CrmDashboard() {
 
                 {/* Estrutura Centralizada de Textos do Cabeçalho */}
                 <div className="flex-1 min-w-0 flex flex-col items-center justify-center px-4">
-                  {/* LINHA 1 - TÍTULO E CLIENTE NA MESMA LINHA (CLIENTE CLICÁVEL) + EDIÇÃO DE TÍTULO PARA O AUTOR */}
+                  {/* LINHA 1 - TÍTULO E CLIENTE NA MESMA LINHA (CLIENTE CLICÁVEL APENAS PARA ORÇAMENTOS/COMERCIAIS) + EDIÇÃO DE TÍTULO */}
                   {(() => {
-                    const dealCust = getDealCustomer(selectedDealForHistory);
-                    const modalCustomerName =
-                      dealCust?.company_name ||
-                      dealCust?.name ||
-                      (selectedDealForHistory.customer_name && selectedDealForHistory.customer_name !== "Uso Interno / Empresa"
-                        ? selectedDealForHistory.customer_name
-                        : null);
                     const parentInfo = getParentDealInfo(selectedDealForHistory);
                     const isSubtaskModal = Boolean(parentInfo);
+                    const isTask = !isSubtaskModal && (
+                      selectedDealForHistory.title.includes("[TAREFA]") ||
+                      selectedDealForHistory.title.includes("[REQ. INTERNA]") ||
+                      selectedDealForHistory.stage === "lead" ||
+                      (!selectedDealForHistory.customer_id && selectedDealForHistory.customer_name === "Uso Interno / Empresa")
+                    );
+
+                    const dealCust = !isTask ? getDealCustomer(selectedDealForHistory) : null;
+                    const modalCustomerName = !isTask
+                      ? (dealCust?.company_name ||
+                         dealCust?.name ||
+                         (selectedDealForHistory.customer_name && selectedDealForHistory.customer_name !== "Uso Interno / Empresa"
+                           ? selectedDealForHistory.customer_name
+                           : null))
+                      : null;
                     const isAuthor = selectedDealForHistory.assigned_user_id === user?.id;
                     const cleanTitle = getCleanDealTitle(selectedDealForHistory.title);
 
@@ -5719,7 +5844,7 @@ function CrmDashboard() {
                               type="button"
                               disabled={isSavingTitle}
                               onClick={() => setIsEditingTitle(false)}
-                              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white border border-white/10 cursor-pointer transition-all"
+                              className="p-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-400/50 cursor-pointer transition-all"
                               title="Cancelar edição"
                             >
                               <X className="h-4 w-4" />
@@ -5740,7 +5865,7 @@ function CrmDashboard() {
                                   VINCULADA
                                 </span>
                               )}
-                              {modalCustomerName && modalCustomerName.trim() !== "" ? (
+                              {!isTask && modalCustomerName && modalCustomerName.trim() !== "" ? (
                                 <>
                                   <button
                                     type="button"
@@ -5770,20 +5895,20 @@ function CrmDashboard() {
                                   <span className="text-sky-300/60 mx-1">-</span>
                                   <span>{cleanTitle}</span>
                                 </>
-                              ) : (
+                              ) : !isTask && role === "admin" ? (
                                 <>
                                   <span>{cleanTitle}</span>
-                                  {role === "admin" && (
-                                    <button
-                                      type="button"
-                                      onClick={handleStartEditCustomer}
-                                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/30 transition-all cursor-pointer ml-1"
-                                      title="Vincular cliente a esta atividade (Administrador)"
-                                    >
-                                      + Vincular Cliente
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={handleStartEditCustomer}
+                                    className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/30 transition-all cursor-pointer ml-1"
+                                    title="Vincular cliente a esta atividade comercial (Administrador)"
+                                  >
+                                    + Vincular Cliente
+                                  </button>
                                 </>
+                              ) : (
+                                <span>{cleanTitle}</span>
                               )}
                             </h2>
 
@@ -6214,12 +6339,12 @@ function CrmDashboard() {
                                 </div>
                               )}
 
-                              {/* Lista de Conclusões de Tarefas Vinculadas com Destaque de Notificação 'NOVA' */}
+                              {/* Lista de Conclusões de Vinculadas com Destaque de Notificação 'NOVA' */}
                               {dealSubtaskCompletions.length > 0 && (
                                 <div className="space-y-1.5 pl-3 border-l-2 border-emerald-400/50">
                                   <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
                                     <GitFork className="h-3.5 w-3.5 text-emerald-400" />
-                                    <span>Conclusão de Tarefas Vinculadas ({dealSubtaskCompletions.length}):</span>
+                                    <span>Conclusão de Vinculadas ({dealSubtaskCompletions.length}):</span>
                                   </span>
                                   {dealSubtaskCompletions.map((comp) => {
                                     const isNewCompletion =
@@ -6238,7 +6363,7 @@ function CrmDashboard() {
                                         <div className="flex items-center justify-between text-[10px] text-muted-foreground border-b border-white/5 pb-1">
                                           <div className="flex items-center gap-1.5 font-bold text-emerald-200 uppercase">
                                             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                                            <span>{comp.userName} concluiu a tarefa "{comp.subtaskTitle}" (Nº {comp.reqNumber})</span>
+                                            <span>{comp.userName} concluiu a vinculada "{comp.subtaskTitle}" (Nº {comp.reqNumber})</span>
                                             {isNewCompletion && (
                                               <span className="ml-1 text-[8px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/25 px-1.5 py-0.5 rounded border border-amber-500/50 animate-pulse shadow-sm">
                                                 Nova
@@ -6336,7 +6461,7 @@ function CrmDashboard() {
 
                             return (
                               <div className="flex flex-wrap items-center gap-2">
-                                {/* 1. Vincular Tarefa */}
+                                {/* 1. Vincular Atividade */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -6347,9 +6472,9 @@ function CrmDashboard() {
                                     setIsSubtaskModalOpen(true);
                                   }}
                                   className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm"
-                                  title="Criar e vincular uma tarefa a esta atividade"
+                                  title="Criar e vincular uma atividade a esta atividade principal"
                                 >
-                                  <PlusCircle className="h-3.5 w-3.5 text-emerald-400" /> VINCULAR TAREFA
+                                  <PlusCircle className="h-3.5 w-3.5 text-emerald-400" /> + VINCULADA
                                 </button>
 
                                 {/* 2. Anexo de Arquivo com Compressão Client-side e Tooltip Inteligente */}
@@ -6668,70 +6793,68 @@ function CrmDashboard() {
                           </div>
 
                           {/* Botões de Ação */}
-                          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
-                            {/* Ações Especiais da Esquerda: Arquivar / Desarquivar */}
-                            <div>
-                              {(() => {
-                                if (
-                                  selectedDealForHistory.title.includes("[REQ. INTERNA]") ||
-                                  selectedDealForHistory.stage === "lead" ||
-                                  selectedDealForHistory.stage === "archived"
-                                ) {
-                                  return selectedDealForHistory.stage === "archived" ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
-                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                    >
-                                      <ArchiveRestore className="h-4 w-4" /> Desarquivar / Restaurar
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleArchiveDeal(selectedDealForHistory)}
-                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 border border-sky-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                      title="Arquivar esta requisição interna sem excluí-la"
-                                    >
-                                      <Archive className="h-4 w-4" /> Arquivar
-                                    </button>
-                                  );
-                                }
+                          <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
+                            {/* Ações Especiais: Concluir (se vinculada), Desarquivar ou Arquivar (em vermelho) e Atualizar */}
+                            {(() => {
+                              const parentInfo = getParentDealInfo(selectedDealForHistory);
+                              const isLinkedSubtask = Boolean(parentInfo);
 
-                                return null;
-                              })()}
-                            </div>
+                              if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCompleteSubtask(selectedDealForHistory)}
+                                    className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                    title="Concluir e fechar esta vinculada"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 text-rose-400" />
+                                    <span>Concluir</span>
+                                  </button>
+                                );
+                              }
 
-                            {/* Ações da Direita: Concluir (se vinculada) e Atualizar */}
-                            <div className="flex items-center gap-2 ml-auto">
-                              {(() => {
-                                const parentInfo = getParentDealInfo(selectedDealForHistory);
-                                const isLinkedSubtask = Boolean(parentInfo);
+                              const isArchivableStage =
+                                selectedDealForHistory.stage === "lead" ||
+                                selectedDealForHistory.stage === "completed" ||
+                                selectedDealForHistory.stage === "lost" ||
+                                selectedDealForHistory.stage === "archived";
 
-                                if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
-                                  return (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCompleteSubtask(selectedDealForHistory)}
-                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                      title="Concluir e fechar esta tarefa vinculada"
-                                    >
-                                      <CheckCircle2 className="h-4 w-4 text-rose-400" />
-                                      <span>Concluir</span>
-                                    </button>
-                                  );
-                                }
-                                return null;
-                              })()}
+                              if (!isLinkedSubtask && isArchivableStage) {
+                                return selectedDealForHistory.stage === "archived" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
+                                    className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                    title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
+                                  >
+                                    <ArchiveRestore className="h-4 w-4 text-emerald-400" />
+                                    <span>Desarquivar</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleArchiveDeal(selectedDealForHistory)}
+                                    className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-300 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105"
+                                    style={{ borderColor: "#ef4444", color: "#ef4444" }}
+                                    title="Arquivar esta atividade totalmente finalizada"
+                                  >
+                                    <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
+                                    <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
+                                  </button>
+                                );
+                              }
 
-                              <button
-                                type="submit"
-                                disabled={isSavingUpdate}
-                                className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 border border-sky-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                              >
-                                <Save className="h-4 w-4 text-sky-400" />
-                                <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
-                              </button>
-                            </div>
+                              return null;
+                            })()}
+
+                            <button
+                              type="submit"
+                              disabled={isSavingUpdate}
+                              className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 border border-sky-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                            >
+                              <Save className="h-4 w-4 text-sky-400" />
+                              <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
+                            </button>
                           </div>
                         </form>
                       </div>
@@ -6784,17 +6907,24 @@ function CrmDashboard() {
             className="glass w-full max-w-2xl rounded-2xl border border-white/15 p-5 sm:p-6 flex flex-col shadow-2xl overflow-hidden"
           >
             <div className="shrink-0 flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-sm font-black uppercase tracking-widest text-gradient flex items-center gap-2">
-                {activeReqModal === "interna" ? (
-                  <>
-                    <Building className="h-4 w-4 text-sky-400" /> Nova Tarefa
-                  </>
-                ) : (
-                  <>
-                    <Globe className="h-4 w-4 text-accent" /> Novo Orçamento
-                  </>
-                )}
-              </h3>
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-black uppercase tracking-widest text-gradient flex items-center gap-2">
+                  {activeReqModal === "interna" ? (
+                    <>
+                      <Building className="h-4 w-4 text-sky-400" /> Nova Tarefa
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="h-4 w-4 text-accent" /> Novo Orçamento
+                    </>
+                  )}
+                </h3>
+                <p className="text-[10px] text-muted-foreground font-medium">
+                  {activeReqModal === "interna"
+                    ? "Atividade interna da empresa (sem cliente e sem faturamento)."
+                    : "Atividade comercial da empresa (com cliente, proposta e faturamento)."}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setActiveReqModal(null)}
@@ -7250,7 +7380,6 @@ function CrmDashboard() {
                     title="Filtrar por Responsável"
                   >
                     <option value="ALL">Todos os Responsáveis</option>
-                    <option value="unassigned">Sem Responsável</option>
                     {teamMembers.map((p) => (
                       <option key={p.id} value={p.id} className="bg-slate-900">
                         {p.display_name || p.email}
@@ -7421,16 +7550,8 @@ function CrmDashboard() {
                               </div>
 
                               <div className="text-left sm:text-right shrink-0 flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-white/10">
-                                <span className={`text-xs font-mono font-black ${
-                                  deadline.status === "hoje"
-                                    ? "text-amber-400"
-                                    : deadline.status === "amanha"
-                                    ? "text-sky-400"
-                                    : deadline.status === "futuro"
-                                    ? "text-slate-300"
-                                    : "text-red-400"
-                                }`}>
-                                  {deadline.fullLabel}
+                                <span className={`text-xs font-mono font-black ${deadline.colorClass || "text-slate-300"}`}>
+                                  {deadline.hoverText || formatDeadlineWithWeekday(deal.expected_close_date)}
                                 </span>
                                 <span className="text-xs text-sky-400 font-bold uppercase group-hover:underline mt-1">
                                   Abrir Atividade →
@@ -7514,10 +7635,10 @@ function CrmDashboard() {
                         const hasDeals = dayDeals.length > 0;
                         const isToday = dateKey === todayStr;
 
-                        const isOverdue = dayDeals.some((d) => {
-                          const deadline = getDeadlineInfo(d.expected_close_date);
-                          return deadline.status === "atrasado";
-                        });
+                        const isOverdue = hasDeals && (
+                          dateKey < todayStr ||
+                          dayDeals.some((d) => (getDeadlineInfo(d.expected_close_date).diffDays ?? 0) < 0)
+                        );
 
                         return (
                           <button
@@ -7526,15 +7647,25 @@ function CrmDashboard() {
                             onClick={() => setCalendarSelectedDate(dateKey)}
                             className={`min-h-[58px] rounded-xl p-2 flex flex-col items-center justify-between border transition-all select-none relative cursor-pointer ${
                               isToday
-                                ? "bg-white border-white text-slate-950 shadow-[0_0_20px_rgba(255,255,255,0.4)] hover:bg-slate-100 hover:scale-[1.03] z-10"
+                                ? "bg-white/[0.04] border-2 border-white text-white shadow-[0_0_15px_rgba(255,255,255,0.25)] hover:bg-white/10 hover:scale-[1.03] z-10"
                                 : hasDeals
                                 ? isOverdue
-                                  ? "bg-rose-500/15 border-rose-500/50 text-rose-200 hover:border-rose-400 hover:bg-rose-500/25 hover:scale-[1.03] shadow-md"
-                                  : "bg-sky-950/50 border-sky-500/40 text-sky-200 hover:border-sky-400 hover:bg-sky-900/60 hover:scale-[1.03] shadow-md"
-                                : "bg-white/[0.02] border-white/5 text-muted-foreground/60 hover:bg-white/5 hover:border-white/20 hover:text-white hover:scale-[1.02]"
+                                  ? "bg-rose-950/40 border-2 border-rose-500/80 text-rose-200 shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:border-rose-400 hover:bg-rose-900/50 hover:scale-[1.03]"
+                                  : "bg-sky-950/50 border border-sky-500/40 text-sky-200 hover:border-sky-400 hover:bg-sky-900/60 hover:scale-[1.03] shadow-md"
+                                : "bg-white/[0.02] border border-white/5 text-muted-foreground/60 hover:bg-white/5 hover:border-white/20 hover:text-white hover:scale-[1.02]"
                             }`}
                           >
-                            <span className={`text-xs sm:text-sm font-mono font-bold leading-none ${isToday ? "text-slate-950 font-black" : ""}`}>
+                            <span
+                              className={`text-xs sm:text-sm font-mono font-bold leading-none ${
+                                isToday
+                                  ? "text-white font-black"
+                                  : isOverdue
+                                  ? "text-rose-400 font-black"
+                                  : hasDeals
+                                  ? "text-sky-300 font-bold"
+                                  : "text-muted-foreground/60 font-medium"
+                              }`}
+                            >
                               {dayNum}
                             </span>
 
@@ -7543,17 +7674,17 @@ function CrmDashboard() {
                                 <span
                                   className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-full leading-none flex items-center gap-1 ${
                                     isToday
-                                      ? "bg-slate-900 text-white shadow-sm"
+                                      ? "bg-white text-slate-950 shadow-[0_0_12px_rgba(255,255,255,0.6)]"
                                       : isOverdue
-                                      ? "bg-rose-500 text-white shadow-[0_0_10px_rgba(244,63,94,0.7)]"
+                                      ? "bg-rose-600 text-white shadow-[0_0_10px_rgba(244,63,94,0.7)]"
                                       : "bg-sky-400 text-slate-950 shadow-[0_0_10px_rgba(56,189,248,0.7)]"
                                   }`}
                                 >
-                                  {dayDeals.length} {dayDeals.length === 1 ? "tarefa" : "tarefas"}
+                                  {dayDeals.length} {dayDeals.length === 1 ? "atividade" : "atividades"}
                                 </span>
                               </div>
                             ) : isToday ? (
-                              <span className="text-[9px] font-black text-slate-900 uppercase tracking-widest leading-none">
+                              <span className="text-[9px] font-black text-white uppercase tracking-widest leading-none">
                                 Hoje
                               </span>
                             ) : (
@@ -7689,182 +7820,261 @@ function CrmDashboard() {
         </div>
       )}
 
-      {/* Modal / Repositório de Requisições Arquivadas */}
-      {isArchivedModalOpen && (
-        <div
-          onClick={() => setIsArchivedModalOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in overflow-y-auto"
-        >
+      {/* Modal / Repositório de Atividades Arquivadas (Tarefas, Concluídos e Perdidos) */}
+      {isArchivedModalOpen && (() => {
+        const leadArchivedCount = getArchivedDealsForStage("lead", deals).length;
+        const completedArchivedCount = getArchivedDealsForStage("completed", deals).length;
+        const lostArchivedCount = getArchivedDealsForStage("lost", deals).length;
+        const allArchivedCount = leadArchivedCount + completedArchivedCount + lostArchivedCount;
+
+        const stageTitle =
+          archivedFilterStage === "lead"
+            ? "Tarefas Arquivadas"
+            : archivedFilterStage === "completed"
+            ? "Concluídos Arquivados"
+            : archivedFilterStage === "lost"
+            ? "Perdidos Arquivados"
+            : "Atividades Arquivadas";
+
+        const stageSubtitle =
+          archivedFilterStage === "lead"
+            ? "Repositório de tarefas internas finalizadas e arquivadas."
+            : archivedFilterStage === "completed"
+            ? "Repositório de atividades comerciais concluídas, com follow-up finalizado e arquivadas."
+            : archivedFilterStage === "lost"
+            ? "Repositório de atividades comerciais perdidas e arquivadas."
+            : "Repositório de atividades finalizadas das colunas Tarefas, Concluídos e Perdidos.";
+
+        return (
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-4xl rounded-2xl border border-sky-500/30 bg-slate-950/95 p-6 space-y-5 shadow-2xl my-8 backdrop-blur-xl transition-all max-h-[90vh] flex flex-col"
+            onClick={() => setIsArchivedModalOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in overflow-y-auto"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400">
-                  <FolderArchive className="h-5 w-5" />
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-4xl rounded-2xl border border-sky-500/30 bg-slate-950/95 p-6 space-y-4 shadow-2xl my-8 backdrop-blur-xl transition-all max-h-[90vh] flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400">
+                    <FolderArchive className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-white flex items-center gap-2">
+                      {stageTitle}
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/40">
+                        {archivedDealsList.length} {archivedDealsList.length === 1 ? "atividade" : "atividades"}
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      {stageSubtitle}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-black uppercase tracking-wider text-white flex items-center gap-2">
-                    Repositório de Atividades Arquivadas
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/40">
-                      {archivedDealsList.length}
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    Tarefas e orçamentos armazenados sem exclusão. Podem ser consultados ou restaurados ao quadro a qualquer momento.
-                  </p>
-                </div>
+
+                <button
+                  onClick={() => setIsArchivedModalOpen(false)}
+                  className="btn-ghost-neon p-2 rounded-xl text-muted-foreground hover:text-white cursor-pointer"
+                >
+                  ✕
+                </button>
               </div>
 
-              <button
-                onClick={() => setIsArchivedModalOpen(false)}
-                className="btn-ghost-neon p-2 rounded-xl text-muted-foreground hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
+              {/* Abas de Navegação / Filtro por Origem (Todas, Tarefas, Concluídos, Perdidos) */}
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/40 border border-white/10 shrink-0 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setArchivedFilterStage("ALL")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                    archivedFilterStage === "ALL"
+                      ? "bg-white/15 text-white border border-white/30 shadow-sm"
+                      : "text-muted-foreground hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  <span>Todas</span>
+                  <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-white">
+                    {allArchivedCount}
+                  </span>
+                </button>
 
-            {/* Campo de Busca */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Buscar por Nº de registro, título ou atualização..."
-                value={archivedSearchTerm}
-                onChange={(e) => setArchivedSearchTerm(e.target.value)}
-                className="input-futuristic w-full rounded-xl px-4 py-2.5 text-xs outline-none bg-black/50"
-              />
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setArchivedFilterStage("lead")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                    archivedFilterStage === "lead"
+                      ? "bg-sky-500/20 text-sky-300 border border-sky-400/50 shadow-sm"
+                      : "text-muted-foreground hover:text-sky-300 hover:bg-sky-500/10"
+                  }`}
+                >
+                  <span>Tarefas</span>
+                  <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500/20 text-sky-300">
+                    {leadArchivedCount}
+                  </span>
+                </button>
 
-            {/* Repositório de Atividades Arquivadas Separadas por Colunas de Etapa */}
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-[350px] max-h-[65vh] custom-scrollbar">
-              {archivedDealsList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground space-y-2">
-                  <Archive className="h-10 w-10 text-white/20" />
-                  <p className="text-xs font-semibold uppercase tracking-wider">
-                    {archivedSearchTerm ? "Nenhuma atividade arquivada encontrada para a busca" : "Nenhuma atividade arquivada no momento"}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-                  {STAGES.map((stage) => {
-                    const stageArchivedDeals = archivedDealsList.filter((d) => {
-                      const dStage = d.stage === "proposal" ? "negotiation" : d.stage;
-                      return dStage === stage.id;
-                    });
+                <button
+                  type="button"
+                  onClick={() => setArchivedFilterStage("completed")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                    archivedFilterStage === "completed"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 shadow-sm"
+                      : "text-muted-foreground hover:text-emerald-300 hover:bg-emerald-500/10"
+                  }`}
+                >
+                  <span>Concluídos</span>
+                  <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300">
+                    {completedArchivedCount}
+                  </span>
+                </button>
 
-                    return (
-                      <div
-                        key={stage.id}
-                        className={`p-3 rounded-2xl bg-black/40 border ${stage.border} flex flex-col space-y-2.5 min-h-[300px]`}
-                      >
-                        {/* Header da Coluna da Etapa */}
-                        <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
-                          <span className={`text-xs font-black uppercase tracking-wider ${stage.color}`}>
-                            {stage.title}
-                          </span>
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white">
-                            {stageArchivedDeals.length}
-                          </span>
-                        </div>
+                <button
+                  type="button"
+                  onClick={() => setArchivedFilterStage("lost")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                    archivedFilterStage === "lost"
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-400/50 shadow-sm"
+                      : "text-muted-foreground hover:text-rose-300 hover:bg-rose-500/10"
+                  }`}
+                >
+                  <span>Perdidos</span>
+                  <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300">
+                    {lostArchivedCount}
+                  </span>
+                </button>
+              </div>
 
-                        {/* Lista de Cards da Etapa Arquivada */}
-                        <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-0.5 max-h-[45vh]">
-                          {stageArchivedDeals.length === 0 ? (
-                            <div className="text-center py-8 text-muted-foreground/40 text-[11px] italic">
-                              Vazio
-                            </div>
-                          ) : (
-                            stageArchivedDeals.map((d) => (
-                              <div
-                                key={d.id}
-                                className="p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-sky-400/40 transition-all space-y-2 shadow-sm flex flex-col justify-between"
-                              >
-                                <div className="space-y-1.5 min-w-0">
-                                  <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">
-                                      Nº {getDealReqNumber(d, deals)}
-                                    </span>
-                                    <span className="text-[9px] text-muted-foreground font-mono truncate">
-                                      {new Date(d.updated_at || d.created_at).toLocaleDateString("pt-BR")}
-                                    </span>
-                                  </div>
+              {/* Campo de Busca */}
+              <div className="relative shrink-0">
+                <input
+                  type="text"
+                  placeholder="Buscar por Nº de registro, título, responsável, cliente ou notas..."
+                  value={archivedSearchTerm}
+                  onChange={(e) => setArchivedSearchTerm(e.target.value)}
+                  className="input-futuristic w-full rounded-xl px-4 py-2.5 text-xs outline-none bg-black/50"
+                />
+              </div>
 
-                                  <h4
-                                    className="text-xs font-bold text-white uppercase tracking-wide truncate cursor-pointer hover:text-sky-300"
-                                    onClick={() => {
-                                      setIsArchivedModalOpen(false);
-                                      openDealHistory(d);
-                                    }}
-                                    title="Clique para ver detalhes"
-                                  >
-                                    {getCleanDealTitle(d.title)}
-                                  </h4>
+              {/* Lista de Atividades Arquivadas */}
+              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[300px] max-h-[55vh] custom-scrollbar">
+                {archivedDealsList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground space-y-2">
+                    <Archive className="h-10 w-10 text-white/20" />
+                    <p className="text-xs font-semibold uppercase tracking-wider">
+                      {archivedSearchTerm ? "Nenhuma atividade arquivada encontrada para a busca" : "Nenhuma atividade arquivada nesta categoria"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {archivedDealsList.map((d) => {
+                      const originStage = getArchivedOriginStage(d);
+                      const originBadge =
+                        originStage === "lead"
+                          ? { label: "TAREFA", cls: "bg-sky-500/20 text-sky-300 border-sky-400/30" }
+                          : originStage === "completed"
+                          ? { label: "CONCLUÍDO", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-400/30" }
+                          : { label: "PERDIDO", cls: "bg-rose-500/20 text-rose-300 border-rose-500/30" };
 
-                                  <p className="text-[10px] text-muted-foreground truncate">
-                                    Resp: <strong className="text-emerald-400 font-medium">{d.assigned_user_name || "Sem resp."}</strong>
-                                  </p>
-                                </div>
+                      const cardCustomer = getDealCustomer(d);
+                      const customerName = cardCustomer?.company_name || cardCustomer?.name || d.customer_name;
 
-                                {/* Botões de Ação */}
-                                <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-white/5">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setIsArchivedModalOpen(false);
-                                      openDealHistory(d);
-                                    }}
-                                    className="p-1 rounded-lg text-sky-300 hover:text-white hover:bg-sky-500/20 transition-colors text-[10px] uppercase font-bold flex items-center gap-1 cursor-pointer"
-                                    title="Ver detalhes"
-                                  >
-                                    <History className="h-3 w-3" />
-                                    <span>Detalhes</span>
-                                  </button>
-
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUnarchiveDeal(d)}
-                                      className="p-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/40 text-[10px] font-black uppercase flex items-center gap-1 hover:scale-105 transition-all cursor-pointer"
-                                      title="Restaurar atividade ao quadro"
-                                    >
-                                      <ArchiveRestore className="h-3 w-3" />
-                                      <span>Restaurar</span>
-                                    </button>
-
-                                    {role === "admin" && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteDeal(d)}
-                                        disabled={isDeletingDeal}
-                                        className="p-1 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
-                                        title="Excluir permanentemente"
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
+                      return (
+                        <div
+                          key={d.id}
+                          className="p-3.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-sky-400/40 transition-all space-y-2.5 shadow-sm flex flex-col justify-between"
+                        >
+                          <div className="space-y-1.5 min-w-0">
+                            <div className="flex items-center justify-between gap-1 flex-wrap">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[9px] font-black px-2 py-0.5 rounded bg-white/10 text-white border border-white/15">
+                                  Nº {getDealReqNumber(d, deals)}
+                                </span>
+                                <span className={`font-mono text-[8px] font-black px-1.5 py-0.5 rounded border ${originBadge.cls}`}>
+                                  {originBadge.label}
+                                </span>
                               </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                              <span className="text-[9px] text-muted-foreground font-mono truncate">
+                                {new Date(d.updated_at || d.created_at).toLocaleDateString("pt-BR")}
+                              </span>
+                            </div>
 
-            {/* Rodapé Informativo Simples */}
-            <div className="shrink-0 flex items-center justify-between pt-3 border-t border-white/10 text-[11px] text-muted-foreground font-mono">
-              <span>Total de Atividades Arquivadas: {archivedDealsList.length}</span>
-              <span className="text-[10px] text-muted-foreground/60 italic">Clique fora para fechar</span>
+                            <h4
+                              className="text-xs font-bold text-white uppercase tracking-wide truncate cursor-pointer hover:text-sky-300"
+                              onClick={() => {
+                                setIsArchivedModalOpen(false);
+                                openDealHistory(d);
+                              }}
+                              title="Clique para ver detalhes e histórico"
+                            >
+                              {getCleanDealTitle(d.title)}
+                            </h4>
+
+                            {customerName && customerName !== "Uso Interno / Empresa" && (
+                              <p className="text-[10px] text-slate-300 truncate">
+                                Cliente: <strong className="text-white font-medium">{customerName}</strong>
+                              </p>
+                            )}
+
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              Resp: <strong className="text-emerald-400 font-medium">{d.assigned_user_name || "Sem responsável"}</strong>
+                            </p>
+                          </div>
+
+                          {/* Botões de Ação */}
+                          <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-white/5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsArchivedModalOpen(false);
+                                openDealHistory(d);
+                              }}
+                              className="btn-ghost-neon px-2.5 py-1 rounded-lg text-sky-300 hover:text-white hover:bg-sky-500/20 transition-colors text-[10px] uppercase font-bold flex items-center gap-1 cursor-pointer"
+                              title="Ver histórico e notas"
+                            >
+                              <History className="h-3 w-3" />
+                              <span>Detalhes</span>
+                            </button>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleUnarchiveDeal(d)}
+                                className="btn-ghost-neon px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-[10px] font-black uppercase flex items-center gap-1 hover:scale-105 transition-all cursor-pointer"
+                                title={`Restaurar para a coluna de ${originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos"}`}
+                              >
+                                <ArchiveRestore className="h-3 w-3 text-emerald-400" />
+                                <span>Restaurar</span>
+                              </button>
+
+                              {role === "admin" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDeal(d)}
+                                  disabled={isDeletingDeal}
+                                  className="btn-ghost-neon p-1 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
+                                  title="Excluir permanentemente"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Rodapé Informativo Simples */}
+              <div className="shrink-0 flex items-center justify-between pt-3 border-t border-white/10 text-[11px] text-muted-foreground font-mono">
+                <span>Total exibido: {archivedDealsList.length} {archivedDealsList.length === 1 ? "atividade" : "atividades"}</span>
+                <span className="text-[10px] text-muted-foreground/60 italic">Clique fora para fechar</span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal: Ficha Completa e Detalhes do Cliente */}
       {selectedCustomerForDetails && (
@@ -8289,7 +8499,7 @@ function CrmDashboard() {
         </div>
       )}
 
-      {/* Modal Exclusivo: Criar Tarefa Vinculada em Tela Isolada */}
+      {/* Modal Exclusivo: Criar Atividade Vinculada em Tela Isolada */}
       {isSubtaskModalOpen && selectedDealForHistory && (
         <div
           onClick={() => setIsSubtaskModalOpen(false)}
@@ -8307,7 +8517,7 @@ function CrmDashboard() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base font-black uppercase tracking-wider text-white truncate">
-                    Criar Tarefa Vinculada
+                    Criar Vinculada
                   </h3>
                   <p className="text-xs text-emerald-300 font-bold uppercase truncate mt-0.5">
                     Vinculada à: {getCleanDealTitle(selectedDealForHistory.title)} (Nº {getDealReqNumber(selectedDealForHistory, deals)})
@@ -8316,11 +8526,11 @@ function CrmDashboard() {
               </div>
             </div>
 
-            {/* Formulário de Criação da Tarefa Vinculada */}
+            {/* Formulário de Criação da Vinculada */}
             <form onSubmit={handleCreateSubtask} className="space-y-3.5">
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                  Título da Tarefa <span className="text-rose-400">*</span>
+                  Título da Vinculada <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -8368,10 +8578,10 @@ function CrmDashboard() {
 
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                  Instruções e Detalhes da Tarefa
+                  Instruções e Detalhes da Vinculada
                 </label>
                 <textarea
-                  placeholder="Descreva as orientações, detalhes técnicos ou recomendações para o responsável executar esta tarefa..."
+                  placeholder="Descreva as orientações, detalhes técnicos ou recomendações para o responsável executar esta atividade vinculada..."
                   value={subtaskNotes}
                   onChange={(e) => setSubtaskNotes(e.target.value)}
                   className="input-futuristic w-full h-[120px] rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed custom-scrollbar"
@@ -8379,7 +8589,7 @@ function CrmDashboard() {
               </div>
 
               <div className="text-[10px] text-muted-foreground/80 bg-white/[0.03] p-2.5 rounded-xl border border-white/5">
-                * A tarefa será criada automaticamente na mesma coluna da atividade mãe e exibirá o vínculo em seu cabeçalho.
+                * A vinculada será criada automaticamente na mesma coluna da atividade mãe e exibirá o vínculo em seu cabeçalho.
               </div>
 
               {/* Botões do Rodapé */}
@@ -8397,7 +8607,7 @@ function CrmDashboard() {
                   className="btn-futuristic rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-wider shadow-lg flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <PlusCircle className="h-4 w-4" />
-                  {isCreatingSubtask ? "Criando Tarefa..." : "Criar Tarefa Vinculada"}
+                  {isCreatingSubtask ? "Criando..." : "Criar Vinculada"}
                 </button>
               </div>
             </form>
@@ -8998,6 +9208,22 @@ function CrmDashboard() {
         onClose={() => setIsProfileOpen(false)}
         currentUser={user}
       />
+
+      {/* Modal Futurista de Confirmação do CRM */}
+      {crmConfirmConfig && (
+        <ConfirmModal
+          isOpen={crmConfirmConfig.isOpen}
+          onClose={() => setCrmConfirmConfig(null)}
+          onConfirm={crmConfirmConfig.onConfirm}
+          title={crmConfirmConfig.title}
+          description={crmConfirmConfig.description}
+          confirmText={crmConfirmConfig.confirmText}
+          cancelText={crmConfirmConfig.cancelText}
+          variant={crmConfirmConfig.variant || "danger"}
+          requireKeyword={crmConfirmConfig.requireKeyword}
+          isLoading={isDeletingDeal}
+        />
+      )}
     </div>
   </TooltipProvider>
   );

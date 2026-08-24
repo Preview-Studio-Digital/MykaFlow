@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { supabase as localSupabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatFactoringClientSubcategory, formatFactoringInvoiceDescription } from "@/lib/factoring-import-format";
+import { ConfirmModal } from "./ConfirmModal";
 import { 
   Link2, 
   RefreshCw, 
@@ -155,10 +156,9 @@ export function IntegrationManager() {
   const [syncedData, setSyncedData] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
 
-  async function handleDeleteImported() {
-    if (!confirm("Tem certeza que deseja apagar TODAS as operações importadas? Isso não pode ser desfeito.")) return;
-    
+  async function executeDeleteImported() {
     setDeleting(true);
     try {
       const { data: auth } = await localSupabase.auth.getUser();
@@ -558,8 +558,8 @@ export function IntegrationManager() {
 
           <button
             disabled={deleting}
-            onClick={handleDeleteImported}
-            className="w-full py-4 mt-4 rounded-2xl bg-red-500/10 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/20 transition-all text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 text-red-500 disabled:opacity-30"
+            onClick={() => setIsConfirmDeleteOpen(true)}
+            className="w-full py-4 mt-4 rounded-2xl bg-red-500/10 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/20 transition-all text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 text-red-500 disabled:opacity-30 cursor-pointer"
           >
             {deleting ? (
               <>
@@ -743,6 +743,22 @@ export function IntegrationManager() {
           </div>
         </div>
       </div>
+
+      {isConfirmDeleteOpen && (
+        <ConfirmModal
+          isOpen={isConfirmDeleteOpen}
+          onClose={() => setIsConfirmDeleteOpen(false)}
+          onConfirm={() => {
+            setIsConfirmDeleteOpen(false);
+            executeDeleteImported();
+          }}
+          title="Apagar Operações Importadas"
+          description="Tem certeza que deseja apagar TODAS as operações importadas do Factoring? Esta ação não pode ser desfeita."
+          confirmText="Apagar Importados"
+          variant="danger"
+          isLoading={deleting}
+        />
+      )}
     </div>
   );
 }

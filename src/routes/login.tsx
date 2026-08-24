@@ -28,13 +28,13 @@ function LoginPage() {
       const { error } = await signIn(email, password);
       if (error) {
         console.error("Login Error:", error);
-        window.alert("ERRO NO LOGIN: " + error);
+        toast.error("Erro no login: " + error);
       } else {
         toast.success("Acesso concedido");
       }
     } catch (err: any) {
       console.error("Fatal Error:", err);
-      window.alert("ERRO FATAL: " + err.message);
+      toast.error("Erro fatal: " + err.message);
     } finally {
       setBusy(false);
     }

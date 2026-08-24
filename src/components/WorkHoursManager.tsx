@@ -49,21 +49,42 @@ export function WorkHoursManager() {
         setDeals(dealsData || []);
 
         // Fetch user profiles
-        const { data: profilesData, error: profilesErr } = await supabase
+        const { data: profilesData } = await supabase
           .from("profiles")
           .select("id, email, display_name");
-        if (profilesErr) throw profilesErr;
         
-        const validProfiles = (profilesData || []).map(p => ({
-          id: p.id,
-          email: p.email || "",
-          display_name: p.display_name || p.email?.split("@")[0] || "Sem nome"
-        }));
+        const profileMap = new Map<string, UserProfile>();
+        (profilesData || []).forEach(p => {
+          profileMap.set(p.id, {
+            id: p.id,
+            email: p.email || "",
+            display_name: p.display_name || p.email?.split("@")[0] || "Sem nome"
+          });
+        });
+
+        // Also check if any WORK_LOG in crm_deals has users not yet in profiles
+        (dealsData || []).forEach(d => {
+          if (!d.notes) return;
+          const regex = /\[WORK_LOG:(.*?)\]/g;
+          let match;
+          while ((match = regex.exec(d.notes)) !== null) {
+            try {
+              if (match[1]) {
+                const parsed = JSON.parse(match[1]);
+                if (parsed.user_id && !profileMap.has(parsed.user_id)) {
+                  profileMap.set(parsed.user_id, {
+                    id: parsed.user_id,
+                    email: "",
+                    display_name: parsed.user_name || "Usuário"
+                  });
+                }
+              }
+            } catch (e) {}
+          }
+        });
+
+        const validProfiles = Array.from(profileMap.values());
         setProfiles(validProfiles);
-        
-        if (validProfiles.length > 0) {
-          setSelectedUserId(validProfiles[0].id);
-        }
       } catch (err: any) {
         console.error("Erro ao carregar dados de horas de trabalho:", err);
         toast.error("Erro ao carregar dados do relatório");
@@ -211,7 +232,7 @@ export function WorkHoursManager() {
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center text-muted-foreground uppercase tracking-widest text-xs">
-        Carregando relação de horas de trabalho...
+        Carregando relatório de produtividade...
       </div>
     );
   }
@@ -231,11 +252,14 @@ export function WorkHoursManager() {
             <select
               value={selectedUserId}
               onChange={(e) => setSelectedUserId(e.target.value)}
-              className="input-futuristic w-full rounded-xl px-3 py-2 text-xs bg-slate-900 border border-white/10 outline-none cursor-pointer"
+              className="input-futuristic w-full rounded-xl px-3 py-2 text-xs bg-slate-900 border border-white/15 outline-none cursor-pointer text-white font-bold tracking-wide shadow-inner"
             >
+              <option value="" className="bg-[#0f172a] text-white font-bold">
+                TODOS OS USUÁRIOS ({profiles.length})
+              </option>
               {profiles.map((p) => (
-                <option key={p.id} value={p.id} className="bg-slate-955 text-white">
-                  {p.display_name} ({p.email})
+                <option key={p.id} value={p.id} className="bg-[#0f172a] text-white font-bold">
+                  {p.display_name.toUpperCase()} {p.email ? `(${p.email})` : ""}
                 </option>
               ))}
             </select>
@@ -250,13 +274,13 @@ export function WorkHoursManager() {
           <select
             value={dateFilter}
             onChange={(e: any) => setDateFilter(e.target.value)}
-            className="input-futuristic w-full rounded-xl px-3 py-2 text-xs bg-slate-900 border border-white/10 outline-none cursor-pointer"
+            className="input-futuristic w-full rounded-xl px-3 py-2 text-xs bg-slate-900 border border-white/15 outline-none cursor-pointer text-white font-bold tracking-wide shadow-inner"
           >
-            <option value="today" className="bg-slate-955 text-white">Hoje</option>
-            <option value="yesterday" className="bg-slate-955 text-white">Ontem</option>
-            <option value="week" className="bg-slate-955 text-white">Últimos 7 dias</option>
-            <option value="month" className="bg-slate-955 text-white">Este Mês</option>
-            <option value="all" className="bg-slate-955 text-white">Todo o Período</option>
+            <option value="today" className="bg-[#0f172a] text-white font-bold">Hoje</option>
+            <option value="yesterday" className="bg-[#0f172a] text-white font-bold">Ontem</option>
+            <option value="week" className="bg-[#0f172a] text-white font-bold">Últimos 7 dias</option>
+            <option value="month" className="bg-[#0f172a] text-white font-bold">Este Mês</option>
+            <option value="all" className="bg-[#0f172a] text-white font-bold">Todo o Período</option>
           </select>
         </div>
 
@@ -272,7 +296,7 @@ export function WorkHoursManager() {
             max="24"
             value={dailyShiftHours}
             onChange={(e) => setDailyShiftHours(parseFloat(e.target.value) || 8.5)}
-            className="input-futuristic w-full rounded-xl px-3 py-1.5 text-xs bg-slate-900 border border-white/10 outline-none"
+            className="input-futuristic w-full rounded-xl px-3 py-2 text-xs bg-slate-900 border border-white/15 outline-none text-white font-bold tracking-wide shadow-inner"
           />
         </div>
 
@@ -345,7 +369,7 @@ export function WorkHoursManager() {
         <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex flex-col justify-between min-h-[350px]">
           <div>
             <h3 className="text-xs font-black uppercase tracking-widest text-slate-300">
-              Gráfico de Horas de Trabalho
+              Gráfico de Produtividade
             </h3>
             <p className="text-[10px] text-muted-foreground">
               Proporção de horas ativas e inativas (com base nos dias com registros)

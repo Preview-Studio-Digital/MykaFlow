@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState } from "react";
 import { TransactionEditDialog } from "./TransactionEditDialog";
+import { ConfirmModal } from "./ConfirmModal";
 import { stripLegacyClientFromFactoringDescription } from "@/lib/factoring-import-format";
 
 export interface TxRow {
@@ -154,14 +155,13 @@ export function TransactionList({
   )
     .filter(Boolean)
     .sort();
-  const uniqueUsers = Array.from(new Set(rows.map((r) => r.user_id)));
+  const [txToDeleteId, setTxToDeleteId] = useState<string | null>(null);
 
-  async function remove(id: string) {
-    if (!confirm("Excluir este lançamento?")) return;
+  async function executeRemove(id: string) {
     const { error } = await supabase.from("transactions").delete().eq("id", id);
     if (error) toast.error(error.message);
     else {
-      toast.success("Excluído");
+      toast.success("Lançamento excluído com sucesso!");
       onDeleted();
     }
   }
@@ -384,8 +384,8 @@ export function TransactionList({
                             <Edit2 className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => remove(r.id)}
-                            className="rounded p-2 text-muted-foreground transition hover:bg-destructive/20 hover:text-destructive"
+                            onClick={() => setTxToDeleteId(r.id)}
+                            className="rounded p-2 text-muted-foreground transition hover:bg-destructive/20 hover:text-destructive cursor-pointer"
                             title="Excluir"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -407,6 +407,22 @@ export function TransactionList({
           transaction={editingTx}
           onClose={() => setEditingTx(null)}
           onUpdated={onDeleted}
+        />
+      )}
+
+      {txToDeleteId && (
+        <ConfirmModal
+          isOpen={Boolean(txToDeleteId)}
+          onClose={() => setTxToDeleteId(null)}
+          onConfirm={() => {
+            const id = txToDeleteId;
+            setTxToDeleteId(null);
+            if (id) executeRemove(id);
+          }}
+          title="Excluir Lançamento"
+          description="Deseja realmente excluir este lançamento financeiro? Esta ação não pode ser desfeita."
+          confirmText="Excluir"
+          variant="danger"
         />
       )}
     </div>

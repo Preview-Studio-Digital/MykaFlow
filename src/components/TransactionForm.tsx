@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { MONTHS_PT } from "@/lib/finance-constants";
+import { ConfirmModal } from "./ConfirmModal";
 
 interface Props {
   onCreated: () => void;
@@ -265,77 +266,95 @@ export function TransactionForm({
     fetchCats();
   }, [type, refreshTrigger]);
 
-  const handleQuickAdd = async (parentId?: string) => {
-    console.log("DEBUG: Clique no botão (+). User:", user);
+  const [formConfirmModal, setFormConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: React.ReactNode;
+    confirmText?: string;
+    variant?: "danger" | "warning" | "info" | "success";
+    isInputPrompt?: boolean;
+    inputLabel?: string;
+    inputPlaceholder?: string;
+    onConfirm?: () => void | Promise<void>;
+    onConfirmWithInput?: (val: string) => void | Promise<void>;
+  } | null>(null);
 
+  const handleQuickAdd = (parentId?: string) => {
     if (!user) {
-      window.alert("ERRO: Você precisa estar logado para cadastrar categorias.");
+      toast.error("Você precisa estar logado para cadastrar categorias.");
       return;
     }
 
-    const name = window.prompt(
-      parentId ? "Nome da nova Subcategoria:" : "Nome da nova Categoria Principal:",
-    );
-    if (!name) return;
+    setFormConfirmModal({
+      isOpen: true,
+      title: parentId ? "Nova Subcategoria" : "Nova Categoria Principal",
+      description: parentId
+        ? "Digite o nome da nova subcategoria para adicionar:"
+        : "Digite o nome da nova categoria principal:",
+      confirmText: "Cadastrar",
+      variant: "info",
+      isInputPrompt: true,
+      inputLabel: parentId ? "Nome da Subcategoria" : "Nome da Categoria",
+      inputPlaceholder: "Ex: COMBUSTÍVEL, SOFTWARES, ALUGUEL...",
+      onConfirmWithInput: async (name: string) => {
+        if (!name.trim()) return;
+        setFormConfirmModal(null);
+        const upperName = name.trim().toUpperCase();
+        setBusy(true);
 
-    const upperName = name.trim().toUpperCase();
-    setBusy(true);
+        try {
+          if (!parentId) {
+            const { data, error } = await supabase
+              .from("financial_categories")
+              .insert({
+                name: upperName,
+                type: type,
+                user_id: user.id,
+              })
+              .select()
+              .single();
 
-    try {
-      if (!parentId) {
-        console.log("DEBUG: Salvando categoria para o usuário:", user.id);
-        const { data, error } = await supabase
-          .from("financial_categories")
-          .insert({
-            name: upperName,
-            type: type,
-            user_id: user.id,
-          })
-          .select()
-          .single();
+            if (error) {
+              toast.error("Erro ao criar categoria: " + error.message);
+              return;
+            }
 
-        if (error) {
-          console.error("DEBUG: Erro Supabase:", error);
-          window.alert("ERRO SUPABASE: " + error.message);
-          return;
+            if (data) {
+              setDbCategories((prev) => [...prev, data]);
+              setSelectedParentId(data.id);
+              setSelectedSubId("");
+              toast.success("Categoria criada com sucesso!");
+            }
+          } else {
+            const { data, error } = await supabase
+              .from("financial_subcategories")
+              .insert({
+                name: upperName,
+                category_id: parentId,
+                user_id: user.id,
+              })
+              .select()
+              .single();
+
+            if (error) {
+              toast.error("Erro ao criar subcategoria: " + error.message);
+              return;
+            }
+
+            if (data) {
+              setDbSubCategories((prev) => [...prev, data]);
+              setSelectedSubId(data.id);
+              toast.success("Subcategoria criada com sucesso!");
+            }
+          }
+        } catch (err: any) {
+          toast.error("Erro inesperado: " + (err.message || "Tente novamente"));
+        } finally {
+          setBusy(false);
+          setRefreshTrigger((prev) => prev + 1);
         }
-
-        if (data) {
-          setDbCategories((prev) => [...prev, data]);
-          setSelectedParentId(data.id);
-          setSelectedSubId("");
-          toast.success("Categoria criada!");
-        }
-      } else {
-        const { data, error } = await supabase
-          .from("financial_subcategories")
-          .insert({
-            name: upperName,
-            category_id: parentId,
-            user_id: user.id,
-          })
-          .select()
-          .single();
-
-        if (error) {
-          console.error("DEBUG: Erro Supabase:", error);
-          window.alert("ERRO SUPABASE (Sub): " + error.message);
-          return;
-        }
-
-        if (data) {
-          setDbSubCategories((prev) => [...prev, data]);
-          setSelectedSubId(data.id);
-          toast.success("Subcategoria criada!");
-        }
-      }
-    } catch (err: any) {
-      console.error("DEBUG: Erro inesperado:", err);
-      window.alert("Erro inesperado. Veja o console.");
-    } finally {
-      setBusy(false);
-      setRefreshTrigger((prev) => prev + 1);
-    }
+      },
+    });
   };
 
   const currentParents = dbCategories;
@@ -395,6 +414,108 @@ export function TransactionForm({
       ? (sub?.name ? `${sub.name} - ${nfText}` : nfText)
       : (description.trim().toUpperCase() || sub?.name || null);
 
+    const executeSave = async () => {
+      setBusy(true);
+      try {
+        if (isPeriodic && endDate) {
+          const start = new Date(date + "T00:00:00");
+          const end = new Date(endDate + "T00:00:00");
+          
+          const transactions = [];
+          let current = new Date(start);
+          let isFirst = true;
+          while (current <= end) {
+            transactions.push({
+              user_id: user.id,
+              type,
+              nature,
+              category: parent?.name || "OUTROS",
+              category_id_v2: selectedParentId,
+              subcategory_id_v2: selectedSubId || null,
+              description: isFirst ? finalDescription : (finalDescription ? `${finalDescription} | VALIDAR VALOR` : "VALIDAR VALOR"),
+              amount: value,
+              occurred_on: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`
+            });
+            current.setMonth(current.getMonth() + 1);
+            isFirst = false;
+          }
+          
+          if (transactions.length > 0) {
+            const { error: mainError } = await supabase.from("transactions").insert(transactions);
+            if (mainError) {
+              setBusy(false);
+              toast.error(mainError.message);
+              return;
+            }
+          }
+        } else {
+          // 1. Registro da Receita Principal
+          const { error: mainError } = await supabase.from("transactions").insert({
+            user_id: user.id,
+            type,
+            nature,
+            category: parent?.name || "OUTROS",
+            category_id_v2: selectedParentId,
+            subcategory_id_v2: selectedSubId || null,
+            description: finalDescription,
+            amount: value,
+            occurred_on: date,
+          });
+
+          if (mainError) {
+            setBusy(false);
+            toast.error(mainError.message);
+            return;
+          }
+        }
+
+        // 2. Se for antecipação, registra o custo como despesa e o marcador de vencimento
+        if (isAntecipacao) {
+          // Custo da Operação (Despesa na mesma data)
+          if (costValue > 0) {
+            await supabase.from("transactions").insert({
+              user_id: user.id,
+              type: "expense",
+              nature: "variable",
+              category: "CUSTO ANTECIPAÇÃO",
+              subcategory_id_v2: selectedSubId || null,
+              description: finalDescription,
+              amount: costValue,
+              occurred_on: date,
+            });
+          }
+
+          // Marcador de Vencimento (0 na data de vencimento)
+          await supabase.from("transactions").insert({
+            user_id: user.id,
+            type: "expense",
+            nature: "variable",
+            category: "VENCIMENTO ANTECIPAÇÃO",
+            description: `VENCIMENTO: ${finalDescription} | Valor: R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            amount: 0,
+            occurred_on: dueDate,
+          });
+        }
+
+        setBusy(false);
+        toast.success(isPeriodic ? "Lançamentos registrados!" : "Lançamento registrado!");
+        setAmount("");
+        setOperationCost("");
+        setDueDate("");
+        setEndDate("");
+        setSelectedSubId("");
+        setDescription("");
+        setSelectedParentId("");
+        setQuantityOfCars("1");
+        setCarValue("");
+        setDepreciationTerm("5");
+        onCreated();
+      } catch (err: any) {
+        setBusy(false);
+        toast.error("Erro ao salvar lançamento: " + (err.message || "Tente novamente"));
+      }
+    };
+
     // Verificação de duplicados
     try {
       let query = supabase
@@ -424,112 +545,28 @@ export function TransactionForm({
 
       if (dupData && dupData.length > 0) {
         const msg = isPeriodic
-          ? "Atenção: Já existe um lançamento recorrente registrado que inicia com exatamente esses mesmos dados (Data, Valor, Categoria e Descrição). Tem certeza que deseja criar essa recorrência duplicada?"
-          : "Atenção: Já existe um lançamento registrado com exatamente os mesmos dados (Data, Valor, Categoria e Descrição). Tem certeza que deseja salvar este lançamento duplicado?";
-        if (!window.confirm(msg)) {
-          setBusy(false);
-          return;
-        }
+          ? "Atenção: Já existe um lançamento recorrente registrado que inicia com exatamente esses mesmos dados (Data, Valor, Categoria e Descrição). Deseja criar essa recorrência duplicada mesmo assim?"
+          : "Atenção: Já existe um lançamento registrado com exatamente os mesmos dados (Data, Valor, Categoria e Descrição). Deseja salvar este lançamento duplicado mesmo assim?";
+        
+        setBusy(false);
+        setFormConfirmModal({
+          isOpen: true,
+          title: "Lançamento Duplicado",
+          description: msg,
+          confirmText: "Salvar Mesmo Assim",
+          variant: "warning",
+          onConfirm: async () => {
+            setFormConfirmModal(null);
+            await executeSave();
+          },
+        });
+        return;
       }
     } catch (err: any) {
       console.warn("Erro ao checar duplicatas:", err.message || err);
     }
 
-
-
-    if (isPeriodic && endDate) {
-      const start = new Date(date + "T00:00:00");
-      const end = new Date(endDate + "T00:00:00");
-      
-      const transactions = [];
-      let current = new Date(start);
-      let isFirst = true;
-      while (current <= end) {
-        transactions.push({
-          user_id: user.id,
-          type,
-          nature,
-          category: parent?.name || "OUTROS",
-          category_id_v2: selectedParentId,
-          subcategory_id_v2: selectedSubId || null,
-          description: isFirst ? finalDescription : (finalDescription ? `${finalDescription} | VALIDAR VALOR` : "VALIDAR VALOR"),
-          amount: value,
-          occurred_on: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`
-        });
-        current.setMonth(current.getMonth() + 1);
-        isFirst = false;
-      }
-      
-      if (transactions.length > 0) {
-        const { error: mainError } = await supabase.from("transactions").insert(transactions);
-        if (mainError) {
-          setBusy(false);
-          toast.error(mainError.message);
-          return;
-        }
-      }
-    } else {
-      // 1. Registro da Receita Principal
-      const { error: mainError } = await supabase.from("transactions").insert({
-        user_id: user.id,
-        type,
-        nature,
-        category: parent?.name || "OUTROS",
-        category_id_v2: selectedParentId,
-        subcategory_id_v2: selectedSubId || null,
-        description: finalDescription,
-        amount: value,
-        occurred_on: date,
-      });
-
-      if (mainError) {
-        setBusy(false);
-        toast.error(mainError.message);
-        return;
-      }
-    }
-
-    // 2. Se for antecipação, registra o custo como despesa e o marcador de vencimento
-    if (isAntecipacao) {
-      // Custo da Operação (Despesa na mesma data)
-      if (costValue > 0) {
-        await supabase.from("transactions").insert({
-          user_id: user.id,
-          type: "expense",
-          nature: "variable",
-          category: "CUSTO ANTECIPAÇÃO",
-          subcategory_id_v2: selectedSubId || null,
-          description: finalDescription,
-          amount: costValue,
-          occurred_on: date,
-        });
-      }
-
-      // Marcador de Vencimento (0 na data de vencimento)
-      await supabase.from("transactions").insert({
-        user_id: user.id,
-        type: "expense", // Pode ser qualquer um, usaremos expense para facilitar o filtro de marcador se necessário
-        nature: "variable",
-        category: "VENCIMENTO ANTECIPAÇÃO",
-        description: `VENCIMENTO: ${finalDescription} | Valor: R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        amount: 0,
-        occurred_on: dueDate,
-      });
-    }
-
-    setBusy(false);
-    toast.success(isPeriodic ? "Lançamentos registrados!" : "Lançamento registrado!");
-    setAmount("");
-    setOperationCost("");
-    setDueDate("");
-    setEndDate("");
-    setSelectedSubId("");
-    setDescription("");
-    setSelectedParentId("");
-    setQuantityOfCars("1");
-    setCarValue("");
-    setDepreciationTerm("5");
-    onCreated();
+    await executeSave();
   }
 
   // Estilo padronizado para todos os campos (Rajdhani)
@@ -937,6 +974,22 @@ export function TransactionForm({
       >
         {busy ? "Processando..." : (isAntecipacao ? "REGISTRAR RECEITA E DESPESA" : `REGISTRAR ${type === "expense" ? "DESPESA" : "RECEITA"}`)}
       </button>
+
+      {formConfirmModal && (
+        <ConfirmModal
+          isOpen={formConfirmModal.isOpen}
+          onClose={() => setFormConfirmModal(null)}
+          onConfirm={formConfirmModal.onConfirm}
+          onConfirmWithInput={formConfirmModal.onConfirmWithInput}
+          title={formConfirmModal.title}
+          description={formConfirmModal.description}
+          confirmText={formConfirmModal.confirmText}
+          variant={formConfirmModal.variant || "info"}
+          isInputPrompt={formConfirmModal.isInputPrompt}
+          inputLabel={formConfirmModal.inputLabel}
+          inputPlaceholder={formConfirmModal.inputPlaceholder}
+        />
+      )}
     </form>
   );
 }

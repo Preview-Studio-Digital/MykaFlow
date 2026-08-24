@@ -804,6 +804,7 @@ function Dashboard() {
             {role === "admin" && (
               <Link
                 to="/admin"
+                search={{ from: "financeiro" }}
                 className="btn-ghost-neon rounded-lg px-3 py-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest"
               >
                 <ShieldCheck className="h-4 w-4" /> ADM

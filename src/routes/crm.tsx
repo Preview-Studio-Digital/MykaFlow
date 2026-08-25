@@ -7,6 +7,7 @@ import { extractQuoteDataFromDocument, type ExtractedQuoteData } from "@/lib/quo
 import {
   Users,
   Kanban,
+  LayoutGrid,
   Plus,
   ArrowLeft,
   Briefcase,
@@ -16,6 +17,7 @@ import {
   Lock,
   LogOut,
   ShieldCheck,
+  User,
   User as UserIcon,
   History,
   Send,
@@ -253,9 +255,62 @@ export interface DealTimeSession {
   stop_reason?: "manual" | "lunch_12h" | "end_of_day_17h30" | "auto_switch";
 }
 
+// Helper para garantir exibição apenas do primeiro nome (sem sobrenome para otimizar espaço)
+function getFirstName(name?: string | null): string {
+  if (!name) return "";
+  const clean = name.trim();
+  if (clean.includes("@")) {
+    return clean.split("@")[0].split(".")[0].toUpperCase();
+  }
+  return clean.split(" ")[0].toUpperCase();
+}
+
+// Helper para tema e cores de perfil (Administrador, Financeiro, Comercial)
+function getUserRoleTheme(role?: string | null, email?: string | null) {
+  const isAdm = role === "admin" || (email ? email.toLowerCase().includes("admin") : false);
+  if (isAdm) {
+    return {
+      text: "text-amber-300",
+      border: "border-amber-500/40",
+      bg: "bg-amber-500/20",
+      badge: "bg-amber-950/80 text-amber-300 border-amber-500/40",
+      indicator: "bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.85)]",
+      activeItem: "bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]",
+      hoverItem: "hover:bg-amber-500/10 hover:text-amber-200",
+      iconColor: "text-amber-400",
+      roleLabel: "ADM",
+    };
+  }
+  if (role === "financeiro") {
+    return {
+      text: "text-emerald-300",
+      border: "border-emerald-500/40",
+      bg: "bg-emerald-500/20",
+      badge: "bg-emerald-950/80 text-emerald-300 border-emerald-500/40",
+      indicator: "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.85)]",
+      activeItem: "bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.25)]",
+      hoverItem: "hover:bg-emerald-500/10 hover:text-emerald-200",
+      iconColor: "text-emerald-400",
+      roleLabel: "FINANCEIRO",
+    };
+  }
+  // Comercial / User
+  return {
+    text: "text-sky-300",
+    border: "border-sky-500/40",
+    bg: "bg-sky-500/20",
+    badge: "bg-sky-950/80 text-sky-300 border-sky-500/40",
+    indicator: "bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.85)]",
+    activeItem: "bg-sky-500/25 text-sky-300 border border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.25)]",
+    hoverItem: "hover:bg-sky-500/10 hover:text-sky-200",
+    iconColor: "text-sky-400",
+    roleLabel: "COMERCIAL",
+  };
+}
+
 // Helper para obter a sessão ativa de trabalho do deal
 function getDealActiveWorker(deal: Deal | null): { userId: string; userName: string; startedAt: string } | null {
-  if (!deal) return null;
+  if (!deal || !deal.notes) return null;
   if (deal.notes && deal.notes.includes("[WORK_ACTIVE:")) {
     try {
       const match = deal.notes.match(/\[WORK_ACTIVE:(.*?)\]/);
@@ -264,7 +319,7 @@ function getDealActiveWorker(deal: Deal | null): { userId: string; userName: str
         if (parsed.userId && parsed.startedAt) {
           return {
             userId: parsed.userId,
-            userName: parsed.userName || "Responsável",
+            userName: getFirstName(parsed.userName) || "RESPONSÁVEL",
             startedAt: parsed.startedAt,
           };
         }
@@ -945,20 +1000,24 @@ function CrmDashboard() {
   const [inlineCustomerPhone, setInlineCustomerPhone] = useState("");
 
   // Filtros e busca por coluna / usuário
-  const [internalFilterUser, setInternalFilterUser] = useState<string>("ALL");
+  const [internalFilterUser, setInternalFilterUser] = useState<string>("ME");
+  const [isBoardSelectorOpen, setIsBoardSelectorOpen] = useState(false);
   const [stageSearchTerms, setStageSearchTerms] = useState<Record<string, string>>({});
   const [openSearchStageId, setOpenSearchStageId] = useState<string | null>(null);
   const [userSearchTerms, setUserSearchTerms] = useState<Record<string, string>>({});
   const [openSearchUserId, setOpenSearchUserId] = useState<string | null>(null);
   const [hoveredSubcolUser, setHoveredSubcolUser] = useState<string | null>(null);
 
-  // Fechar barra de pesquisa ao clicar em qualquer lugar da tela fora da busca
+  // Fechar barra de pesquisa e menu de visão do quadro ao clicar fora
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest(".crm-search-box")) {
         setOpenSearchStageId(null);
         setOpenSearchUserId(null);
+      }
+      if (!target.closest(".user-board-selector")) {
+        setIsBoardSelectorOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -983,6 +1042,60 @@ function CrmDashboard() {
   const [stageToMove, setStageToMove] = useState<Deal["stage"] | null>(null);
   const [reassignTo, setReassignTo] = useState("");
   const [isSavingUpdate, setIsSavingUpdate] = useState(false);
+
+  // Linha do tempo unificada (histórico de movimentações + atualizações + respostas a menções + conclusões de vinculadas)
+  const unifiedTimelineList = useMemo(() => {
+    if (!selectedDealForHistory) return dealHistoryList;
+
+    const replies = getDealMentionReplies(selectedDealForHistory);
+    const completions = getDealSubtaskCompletions(selectedDealForHistory);
+
+    const items: (DealHistoryItem & { isReply?: boolean; isSubtaskCompletion?: boolean; rawReplyText?: string })[] = [
+      ...dealHistoryList,
+    ];
+
+    // Mescla respostas de atualizações/menções que ainda não estejam presentes no histórico
+    replies.forEach((rep) => {
+      const isAlreadyInHistory = items.some(
+        (h) => h.id === rep.id || (h.action_type === "reply" && h.description.includes(rep.reply_text.trim()))
+      );
+      if (!isAlreadyInHistory) {
+        items.push({
+          id: rep.id,
+          deal_id: rep.deal_id,
+          user_name: (rep.user_name || "Usuário").toUpperCase(),
+          action_type: "reply",
+          description: `↩ Resposta à atualização:\n${rep.reply_text}`,
+          created_at: rep.created_at,
+          isReply: true,
+          rawReplyText: rep.reply_text,
+        });
+      }
+    });
+
+    // Mescla conclusões de vinculadas
+    completions.forEach((comp) => {
+      const isAlreadyInHistory = items.some(
+        (h) => h.id === comp.id || (h.action_type === "subtask_completed" && h.description.includes(comp.subtaskTitle))
+      );
+      if (!isAlreadyInHistory) {
+        items.push({
+          id: comp.id,
+          deal_id: selectedDealForHistory.id,
+          user_name: (comp.userName || "Usuário").toUpperCase(),
+          action_type: "subtask_completed",
+          description: `${comp.userName} concluiu a tarefa "${comp.subtaskTitle}" (Nº ${comp.reqNumber})${
+            comp.completionText ? `\nAtualização de Fechamento: ${comp.completionText}` : ""
+          }`,
+          created_at: comp.created_at,
+          isSubtaskCompletion: true,
+        });
+      }
+    });
+
+    // Ordenação decrescente (mais recente primeiro)
+    return items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [dealHistoryList, selectedDealForHistory]);
 
   // Helper para adicionar logs automáticos imutáveis sempre terminados com ponto final
   const appendAutoLog = (logText: string) => {
@@ -1017,6 +1130,8 @@ function CrmDashboard() {
 
   // Caixa de Entrada de Menções (@usuario)
   const [isMentionsInboxOpen, setIsMentionsInboxOpen] = useState(false);
+  const [mentionsFilterTab, setMentionsFilterTab] = useState<"all" | "unread" | "read">("all");
+  const [mentionsSearchTerm, setMentionsSearchTerm] = useState("");
   const [mentionReplyText, setMentionReplyText] = useState<Record<string, string>>({});
   const [replyingToMentionId, setReplyingToMentionId] = useState<string | null>(null);
   
@@ -1110,13 +1225,10 @@ function CrmDashboard() {
     return () => clearTimeout(timeoutId);
   }, []);
 
-  // Monitoramento Automático de Horário (Auto-parada forçada às 12:00 e às 17:30)
-  // Monitoramento Automático de Horário e Encerramento Automático (Almoço 12h00 e Fim de Expediente 17h30/16h30)
+  // Monitoramento Automático de Horário (Auto-parada forçada às 12:00 e às 17:30 para TODOS, inclusive ADM)
   useEffect(() => {
     const checkScheduleAutoStop = async () => {
       if (!user) return;
-      // ADM tem autorização irrestrita para trabalhar normalmente em qualquer horário sem encerramento automático
-      if (isAdmin) return;
       const now = new Date();
 
       for (const deal of deals) {
@@ -1167,7 +1279,10 @@ function CrmDashboard() {
             try {
               await supabase.from("crm_deals").update({ notes: updatedNotes, updated_at: nowIso }).eq("id", deal.id);
               setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes, updated_at: nowIso } : d)));
-              toast.warning(`Atividade encerrada automaticamente (${cutoffInfo.reasonLabel || schedule.reason || "Fora do expediente"}).`, { duration: 6000 });
+              setInterruptedActivityTitle(deal.title);
+              setOffHoursInfo(schedule);
+              setShowOffHoursPrompt(true);
+              toast.warning(`Atividade interrompida pelo horário de corte (${cutoffInfo.reasonLabel || schedule.reason || "Fora do expediente"}).`, { duration: 6000 });
             } catch (e) {
               console.warn("Erro ao registrar parada automática:", e);
             }
@@ -1184,6 +1299,7 @@ function CrmDashboard() {
   const [showChooseActivityPrompt, setShowChooseActivityPrompt] = useState(false);
   const [showOffHoursPrompt, setShowOffHoursPrompt] = useState(false);
   const [offHoursInfo, setOffHoursInfo] = useState<WorkScheduleInfo | null>(null);
+  const [interruptedActivityTitle, setInterruptedActivityTitle] = useState<string | null>(null);
   const lastPromptTimeRef = useRef<number>(Date.now());
   const previousScheduleAllowedRef = useRef<boolean | null>(null);
   const offHoursPromptShownForCurrentPeriodRef = useRef<boolean>(false);
@@ -1532,6 +1648,12 @@ function CrmDashboard() {
         .select("id, display_name, email")
         .order("display_name");
 
+      const { data: rolesData } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+
+      const roleMap = new Map((rolesData || []).map((r: any) => [r.user_id, r.role]));
+
       const { data: dealsData } = await supabase
         .from("crm_deals")
         .select("*, crm_customers(name)")
@@ -1568,6 +1690,7 @@ function CrmDashboard() {
         setTeamMembers(
           profsData.map((p) => ({
             ...p,
+            role: roleMap.get(p.id) || "user",
             display_name: p.display_name ? p.display_name.toUpperCase() : p.display_name,
           }))
         );
@@ -1576,21 +1699,21 @@ function CrmDashboard() {
         const mappedDeals: Deal[] = dealsData.map((d: any) => {
           const creatorProf = profsData?.find((p) => p.id === d.user_id);
           const mappedStage = d.stage === "proposal" ? "negotiation" : d.stage;
-          const creatorName = (
+          const creatorName = getFirstName(
             creatorProf?.display_name ||
             creatorProf?.email ||
             (d.user_id === user?.id
               ? user?.user_metadata?.display_name || user?.email || "Você"
               : "Autor")
-          ).toUpperCase();
+          );
           const rawLatestAuthor = historyMap.get(d.id);
-          const latestAuthor = (rawLatestAuthor || creatorName).toUpperCase();
+          const latestAuthor = getFirstName(rawLatestAuthor || creatorName);
           const assignedProf = profsData?.find((p) => p.id === d.assigned_user_id);
-          const assignedName = (
+          const assignedName = getFirstName(
             assignedProf?.display_name ||
             assignedProf?.email ||
             "Não atribuído"
-          ).toUpperCase();
+          );
 
           const latestRealDate = historyDateMap.get(d.id) || d.created_at;
 
@@ -2351,7 +2474,6 @@ function CrmDashboard() {
         .from("crm_deals")
         .update({
           customer_id: newCustomerId || null,
-          customer_name: newCustomerName,
           updated_at: nowIso,
         })
         .eq("id", deal.id);
@@ -2967,7 +3089,7 @@ function CrmDashboard() {
     }
 
     const nowIso = new Date().toISOString();
-    const userName = user.user_metadata?.display_name || user.email || "Usuário";
+    const userName = getFirstName(user.user_metadata?.display_name || user.email || "Usuário");
 
     // Se confirmou a troca ou não havia outra, encerra a anterior se existir
     if (otherRunningDeal) {
@@ -3115,10 +3237,36 @@ function CrmDashboard() {
     const replyTag = `[MENTION_REPLY:${JSON.stringify(replyObj)}]`;
     const tagsBlock = mentionTags.length > 0 ? mentionTags.join("\n") + "\n" : "";
     const updatedNotes = `${replyTag}\n${tagsBlock}${deal.notes || ""}`.trim();
+    const historyDesc = `↩ Resposta à atualização:\n${replyText}`;
+    const historyEntry: DealHistoryItem = {
+      id: replyObj.id,
+      deal_id: deal.id,
+      user_name: currentUserName.toUpperCase(),
+      action_type: "reply",
+      description: historyDesc,
+      created_at: nowIso,
+    };
 
     try {
       // Salva a resposta no deal SEM alterar o updated_at para não modificar a coloração das atualizações
       await supabase.from("crm_deals").update({ notes: updatedNotes }).eq("id", deal.id);
+
+      // Registra a resposta no histórico permanente da atividade
+      try {
+        await supabase.from("crm_deal_history").insert({
+          id: replyObj.id,
+          deal_id: deal.id,
+          user_id: user.id,
+          user_name: currentUserName,
+          action_type: "reply",
+          description: historyDesc,
+          created_at: nowIso,
+        });
+      } catch (histErr) {
+        console.warn("Aviso ao salvar histórico de resposta:", histErr);
+      }
+
+      setDealHistoryList((prev) => [historyEntry, ...prev]);
       setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes } : d)));
       if (selectedDealForHistory?.id === deal.id) {
         setSelectedDealForHistory((prev) => (prev ? { ...prev, notes: updatedNotes } : null));
@@ -3126,7 +3274,7 @@ function CrmDashboard() {
 
       setMentionReplyText((prev) => ({ ...prev, [mentionId]: "" }));
       setReplyingToMentionId(null);
-      toast.success("Resposta enviada e vinculada à menção!");
+      toast.success("Resposta enviada e vinculada à linha do tempo!");
     } catch (err: any) {
       toast.error("Erro ao enviar resposta: " + err.message);
     }
@@ -3224,7 +3372,12 @@ function CrmDashboard() {
 
           // 1. Linha automática imutável da conclusão na vinculada
           const autoLogLine = `${userName} concluiu a vinculada "${cleanTitle}".`;
-          const combinedNotesText = [...autoGeneratedLogs, autoLogLine, completionText].filter(Boolean).join("\n\n");
+          const existingTags = (deal.notes || "").match(/\[(QUOTE_FILE|PARENT_DEAL|WORK_LOG|WORK_ACTIVE|QUOTE_DATA|MENTION|MENTION_REPLY|SUBTASK_COMPLETION):.*?\]/g) || [];
+          const cleanOldNotes = (deal.notes || "")
+            .replace(/\[(QUOTE_FILE|PARENT_DEAL|WORK_LOG|WORK_ACTIVE|QUOTE_DATA|MENTION|MENTION_REPLY|SUBTASK_COMPLETION):.*?\]\s*/g, "")
+            .trim();
+          const tagsPrefix = existingTags.length > 0 ? existingTags.join("\n") + "\n\n" : "";
+          const combinedNotesText = `${tagsPrefix}${[cleanOldNotes, ...autoGeneratedLogs, autoLogLine, completionText].filter(Boolean).join("\n\n")}`.trim();
 
           const { error } = await supabase
             .from("crm_deals")
@@ -3310,24 +3463,16 @@ function CrmDashboard() {
     });
   }
 
-  // Arquivar Atividade (Armazena os cards em categoria de arquivo das colunas Tarefas, Concluídos ou Perdidos)
+  // Arquivar / Armazenar Atividade (Disponível para Concluídos e Perdidos)
   function handleArchiveDeal(deal: Deal) {
-    if (!newComment.trim()) {
-      toast.error("Preencha o campo Nova Atualização antes de arquivar a atividade.");
-      return;
-    }
-
+    const isLinkedSubtask = Boolean(getParentDealInfo(deal));
     const reqNum = getDealReqNumber(deal, deals);
+    const typeLabel = isLinkedSubtask ? "Vinculada" : "Atividade";
     const cleanTitle = getCleanDealTitle(deal.title);
+
+    // Se estiver em "archived", recupera o originStage anterior, senão usa o stage atual
     const originStage = deal.stage === "archived" ? getArchivedOriginStage(deal) : (deal.stage as "lead" | "completed" | "lost");
-    if ((originStage === "completed" || originStage === "lost") && !isAdmin) {
-      toast.error("Apenas administradores podem arquivar atividades de Concluídos e Perdidos.");
-      return;
-    }
-    const typeLabel =
-      originStage === "lead" ? "Tarefa" : originStage === "completed" ? "Atividade Concluída" : "Atividade Perdida";
-    const destColumnName =
-      originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos";
+    const destColumnName = originStage === "completed" ? "Concluídos" : originStage === "lost" ? "Perdidos" : "Triagem";
 
     setCrmConfirmConfig({
       isOpen: true,
@@ -3341,7 +3486,16 @@ function CrmDashboard() {
           const nowIso = new Date().toISOString();
           const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
           const userNotes = newComment.trim();
-          const taggedNotes = `<!-- ORIGIN_STAGE:${originStage} -->\n${userNotes}`;
+
+          const existingTags = (deal.notes || "").match(/\[(QUOTE_FILE|PARENT_DEAL|WORK_LOG|WORK_ACTIVE|QUOTE_DATA|MENTION|MENTION_REPLY|SUBTASK_COMPLETION):.*?\]/g) || [];
+          const cleanOldNotes = (deal.notes || "")
+            .replace(/<!-- ORIGIN_STAGE:.*?-->/g, "")
+            .replace(/\[(QUOTE_FILE|PARENT_DEAL|WORK_LOG|WORK_ACTIVE|QUOTE_DATA|MENTION|MENTION_REPLY|SUBTASK_COMPLETION):.*?\]\s*/g, "")
+            .trim();
+
+          const combinedUserNotes = [cleanOldNotes, userNotes].filter(Boolean).join("\n\n");
+          const tagsPrefix = existingTags.length > 0 ? existingTags.join("\n") + "\n\n" : "";
+          const taggedNotes = `<!-- ORIGIN_STAGE:${originStage} -->\n${tagsPrefix}${combinedUserNotes}`.trim();
 
           const { error } = await supabase
             .from("crm_deals")
@@ -4213,6 +4367,10 @@ function CrmDashboard() {
     );
   }, [deals, returnedHistoryList]);
 
+  const totalAdminAlerts = useMemo(() => {
+    return overdueAlerts.length + returnedAlerts.length;
+  }, [overdueAlerts.length, returnedAlerts.length]);
+
   const totalArchivedCount = useMemo(() => {
     return visibleDeals.filter(
       (d) => d.stage === "archived" && !getParentDealInfo(d)
@@ -4326,43 +4484,39 @@ function CrmDashboard() {
     };
   }, [visibleDeals]);
 
-  // Inicialização inteligente: Abre automaticamente todas as colunas que possuem atividades e oculta as vazias
-  useEffect(() => {
-    if (visibleDeals && !loading && !userInitializedStages) {
-      const initialCollapsed: Record<string, boolean> = {};
-      STAGES.forEach((stage) => {
-        const count = visibleDeals.filter((d) => d.stage === stage.id).length;
-        initialCollapsed[stage.id] = count === 0;
-      });
-      setCollapsedStages(initialCollapsed);
-      setUserInitializedStages(true);
+  // Helper para obter atividades na visão ativa atual (respeitando o filtro de usuário selecionado)
+  const getStageActiveViewDeals = (stageId: string) => {
+    const effectiveUser = internalFilterUser === "ME" ? (user?.id || "ALL") : internalFilterUser;
+    let list = (visibleDeals || []).filter((d) => d.stage === stageId);
+    if (effectiveUser !== "ALL") {
+      if (effectiveUser === "unassigned") {
+        list = list.filter((d) => !d.assigned_user_id);
+      } else {
+        list = list.filter((d) => d.assigned_user_id === effectiveUser);
+      }
     }
-  }, [visibleDeals, loading, userInitializedStages]);
+    return list;
+  };
 
-  // Garante que qualquer coluna que receba novas atividades permaneça sempre aberta e visível
+  // Inicialização inteligente e atualização por visão: Abre colunas com atividades e recolhe as vazias na visão atual
   useEffect(() => {
     if (!visibleDeals || loading) return;
-    setCollapsedStages((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      STAGES.forEach((stage) => {
-        const count = visibleDeals.filter((d) => d.stage === stage.id).length;
-        if (count > 0 && next[stage.id]) {
-          next[stage.id] = false;
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
+    const initialCollapsed: Record<string, boolean> = {};
+    STAGES.forEach((stage) => {
+      const count = getStageActiveViewDeals(stage.id).length;
+      initialCollapsed[stage.id] = count === 0;
     });
-  }, [visibleDeals, loading]);
+    setCollapsedStages(initialCollapsed);
+    setUserInitializedStages(true);
+  }, [visibleDeals, loading, internalFilterUser, user?.id]);
 
   const toggleCollapseStage = (stageId: string) => {
-    const stageDealsCount = visibleDeals.filter((d) => d.stage === stageId).length;
+    const dealsInView = getStageActiveViewDeals(stageId);
     const isCurrentlyCollapsed = Boolean(collapsedStages[stageId]);
 
-    // Se estiver aberta e tiver atividades, não permite encolher
-    if (!isCurrentlyCollapsed && stageDealsCount > 0) {
-      toast.info("Colunas com atividades permanecem sempre abertas e não podem ser encolhidas.");
+    // Se estiver aberta e tiver atividades na visão atual, avisa
+    if (!isCurrentlyCollapsed && dealsInView.length > 0) {
+      toast.info("Colunas com atividades na sua visão permanecem abertas.");
       return;
     }
 
@@ -4387,12 +4541,13 @@ function CrmDashboard() {
 
   if (!user) return null;
 
+  const effectiveFilterUser = internalFilterUser === "ME" ? (user?.id || "ALL") : internalFilterUser;
+
   return (
     <TooltipProvider delayDuration={150}>
       <div
         onClick={() => {
           if (isolatedStageId) setIsolatedStageId(null);
-          if (internalFilterUser !== "ALL") setInternalFilterUser("ALL");
         }}
         className="relative z-10 h-screen max-h-screen flex flex-col overflow-hidden px-4 pt-3 pb-3 md:px-6"
       >
@@ -4401,18 +4556,16 @@ function CrmDashboard() {
         <div className="flex items-center gap-3 shrink-0">
           <Link
             to="/"
-            className="btn-ghost-neon p-2 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white"
+            className="btn-ghost-neon h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shadow-sm hover:scale-105"
             title="Voltar ao Seletor de Módulos (Hub Inicial)"
           >
             <ChevronLeft className="h-5 w-5" />
           </Link>
-          <Link
-            to="/"
-            className="flex flex-col select-none justify-center cursor-pointer focus:outline-none"
-            title="Voltar à tela inicial"
+          <div
+            className="flex flex-col select-none justify-center focus:outline-none"
           >
             <svg
-              className="w-[240px] sm:w-[265px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
+              className="w-[220px] sm:w-[250px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
               viewBox="0 0 265 26"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -4429,11 +4582,194 @@ function CrmDashboard() {
                 GESTÃO COMERCIAL
               </text>
             </svg>
-          </Link>
+          </div>
+
+          {/* Seletor Rápido de Visão do Quadro (Meu Quadro / Geral / Membros com Cor de Perfil) */}
+          {(() => {
+            const isMe = effectiveFilterUser === user?.id;
+            const isAll = effectiveFilterUser === "ALL";
+            const selectedMember = teamMembers.find((m) => m.id === effectiveFilterUser);
+            const myMember = teamMembers.find((m) => m.id === user?.id);
+
+            // Garante que o administrador sempre tenha o perfil ADM no seu quadro
+            const myRole = isAdmin ? "admin" : (role || myMember?.role || "user");
+            const myTheme = getUserRoleTheme(myRole, user?.email);
+
+            const memberRole = selectedMember
+              ? (selectedMember.id === user?.id && isAdmin ? "admin" : selectedMember.role)
+              : myRole;
+            const memberTheme = selectedMember 
+              ? getUserRoleTheme(memberRole, selectedMember.email) 
+              : myTheme;
+
+            const buttonStyle = isMe
+              ? `${myTheme.bg} ${myTheme.text} ${myTheme.border} hover:scale-105 shadow-md`
+              : isAll
+              ? "bg-sky-500/20 text-sky-300 border-sky-500/50 hover:bg-sky-500/30 hover:scale-105 shadow-[0_0_15px_rgba(56,189,248,0.25)]"
+              : `${memberTheme.bg} ${memberTheme.text} ${memberTheme.border} hover:scale-105 shadow-md`;
+
+            return (
+              <div className="relative user-board-selector">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsBoardSelectorOpen((prev) => !prev);
+                  }}
+                  className={`h-9 px-3 rounded-xl border flex items-center gap-2 text-xs font-black uppercase tracking-wider transition-all shadow-md cursor-pointer ${buttonStyle}`}
+                  title="Filtrar visão do quadro por perfil ou ver quadro geral"
+                >
+                  {isMe ? (
+                    <>
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${myTheme.indicator}`} />
+                      <UserCheck className={`h-3.5 w-3.5 ${myTheme.iconColor}`} />
+                      <span className="font-black">MEU QUADRO</span>
+                      <span className={`px-1.5 py-0.2 rounded-md font-mono text-[10px] font-bold border ${myTheme.badge}`}>
+                        {deals.filter((d) => d.assigned_user_id === user?.id && d.stage !== "archived").length}
+                      </span>
+                    </>
+                  ) : isAll ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full shrink-0 bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.85)]" />
+                      <LayoutGrid className="h-3.5 w-3.5 text-sky-400" />
+                      <span className="font-black">QUADRO GERAL</span>
+                      <span className="px-1.5 py-0.2 rounded-md bg-sky-950/80 text-sky-300 font-mono text-[10px] font-bold border border-sky-500/30">
+                        {deals.filter((d) => d.stage !== "archived").length}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${memberTheme.indicator}`} />
+                      <User className={`h-3.5 w-3.5 ${memberTheme.iconColor}`} />
+                      <span className="truncate max-w-[120px] font-black">
+                        {getFirstName(selectedMember?.display_name || selectedMember?.email || "COLABORADOR")}
+                      </span>
+                      <span className={`px-1.5 py-0.2 rounded-md font-mono text-[10px] font-bold border ${memberTheme.badge}`}>
+                        {deals.filter((d) => d.assigned_user_id === effectiveFilterUser && d.stage !== "archived").length}
+                      </span>
+                    </>
+                  )}
+                  <ChevronDown className={`h-3.5 w-3.5 opacity-70 transition-transform duration-200 ${isBoardSelectorOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {/* Dropdown Menu com visual Glassmorphism e Cores de Perfil */}
+                {isBoardSelectorOpen && (
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-full left-0 mt-2 w-72 rounded-2xl bg-slate-950/98 border border-white/15 backdrop-blur-2xl p-2 shadow-[0_15px_40px_rgba(0,0,0,0.85)] z-50 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 px-3 py-1.5 mb-1 border-b border-white/10 flex items-center justify-between">
+                      <span>VISÃO DO QUADRO KANBAN</span>
+                      <span className="text-[8px] text-muted-foreground">Clique para trocar</span>
+                    </div>
+
+                    <div className="space-y-1 max-h-80 overflow-y-auto custom-scrollbar p-0.5">
+                      {/* Opção 1: MEU QUADRO */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInternalFilterUser("ME");
+                          setIsBoardSelectorOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isMe
+                            ? `${myTheme.activeItem}`
+                            : `text-slate-300 ${myTheme.hoverItem} hover:bg-white/5`
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${myTheme.indicator}`} />
+                          <UserCheck className={`h-4 w-4 ${myTheme.iconColor}`} />
+                          <span className="uppercase font-black tracking-wide">Meu Quadro</span>
+                          <span className={`text-[8px] font-mono font-black px-1.5 py-0.2 rounded border uppercase tracking-wider ${myTheme.badge}`}>
+                            {myTheme.roleLabel}
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-black/50 ${myTheme.text} border ${myTheme.border}`}>
+                          {deals.filter((d) => d.assigned_user_id === user?.id && d.stage !== "archived").length}
+                        </span>
+                      </button>
+
+                      {/* Opção 2: QUADRO GERAL (TODOS) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInternalFilterUser("ALL");
+                          setIsBoardSelectorOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isAll
+                            ? "bg-sky-500/25 text-sky-300 border border-sky-500/40 shadow-sm"
+                            : "text-slate-300 hover:bg-sky-500/10 hover:text-sky-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-2 h-2 rounded-full shrink-0 bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.85)]" />
+                          <LayoutGrid className="h-4 w-4 text-sky-400" />
+                          <span className="uppercase font-black tracking-wide">Quadro Geral (Todos)</span>
+                        </div>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-black/50 text-sky-400 border border-sky-500/30">
+                          {deals.filter((d) => d.stage !== "archived").length}
+                        </span>
+                      </button>
+
+                      {/* Divisor */}
+                      <div className="h-px bg-white/10 my-1.5" />
+
+                      <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-500 px-3 py-0.5">
+                        Quadro por Colaborador
+                      </div>
+
+                      {/* Lista de Membros da Equipe */}
+                      {teamMembers
+                        .filter((m) => m.id !== user?.id)
+                        .map((m) => {
+                          const count = deals.filter((d) => d.assigned_user_id === m.id && d.stage !== "archived").length;
+                          const isSelected = effectiveFilterUser === m.id;
+                          const firstName = getFirstName(m.display_name || m.email || "Membro");
+                          const memberRole = (m.id === user?.id && isAdmin) ? "admin" : m.role;
+                          const theme = getUserRoleTheme(memberRole, m.email);
+
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                setInternalFilterUser(m.id);
+                                setIsBoardSelectorOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                isSelected
+                                  ? `${theme.activeItem}`
+                                  : `text-slate-300 ${theme.hoverItem} hover:bg-white/5`
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${theme.indicator}`} />
+                                <User className={`h-3.5 w-3.5 shrink-0 ${isSelected ? theme.iconColor : "text-slate-400"}`} />
+                                <span className={`uppercase truncate tracking-wide font-black ${isSelected ? theme.text : "text-slate-200"}`}>
+                                  {firstName}
+                                </span>
+                                <span className={`text-[8px] font-mono font-black px-1.5 py-0.2 rounded border uppercase tracking-wider ${theme.badge}`}>
+                                  {theme.roleLabel}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-black/50 text-slate-300 shrink-0 border border-white/5">
+                                {count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
-        {/* Centro do Cabeçalho: Tag Centralizada de Isolamento / Expansão de Atividade ou Usuário */}
-        {(internalFilterUser !== "ALL" || isolatedStageId) && (() => {
+        {/* Centro do Cabeçalho: Tag Centralizada de Isolamento de Etapa */}
+        {isolatedStageId && (() => {
           const isLead = isolatedStageId === "lead";
           const isCompleted = isolatedStageId === "completed";
           const isLost = isolatedStageId === "lost";
@@ -4460,72 +4796,27 @@ function CrmDashboard() {
 
           return (
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-30 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
-              {isolatedStageId && internalFilterUser !== "ALL" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsolatedStageId(null);
-                    setInternalFilterUser("ALL");
-                  }}
-                  className={`group inline-flex items-center justify-center px-4 py-1.5 rounded-xl ${tagTheme.btn} backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[38vw]`}
-                  title="Clique para fechar e voltar ao quadro geral"
-                >
-                  <span className={`text-xs sm:text-sm font-black uppercase tracking-wider ${tagTheme.text} leading-none transition-colors group-hover:hidden truncate`}>
-                    {`${STAGES.find((s) => s.id === isolatedStageId)?.title || "ATIVIDADE"} - ${
-                      teamMembers.find((m) => m.id === internalFilterUser)?.display_name ||
-                      teamMembers.find((m) => m.id === internalFilterUser)?.email ||
-                      deals.find((d) => d.assigned_user_id === internalFilterUser)?.assigned_user_name ||
-                      "USUÁRIO"
-                    }`}
-                  </span>
-                  <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
-                    FECHAR
-                  </span>
-                </button>
-              ) : isolatedStageId ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsolatedStageId(null);
-                    setInternalFilterUser("ALL");
-                  }}
-                  className={`group inline-flex items-center justify-center px-4 py-1.5 rounded-xl ${tagTheme.btn} backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[38vw]`}
-                  title="Clique para fechar e voltar ao quadro geral"
-                >
-                  <span className={`text-xs sm:text-sm font-black uppercase tracking-wider ${tagTheme.text} leading-none transition-colors group-hover:hidden truncate`}>
-                    {STAGES.find((s) => s.id === isolatedStageId)?.title || "ATIVIDADE"}
-                  </span>
-                  <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
-                    FECHAR
-                  </span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsolatedStageId(null);
-                    setInternalFilterUser("ALL");
-                  }}
-                  className={`group inline-flex items-center justify-center px-4 py-1.5 rounded-xl ${tagTheme.btn} backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[38vw]`}
-                  title="Clique para fechar e voltar ao quadro geral"
-                >
-                  <span className={`text-xs sm:text-sm font-black uppercase tracking-wider ${tagTheme.text} leading-none transition-colors group-hover:hidden truncate`}>
-                    {teamMembers.find((m) => m.id === internalFilterUser)?.display_name ||
-                      teamMembers.find((m) => m.id === internalFilterUser)?.email ||
-                      deals.find((d) => d.assigned_user_id === internalFilterUser)?.assigned_user_name ||
-                      "USUÁRIO"}
-                  </span>
-                  <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
-                    FECHAR
-                  </span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsolatedStageId(null);
+                }}
+                className={`group inline-flex items-center justify-center px-4 py-1.5 rounded-xl ${tagTheme.btn} backdrop-blur-xl transition-all duration-200 cursor-pointer animate-in fade-in select-none max-w-[38vw]`}
+                title="Clique para fechar e voltar às colunas completas"
+              >
+                <span className={`text-xs sm:text-sm font-black uppercase tracking-wider ${tagTheme.text} leading-none transition-colors group-hover:hidden truncate`}>
+                  {STAGES.find((s) => s.id === isolatedStageId)?.title || "ATIVIDADE"}
+                </span>
+                <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300 leading-none transition-colors hidden group-hover:inline">
+                  FECHAR
+                </span>
+              </button>
             </div>
           );
         })()}
 
         {/* Lado Direito: Calendário de Prazos, Caixa de Entrada de Menções (@usuario), ADM e Sair */}
-        <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 justify-end shrink-0">
           {/* Botão de Calendário de Prazos no Cabeçalho */}
           <button
             type="button"
@@ -4533,14 +4824,12 @@ function CrmDashboard() {
               setCalendarUserFilter(role === "admin" ? "ALL" : (user?.id || "ALL"));
               setIsCalendarModalOpen(true);
             }}
-            className="btn-ghost-neon px-2.5 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-sky-400 hover:text-white border-sky-500/30 hover:border-sky-400/60 bg-sky-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
+            className="btn-ghost-neon h-9 px-3 rounded-xl flex items-center justify-center gap-1.5 text-sky-400 hover:text-white border border-sky-500/30 hover:border-sky-400/60 bg-sky-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer text-xs font-black uppercase tracking-wider"
             title={role === "admin" ? "Calendário de Prazos (Geral de Todos os Responsáveis)" : "Meu Calendário de Prazos"}
           >
             <Calendar className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline text-xs font-black uppercase tracking-wider">
-              Prazos
-            </span>
-            <span className="px-1.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-mono text-[10px] font-bold border border-sky-400/40">
+            <span className="hidden sm:inline">Prazos</span>
+            <span className="px-1.5 py-0.2 rounded-md bg-sky-500/20 text-sky-300 font-mono text-[10px] font-bold border border-sky-400/40">
               {role === "admin"
                 ? deals.filter((d) => Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost").length
                 : deals.filter((d) => d.assigned_user_id === user?.id && Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost").length
@@ -4548,54 +4837,55 @@ function CrmDashboard() {
             </span>
           </button>
 
-          <div className="flex items-center">
-            {/* Botão Caixa de Entrada de Menções com @usuario */}
-              <button
-                type="button"
-                onClick={() => setIsMentionsInboxOpen(true)}
-                className="group/mentionbtn relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-black/40 border border-white/10 hover:border-sky-400/50 hover:bg-sky-500/10 transition-all cursor-pointer shadow-sm"
-                title="Abrir Caixa de Entrada de Menções (@)"
+          {/* Botão Caixa de Entrada de Menções com @usuario */}
+          <button
+            type="button"
+            onClick={() => setIsMentionsInboxOpen(true)}
+            className="group/mentionbtn relative h-9 flex items-center gap-1.5 px-3 rounded-xl bg-black/40 border border-white/10 hover:border-sky-400/50 hover:bg-sky-500/10 transition-all cursor-pointer shadow-sm text-xs font-black uppercase tracking-widest text-white hover:scale-105"
+            title="Abrir Caixa de Entrada de Menções (@)"
+          >
+            <AtSign className="h-3.5 w-3.5 text-sky-400 group-hover/mentionbtn:scale-110 transition-transform" />
+            <p className="text-xs font-black uppercase tracking-widest text-white group-hover/mentionbtn:text-sky-300">
+              {user?.user_metadata?.display_name || user?.email}
+            </p>
+
+            {/* Badge de Menções Não Lidas no Nome do Usuário */}
+            {userMentionsData.unreadCount > 0 && (
+              <span
+                className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-mono font-black text-[10px] shadow-[0_0_10px_rgba(244,63,94,0.9)] animate-pulse shrink-0 ml-0.5 leading-none select-none"
+                title={`Você possui ${userMentionsData.unreadCount} ${
+                  userMentionsData.unreadCount === 1 ? "menção não lida" : "menções não lidas"
+                }`}
               >
-                <AtSign className="h-3.5 w-3.5 text-sky-400 group-hover/mentionbtn:scale-110 transition-transform" />
-                <p className="text-xs font-black uppercase tracking-widest text-white group-hover/mentionbtn:text-sky-300">
-                  {user?.user_metadata?.display_name || user?.email}
-                </p>
+                {userMentionsData.unreadCount}
+              </span>
+            )}
+          </button>
 
-                {/* Badge de Menções Não Lidas no Nome do Usuário */}
-                {userMentionsData.unreadCount > 0 && (
-                  <span
-                    className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-mono font-black text-[10px] shadow-[0_0_10px_rgba(244,63,94,0.9)] animate-pulse shrink-0 ml-0.5 leading-none select-none"
-                    title={`Você possui ${userMentionsData.unreadCount} ${
-                      userMentionsData.unreadCount === 1 ? "menção não lida" : "menções não lidas"
-                    }`}
-                  >
-                    {userMentionsData.unreadCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {role === "admin" && (
-                <Link
-                  to="/admin"
-                  search={{ from: "crm" }}
-                  className="btn-ghost-neon rounded-lg px-3.5 py-2 text-xs flex items-center gap-1.5 text-accent hover:text-accent-foreground"
-                >
-                  <ShieldCheck className="h-4 w-4" /> ADM
-                </Link>
-              )}
-
-              <button
-                type="button"
-                onClick={handleExit}
-                className="btn-ghost-neon rounded-lg px-3.5 py-2 text-xs flex items-center gap-1.5 text-rose-400 hover:text-rose-300"
-                title={role === "admin" ? "Voltar ao Seletor de Módulos" : "Sair do Sistema"}
+          {/* ADM e Sair */}
+          <div className="flex items-center gap-2">
+            {role === "admin" && (
+              <Link
+                to="/admin"
+                search={{ from: "crm" }}
+                className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-amber-300 hover:text-white border border-amber-500/30 hover:border-amber-400/60 bg-amber-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
               >
-                <LogOut className="h-4 w-4" /> Sair
-              </button>
-            </div>
+                <ShieldCheck className="h-4 w-4 text-amber-400" />
+                <span>ADM</span>
+              </Link>
+            )}
+
+            <button
+              type="button"
+              onClick={handleExit}
+              className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-400/60 bg-rose-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
+              title={role === "admin" ? "Voltar ao Seletor de Módulos" : "Sair do Sistema"}
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Sair</span>
+            </button>
           </div>
+        </div>
         </header>
 
       {/* Quadro de Tarefas / Atividades Kanban com Estilo Futurista Glass e Rolagem Própria por Coluna */}
@@ -4841,9 +5131,9 @@ function CrmDashboard() {
                         } to-transparent my-1.5`}
                       />
 
-                      {/* Linha 2: Nome do Responsável em destaque */}
+                      {/* Linha 2: Nome do Responsável em destaque (apenas primeiro nome) */}
                       <span className="font-mono text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-100 drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] truncate max-w-[210px]">
-                        {activeWorker?.userName || deal.assigned_user_name || "RESPONSÁVEL"}
+                        {getFirstName(activeWorker?.userName || deal.assigned_user_name || "RESPONSÁVEL")}
                       </span>
                     </div>
                   );
@@ -5144,11 +5434,11 @@ function CrmDashboard() {
             const currentStage = STAGES.find((s) => s.id === isolatedStageId) || STAGES[0];
             let stageDeals = visibleDeals.filter((d) => d.stage === currentStage.id);
 
-            if (internalFilterUser !== "ALL") {
-              if (internalFilterUser === "unassigned") {
+            if (effectiveFilterUser !== "ALL") {
+              if (effectiveFilterUser === "unassigned") {
                 stageDeals = stageDeals.filter((d) => !d.assigned_user_id);
               } else {
-                stageDeals = stageDeals.filter((d) => d.assigned_user_id === internalFilterUser);
+                stageDeals = stageDeals.filter((d) => d.assigned_user_id === effectiveFilterUser);
               }
             }
 
@@ -5395,12 +5685,12 @@ function CrmDashboard() {
               {STAGES.map((stage) => {
                 let stageDeals = visibleDeals.filter((d) => d.stage === stage.id);
 
-                if (internalFilterUser !== "ALL") {
-                  if (internalFilterUser === "unassigned") {
+                if (effectiveFilterUser !== "ALL") {
+                  if (effectiveFilterUser === "unassigned") {
                     stageDeals = stageDeals.filter((d) => !d.assigned_user_id);
                   } else {
                     stageDeals = stageDeals.filter(
-                      (d) => d.assigned_user_id === internalFilterUser
+                      (d) => d.assigned_user_id === effectiveFilterUser
                     );
                   }
                 }
@@ -5807,7 +6097,20 @@ function CrmDashboard() {
                     </div>
 
                     {/* Rodapé da Coluna com Desfoque Gradual / Degradê Idêntico para Todas as Colunas */}
-                    <div className="absolute bottom-0 left-0 right-0 p-2 pt-6 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent backdrop-blur-[3px] rounded-b-2xl z-20 pointer-events-none">
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (stage.id === "lead" || stage.id === "completed" || stage.id === "lost") {
+                          setArchivedFilterStage(stage.id as "lead" | "completed" | "lost");
+                          setIsArchivedModalOpen(true);
+                        }
+                      }}
+                      className={`absolute bottom-0 left-0 right-0 p-2 pt-6 bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent backdrop-blur-[4px] rounded-b-2xl z-30 select-none ${
+                        (stage.id === "lead" || stage.id === "completed" || stage.id === "lost")
+                          ? "pointer-events-auto cursor-pointer"
+                          : "pointer-events-none"
+                      }`}
+                    >
                       {(stage.id === "lead" || stage.id === "completed" || stage.id === "lost") ? (() => {
                         const archivedInStage = getArchivedDealsForStage(stage.id as "lead" | "completed" | "lost", deals);
                         const isLead = stage.id === "lead";
@@ -5820,13 +6123,8 @@ function CrmDashboard() {
                           : "text-rose-300 border-rose-500/40 bg-rose-500/20";
 
                         return (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setArchivedFilterStage(stage.id as "lead" | "completed" | "lost");
-                              setIsArchivedModalOpen(true);
-                            }}
-                            className="w-full py-1.5 px-2.5 rounded-xl border border-white/10 hover:border-white/25 bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-md transition-all flex items-center justify-between text-xs font-black uppercase tracking-wider text-muted-foreground hover:text-white group cursor-pointer shadow-lg pointer-events-auto"
+                          <div
+                            className="w-full py-1.5 px-2.5 rounded-xl border border-white/10 hover:border-white/25 bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-md transition-all flex items-center justify-between text-xs font-black uppercase tracking-wider text-muted-foreground hover:text-white group shadow-lg cursor-pointer"
                             title={`Ver ${isLead ? "Tarefas" : isCompleted ? "Concluídos" : "Perdidos"} Arquivadas`}
                           >
                             <div className="flex items-center gap-1.5">
@@ -5839,7 +6137,7 @@ function CrmDashboard() {
                             <span className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-full border ${badgeColor} transition-transform group-hover:scale-105`}>
                               {archivedInStage.length}
                             </span>
-                          </button>
+                          </div>
                         );
                       })() : (
                         <div className="w-full h-[32px]" />
@@ -5855,9 +6153,7 @@ function CrmDashboard() {
 
       {selectedDealForHistory && (() => {
         const hasModalDeadline = Boolean(selectedDealForHistory.expected_close_date);
-        const modalStyle = hasModalDeadline
-          ? getInternalDeadlineStyle(selectedDealForHistory.expected_close_date)
-          : getDealAgingStyle(selectedDealForHistory.latest_update_at || selectedDealForHistory.created_at);
+        const modalStyle = getInternalDeadlineStyle(selectedDealForHistory.expected_close_date);
         const aging = getDealAgingStyle(selectedDealForHistory.latest_update_at || selectedDealForHistory.created_at);
 
         return (
@@ -6192,7 +6488,7 @@ function CrmDashboard() {
                 <div className="flex-1 min-h-0 flex flex-col space-y-3 pt-2.5 overflow-hidden animate-in fade-in duration-200">
                   <div className="shrink-0 flex items-center justify-between p-2.5 rounded-xl bg-white/[0.04] border border-white/10">
                     <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-sky-300">
-                      <History className="h-4 w-4 text-accent" /> Linha do Tempo Completa ({dealHistoryList.length} eventos)
+                      <History className="h-4 w-4 text-accent" /> Linha do Tempo Completa ({unifiedTimelineList.length} eventos)
                     </span>
                     <button
                       type="button"
@@ -6206,30 +6502,67 @@ function CrmDashboard() {
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1.5 custom-scrollbar">
                     {historyLoading ? (
                       <p className="text-xs text-muted-foreground text-center py-12 animate-pulse">Carregando histórico completo...</p>
-                    ) : dealHistoryList.length === 0 ? (
+                    ) : unifiedTimelineList.length === 0 ? (
                       <div className="text-center py-16 border border-dashed border-white/10 rounded-xl">
                         <p className="text-xs text-muted-foreground/60 uppercase font-bold tracking-widest">Nenhum evento registrado ainda nesta atividade.</p>
                       </div>
                     ) : (
-                      dealHistoryList.map((item) => (
-                        <div
-                          key={item.id}
-                          className="p-3.5 rounded-xl bg-black/40 border border-white/10 space-y-1.5 text-xs shadow-inner"
-                        >
-                          <div className="flex items-center justify-between text-muted-foreground border-b border-white/5 pb-1">
-                            <span className="font-bold text-white uppercase text-[11px] flex items-center gap-1.5">
-                              <UserIcon className="h-3.5 w-3.5 text-accent" />
-                              {item.user_name}
-                            </span>
-                            <span className="font-mono text-[10px] text-muted-foreground">
-                              {new Date(item.created_at).toLocaleString("pt-BR")}
-                            </span>
-                          </div>
+                      unifiedTimelineList.map((item) => {
+                        const isReply = item.action_type === "reply" || (item as any).isReply;
+                        const isSubtaskComp = item.action_type === "subtask_completed" || (item as any).isSubtaskCompletion;
 
-                          {/* Renderização Inteligente com Links Clicáveis */}
-                          {renderInteractiveDescription(item.description)}
-                        </div>
-                      ))
+                        return (
+                          <div
+                            key={item.id}
+                            className={`p-3.5 rounded-xl bg-black/40 border space-y-1.5 text-xs shadow-inner transition-all ${
+                              isReply
+                                ? "border-sky-400/40 bg-sky-950/20 shadow-[0_0_10px_rgba(56,189,248,0.05)] border-l-4 border-l-sky-400"
+                                : isSubtaskComp
+                                ? "border-emerald-500/40 bg-emerald-950/20 border-l-4 border-l-emerald-400"
+                                : "border-white/10"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-muted-foreground border-b border-white/5 pb-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white uppercase text-[11px] flex items-center gap-1.5">
+                                  {isReply ? (
+                                    <Reply className="h-3.5 w-3.5 text-sky-400" />
+                                  ) : isSubtaskComp ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                  ) : (
+                                    <UserIcon className="h-3.5 w-3.5 text-accent" />
+                                  )}
+                                  {item.user_name}
+                                </span>
+                                {isReply && (
+                                  <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 uppercase flex items-center gap-1 shadow-sm">
+                                    Resposta
+                                  </span>
+                                )}
+                                {isSubtaskComp && (
+                                  <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 uppercase flex items-center gap-1 shadow-sm">
+                                    Vinculada Concluída
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                {new Date(item.created_at).toLocaleString("pt-BR")}
+                              </span>
+                            </div>
+
+                            {/* Renderização Inteligente de Respostas ou Descrições */}
+                            {isReply && (item as any).rawReplyText ? (
+                              <div className="space-y-1 pt-0.5 pl-2">
+                                <p className="text-white/95 text-xs whitespace-pre-wrap leading-relaxed">
+                                  {formatMentionsInText((item as any).rawReplyText)}
+                                </p>
+                              </div>
+                            ) : (
+                              renderInteractiveDescription(item.description)
+                            )}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -6597,7 +6930,7 @@ function CrmDashboard() {
                                   className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm"
                                   title="Criar e vincular uma atividade a esta atividade principal"
                                 >
-                                  <PlusCircle className="h-3.5 w-3.5 text-emerald-400" /> + VINCULADA
+                                  <PlusCircle className="h-3.5 w-3.5 text-emerald-400" /> VINCULAR ATIVIDADE
                                 </button>
 
                                 {/* 2. Anexo de Arquivo com Compressão Client-side e Tooltip Inteligente */}
@@ -7011,7 +7344,7 @@ function CrmDashboard() {
                       <History className="h-4 w-4 text-accent" /> Abrir Linha do Tempo
                     </span>
                     <span className="text-[10px] font-mono font-bold text-accent px-2 py-0.5 rounded bg-accent/10 border border-accent/20">
-                      {dealHistoryList.length} {dealHistoryList.length === 1 ? "evento" : "eventos"}
+                      {unifiedTimelineList.length} {unifiedTimelineList.length === 1 ? "evento" : "eventos"}
                     </span>
                   </button>
                 </div>
@@ -9172,118 +9505,252 @@ function CrmDashboard() {
         </div>
       )}
 
-      {/* Modal Caixa de Entrada de Menções (@usuario) */}
+      {/* Página em Tela Cheia: Caixa de Entrada de Menções (@usuario) */}
       {isMentionsInboxOpen && (
-        <div
-          onClick={() => setIsMentionsInboxOpen(false)}
-          className="fixed inset-0 z-[85] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in select-none"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl rounded-2xl border border-sky-400/40 bg-slate-950 p-5 sm:p-6 shadow-2xl flex flex-col text-white space-y-4 shadow-sky-950/50 max-h-[88vh] overflow-hidden"
-          >
-            {/* Header da Caixa de Entrada */}
-            <div className="shrink-0 flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-400/40 shrink-0">
-                  <Inbox className="h-6 w-6" />
+        <div className="fixed inset-0 z-[85] flex flex-col bg-[#020617] text-white animate-in fade-in select-none">
+          {/* 1. Cabeçalho Superior da Página */}
+          <header className="shrink-0 bg-slate-950/80 backdrop-blur-xl border-b border-sky-500/20 px-4 sm:px-8 py-4 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <button
+                type="button"
+                onClick={() => setIsMentionsInboxOpen(false)}
+                className="btn-ghost-neon h-9 w-9 rounded-xl flex items-center justify-center text-accent hover:text-white border-primary/20 shrink-0 cursor-pointer transition-all hover:scale-105"
+                title="Voltar ao CRM"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+
+              <div className="flex flex-col select-none justify-center focus:outline-none shrink-0">
+                <svg
+                  className="w-[210px] sm:w-[245px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
+                  viewBox="0 0 245 26"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <text
+                    x="0"
+                    y="21"
+                    className="font-saira-stencil"
+                    fontSize="22"
+                    fill="#22d3ee"
+                    textLength="245"
+                    lengthAdjust="spacing"
+                  >
+                    CAIXA DE MENÇÕES
+                  </text>
+                </svg>
+              </div>
+
+              <div className="h-6 w-px bg-white/15 hidden md:block shrink-0" />
+
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-400/30 shadow-[0_0_15px_rgba(56,189,248,0.25)] shrink-0">
+                  <AtSign className="h-4 w-4" />
                 </div>
-                <div>
-                  <h3 className="text-base font-black uppercase tracking-wider text-sky-300 flex items-center gap-2">
-                    <span>Minha Caixa de Menções (@)</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black font-mono uppercase text-sky-300">
+                      @{user?.user_metadata?.display_name || user?.email}
+                    </span>
                     {userMentionsData.unreadCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white font-mono text-[10px] font-black animate-pulse">
+                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white font-mono text-[10px] font-black animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]">
                         {userMentionsData.unreadCount} novas
                       </span>
                     )}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Todas as atividades onde colegas mencionaram o seu usuário (@{user?.user_metadata?.display_name?.split(" ")[0] || "você"}).
+                  </div>
+                  <p className="text-[11px] text-muted-foreground hidden lg:block truncate">
+                    Atividades em que você foi citado por colegas de equipe.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Lista de Menções com Rolagem - Linha Única Numerada */}
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
-              {userMentionsData.all.length === 0 ? (
-                <div className="text-center py-16 border border-dashed border-white/10 rounded-2xl">
-                  <AtSign className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
-                    Você ainda não recebeu nenhuma menção em atividades.
-                  </p>
-                </div>
-              ) : (
-                userMentionsData.all.map(({ mention, deal }, idx) => {
-                  const isUnread = !mention.read_by_user;
-                  const itemNumber = userMentionsData.all.length - idx; // Numeração sequencial
-                  const cleanActivityTitle = `${getCleanDealTitle(deal.title)} (Nº ${getDealReqNumber(deal, deals)})`;
+            {/* Badges de Contagem e Pesquisa */}
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={mentionsSearchTerm}
+                  onChange={(e) => setMentionsSearchTerm(e.target.value)}
+                  placeholder="Pesquisar menções..."
+                  className="w-full bg-slate-900 border border-white/15 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-muted-foreground focus:outline-none focus:border-sky-400/60 font-mono"
+                />
+              </div>
 
-                  return (
-                    <div
-                      key={mention.id}
-                      onClick={() => {
-                        setIsMentionsInboxOpen(false);
-                        openDealHistory(deal);
-                      }}
-                      className={`group p-2.5 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-all duration-150 ${
-                        isUnread
-                          ? "bg-rose-950/30 hover:bg-rose-950/45 border-rose-500/50 shadow-sm hover:border-rose-400"
-                          : "bg-emerald-950/25 hover:bg-emerald-950/40 border-emerald-500/40 shadow-sm hover:border-emerald-400"
-                      }`}
-                      title="Clique para abrir esta atividade, responder ou marcar como lida"
-                    >
-                      {/* Lado Esquerdo: Número + Indicador + [USUÁRIO] mencionou você em [ATIVIDADE] */}
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        {/* Numeração da Menção */}
-                        <span className={`font-mono text-xs font-black shrink-0 w-6 text-right ${isUnread ? "text-rose-400" : "text-emerald-400"}`}>
-                          #{itemNumber}
-                        </span>
+              {/* Abas Rápidas de Filtro */}
+              <div className="flex items-center gap-1 bg-slate-900/90 border border-white/10 p-1 rounded-xl font-mono text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMentionsFilterTab("all")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                    mentionsFilterTab === "all"
+                      ? "bg-sky-500 text-white shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Todas ({userMentionsData.all.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMentionsFilterTab("unread")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                    mentionsFilterTab === "unread"
+                      ? "bg-rose-500 text-white shadow-sm"
+                      : "text-rose-400 hover:text-rose-300"
+                  }`}
+                >
+                  Não Lidas ({userMentionsData.unreadCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMentionsFilterTab("read")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                    mentionsFilterTab === "read"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-emerald-400 hover:text-emerald-300"
+                  }`}
+                >
+                  Lidas ({userMentionsData.all.length - userMentionsData.unreadCount})
+                </button>
+              </div>
+            </div>
+          </header>
 
-                        {/* Indicador de Status */}
-                        {isUnread ? (
-                          <span className="h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)] shrink-0 animate-pulse" title="Não lida" />
-                        ) : (
-                          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0" title="Lida" />
-                        )}
+          {/* 2. Conteúdo da Página: Tabela / Lista em Tela Cheia */}
+          <main className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-8 max-w-7xl w-full mx-auto flex flex-col space-y-3 custom-scrollbar">
+            {(() => {
+              const filteredMentions = userMentionsData.all.filter((item) => {
+                if (mentionsFilterTab === "unread" && item.mention.read_by_user) return false;
+                if (mentionsFilterTab === "read" && !item.mention.read_by_user) return false;
+                if (mentionsSearchTerm.trim()) {
+                  const term = mentionsSearchTerm.toLowerCase();
+                  const matchAuthor = item.mention.author_name?.toLowerCase().includes(term);
+                  const matchTitle = item.deal.title?.toLowerCase().includes(term);
+                  const matchContent = item.mention.content?.toLowerCase().includes(term);
+                  const matchReq = getDealReqNumber(item.deal, deals)?.toLowerCase().includes(term);
+                  if (!matchAuthor && !matchTitle && !matchContent && !matchReq) return false;
+                }
+                return true;
+              });
 
-                        {/* Linha única: [AUTOR] mencionou você em [ATIVIDADE] */}
-                        <p className="text-xs truncate leading-tight">
-                          <strong className={`font-bold uppercase ${isUnread ? "text-rose-300 group-hover:text-rose-200" : "text-emerald-300 group-hover:text-emerald-200"}`}>
-                            {mention.author_name}
-                          </strong>
-                          <span className="text-muted-foreground mx-1.5 font-normal">mencionou você em</span>
-                          <strong className="text-white font-bold uppercase underline underline-offset-2 decoration-white/30 group-hover:decoration-white">
-                            {cleanActivityTitle}
-                          </strong>
-                        </p>
-                      </div>
-
-                      {/* Lado Direito: Etapa + Data/Hora */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`font-mono text-[9px] uppercase px-1.5 py-0.5 rounded border shrink-0 ${
-                          isUnread
-                            ? "bg-rose-900/40 text-rose-200 border-rose-500/30"
-                            : "bg-emerald-900/40 text-emerald-200 border-emerald-500/30"
-                        }`}>
-                          {STAGES.find((s) => s.id === deal.stage)?.title || deal.stage}
-                        </span>
-                        <span className="font-mono text-[10px] text-muted-foreground shrink-0 hidden sm:inline">
-                          {new Date(mention.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </div>
+              if (filteredMentions.length === 0) {
+                return (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-12 border border-dashed border-white/10 rounded-3xl bg-white/[0.01]">
+                    <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 mb-3">
+                      <Inbox className="h-10 w-10 opacity-60" />
                     </div>
-                  );
-                })
-              )}
-            </div>
+                    <h4 className="text-sm font-black uppercase tracking-widest text-slate-300 font-mono">
+                      Nenhuma menção encontrada no filtro selecionado
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-md">
+                      Todas as menções recebidas aparecem organizadas nesta tela para facilitar o acompanhamento direto.
+                    </p>
+                  </div>
+                );
+              }
 
-            {/* Footer Informativo Simples */}
-            <div className="shrink-0 flex items-center justify-between pt-3 border-t border-white/10 text-[11px] text-muted-foreground font-mono">
-              <span>Total de Menções: {userMentionsData.all.length}</span>
-              <span className="text-[10px] text-muted-foreground/60 italic">Clique fora para fechar</span>
-            </div>
-          </div>
+              return (
+                <div className="space-y-2.5">
+                  {filteredMentions.map(({ mention, deal, replies }, idx) => {
+                    const isUnread = !mention.read_by_user;
+                    const itemNumber = userMentionsData.all.length - idx;
+                    const formattedNumber = String(itemNumber).padStart(2, "0");
+                    const cleanTitle = getCleanDealTitle(deal.title);
+                    const dealReqNumber = getDealReqNumber(deal, deals);
+                    const stageObj = STAGES.find((s) => s.id === deal.stage);
+
+                    return (
+                      <div
+                        key={mention.id}
+                        onClick={() => {
+                          setIsMentionsInboxOpen(false);
+                          openDealHistory(deal);
+                        }}
+                        className={`group p-3.5 sm:p-4 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 shadow-lg ${
+                          isUnread
+                            ? "bg-rose-950/25 hover:bg-rose-950/40 border-rose-500/40 shadow-rose-950/20 hover:border-rose-400 hover:shadow-[0_0_25px_rgba(244,63,94,0.2)]"
+                            : "bg-slate-900/60 hover:bg-slate-900/90 border-white/10 hover:border-sky-400/40 shadow-black/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.15)]"
+                        }`}
+                        title="Clique para abrir esta atividade no CRM"
+                      >
+                        {/* Coluna 1: Número Sequencial + Status + Autor + Atividade + Mensagem */}
+                        <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
+                          {/* Número Sequencial Organizado */}
+                          <span className={`font-mono text-xs sm:text-sm font-black px-2.5 py-1 rounded-xl border shrink-0 ${
+                            isUnread
+                              ? "bg-rose-950/80 text-rose-300 border-rose-500/40"
+                              : "bg-slate-800/90 text-slate-300 border-white/10"
+                          }`}>
+                            #{formattedNumber}
+                          </span>
+
+                          {/* Status Lida / Não Lida */}
+                          <span className={`font-mono text-[9px] font-black uppercase px-2 py-0.5 rounded-lg border shrink-0 flex items-center gap-1 ${
+                            isUnread
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/50 animate-pulse"
+                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                          }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${isUnread ? "bg-rose-400" : "bg-emerald-400"}`} />
+                            {isUnread ? "NOVA" : "LIDA"}
+                          </span>
+
+                          {/* Informações da Mensagem e Atividade */}
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-black uppercase font-mono text-sky-400">
+                                @{mention.author_name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">mencionou você em</span>
+                              <span className="text-xs font-bold uppercase text-white group-hover:text-sky-300 transition-colors truncate">
+                                {cleanTitle}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-400 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
+                                Nº {dealReqNumber}
+                              </span>
+                            </div>
+
+                            {/* Trecho do conteúdo da mensagem */}
+                            {mention.content && (
+                              <p className="text-xs text-slate-300 line-clamp-2 italic font-sans bg-black/30 px-2.5 py-1 rounded-lg border border-white/5">
+                                "{mention.content}"
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Coluna 2: Etapa, Respostas, Data e Ação */}
+                        <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5">
+                          {/* Quantidade de respostas se houver */}
+                          {replies && replies.length > 0 && (
+                            <span className="text-[10px] font-mono text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                              <MessageSquare className="h-3 w-3 text-emerald-400" />
+                              {replies.length} {replies.length === 1 ? "resposta" : "respostas"}
+                            </span>
+                          )}
+
+                          {/* Coluna do Kanban */}
+                          <span className="font-mono text-[10px] uppercase font-bold px-2.5 py-1 rounded-lg bg-slate-800/80 border border-white/10 text-slate-300 shrink-0">
+                            {stageObj?.title || deal.stage}
+                          </span>
+
+                          {/* Data e Hora */}
+                          <span className="font-mono text-xs text-slate-400 shrink-0">
+                            {new Date(mention.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às {new Date(mention.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+
+                          {/* Botão de Ação */}
+                          <div className="p-2 rounded-xl bg-sky-500/10 group-hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 transition-all flex items-center gap-1 text-xs font-mono font-bold">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </main>
         </div>
       )}
 
@@ -9314,21 +9781,25 @@ function CrmDashboard() {
                 !
               </h2>
 
-              {!isAdmin && (
-                <div className="inline-block px-3 py-1 rounded-full bg-slate-950/80 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                  {offHoursInfo.reason}
-                </div>
-              )}
+              <div className="inline-block px-3 py-1 rounded-full bg-slate-950/80 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                {offHoursInfo.reason}
+              </div>
 
               {isAdmin ? (
                 <div className="space-y-2 text-left w-full">
-                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs leading-relaxed space-y-1.5 shadow-inner">
-                    <p className="font-black text-amber-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                      <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400" />
-                      Acesso de Administrador Autorizado
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs leading-relaxed space-y-2.5 shadow-inner">
+                    <p className="font-black text-amber-300 uppercase tracking-wider text-xs flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                      Atividade Interrompida
                     </p>
-                    <p className="text-[12px] font-medium text-amber-100 leading-relaxed">
-                      Como <strong>Administrador</strong>, você possui autorização total e irrestrita para trabalhar normalmente na plataforma em qualquer horário, dia ou ocasião.
+                    {interruptedActivityTitle && (
+                      <div className="p-2.5 rounded-xl bg-black/40 border border-amber-500/20 text-[11px] font-mono text-amber-200">
+                        <span className="text-muted-foreground block text-[9px] uppercase">Atividade pausada:</span>
+                        <span className="font-bold text-white truncate block">{interruptedActivityTitle}</span>
+                      </div>
+                    )}
+                    <p className="text-[12px] text-amber-100 leading-relaxed">
+                      A sua atividade ativa foi interrompida, mas como <strong>administrador</strong> você tem permissão para iniciar novas atividades nesse horário.
                     </p>
                   </div>
                   <p className="text-[10px] text-center text-muted-foreground/70 uppercase tracking-wider font-bold pt-1">

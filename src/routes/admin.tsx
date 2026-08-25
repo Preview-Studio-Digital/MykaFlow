@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   ShieldCheck,
   ChevronLeft,
+  ArrowLeft,
   Users,
   Plus,
   Trash2,
@@ -51,6 +52,18 @@ interface Category {
   isTemporary?: boolean;
 }
 
+function formatElapsedLive(startedAt: string, currentMs: number = Date.now()) {
+  const startMs = new Date(startedAt).getTime();
+  if (isNaN(startMs)) return "0s";
+  const sec = Math.max(0, Math.floor((currentMs - startMs) / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 function AdminPage() {
   const { user, role, loading: authLoading } = useAuth();
   const search = Route.useSearch();
@@ -90,6 +103,58 @@ function AdminPage() {
   const [selectedUserForProductivity, setSelectedUserForProductivity] = useState<MemberProfile | null>(null);
   const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
 
+  // Rastreamento de atividades ativas em tempo real
+  const [activeActivities, setActiveActivities] = useState<
+    Record<string, { dealId: string; title: string; reqNumber?: string | null; startedAt: string }>
+  >({});
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  async function fetchActiveActivities() {
+    try {
+      // Busca no banco APENAS as atividades que estão com cronômetro ativo no momento
+      const { data: deals, error: dealsErr } = await supabase
+        .from("crm_deals")
+        .select("id, title, notes")
+        .like("notes", "%[WORK_ACTIVE:%");
+
+      if (dealsErr) throw dealsErr;
+
+      const activeMap: Record<
+        string,
+        { dealId: string; title: string; reqNumber?: string | null; startedAt: string }
+      > = {};
+
+      (deals || []).forEach((deal) => {
+        if (!deal.notes || !deal.notes.includes("[WORK_ACTIVE:")) return;
+        const match = deal.notes.match(/\[WORK_ACTIVE:(.*?)\]/);
+        if (match && match[1]) {
+          try {
+            const parsed = JSON.parse(match[1]);
+            if (parsed.userId && parsed.startedAt) {
+              const reqMatch = deal.notes.match(/(?:REQ|Nº|Requisito)\s*[:#]?\s*([0-9.]+)/i);
+              const reqNum = parsed.reqNumber || (reqMatch ? reqMatch[1] : null);
+              activeMap[parsed.userId] = {
+                dealId: deal.id,
+                title: deal.title,
+                reqNumber: reqNum,
+                startedAt: parsed.startedAt,
+              };
+            }
+          } catch (e) {}
+        }
+      });
+
+      setActiveActivities(activeMap);
+    } catch (err) {
+      console.warn("Erro ao buscar atividades ativas em equipe:", err);
+    }
+  }
+
   async function fetchUsers() {
     setUsersLoading(true);
     try {
@@ -120,6 +185,7 @@ function AdminPage() {
       });
 
       setProfiles(Array.from(profileMap.values()));
+      await fetchActiveActivities();
     } catch (err: any) {
       console.error("Erro ao listar usuários:", err);
       toast.error(`Erro na lista: ${err.message || "Falha de conexão"}`);
@@ -134,6 +200,8 @@ function AdminPage() {
   useEffect(() => {
     if (user && activeTab === "users") {
       fetchUsers();
+      const interval = setInterval(fetchActiveActivities, 4000);
+      return () => clearInterval(interval);
     }
   }, [user, activeTab]);
 
@@ -198,7 +266,7 @@ function AdminPage() {
             <button
               type="button"
               onClick={handleBack}
-              className="btn-ghost-neon p-2 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white cursor-pointer"
+              className="btn-ghost-neon h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shadow-sm hover:scale-105"
               title={
                 search.from === "crm"
                   ? "Voltar para Gestão Comercial"
@@ -312,6 +380,8 @@ function AdminPage() {
               selectedUserToEdit={selectedUserToEdit}
               setSelectedUserToEdit={setSelectedUserToEdit}
               setSelectedUserForProductivity={setSelectedUserForProductivity}
+              activeActivities={activeActivities}
+              nowMs={nowMs}
             />
           ) : activeTab === "categories" ? (
             <CategoryManager />
@@ -336,38 +406,94 @@ function AdminPage() {
         }}
       />
 
-      {/* Modal de Produtividade */}
+      {/* Painel de Produtividade em Tela Cheia */}
       {selectedUserForProductivity && (
-        <div
-          onClick={() => setSelectedUserForProductivity(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-6xl h-[90vh] max-h-[90vh] flex flex-col rounded-3xl bg-slate-950/95 border border-emerald-500/30 shadow-[0_0_50px_rgba(16,185,129,0.15)] overflow-hidden"
-          >
-            <div className="p-5 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-emerald-950/40 via-slate-950 to-slate-950 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-                  <Clock className="h-5 w-5 animate-pulse" />
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 text-white animate-in fade-in overflow-hidden">
+          {/* Cabeçalho Fixo em Tela Cheia */}
+          <div className="px-4 sm:px-6 py-2.5 border-b border-white/10 flex flex-col md:flex-row md:items-center justify-between bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 shrink-0 shadow-2xl gap-3">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => setSelectedUserForProductivity(null)}
+                className="btn-ghost-neon h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shadow-sm hover:scale-105 shrink-0"
+                title="Voltar para a lista de equipe"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+
+              <div className="flex flex-col select-none justify-center focus:outline-none shrink-0">
+                <svg
+                  className="w-[230px] sm:w-[260px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
+                  viewBox="0 0 265 26"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <text
+                    x="0"
+                    y="21"
+                    className="font-saira-stencil"
+                    fontSize="22"
+                    fill="#22d3ee"
+                    textLength="265"
+                    lengthAdjust="spacing"
+                  >
+                    GESTÃO INDIVIDUAL
+                  </text>
+                </svg>
+              </div>
+
+              <div className="h-6 w-px bg-white/15 hidden md:block shrink-0" />
+
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={`p-2 rounded-xl shrink-0 ${
+                  activeActivities[selectedUserForProductivity.id]
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.35)]"
+                    : "bg-slate-900 text-slate-500 border border-white/10"
+                }`}>
+                  <Clock className={`h-4 w-4 ${activeActivities[selectedUserForProductivity.id] ? "animate-pulse" : ""}`} />
                 </div>
-                <div>
-                  <h3 className="text-base font-black uppercase tracking-wider text-white flex items-center gap-2">
-                    Produtividade • {selectedUserForProductivity.name}
-                  </h3>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {selectedUserForProductivity.email}
-                  </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white truncate">
+                      {selectedUserForProductivity.name}
+                    </h3>
+                  </div>
+
+                  {/* Status ao vivo da Atividade no Cabeçalho */}
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {activeActivities[selectedUserForProductivity.id] ? (
+                      <div className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-lg text-emerald-300 shadow-sm text-xs font-bold">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
+                        <span className="font-mono text-[11px] uppercase tracking-wider">
+                          TRABALHANDO EM:{" "}
+                          <span className="text-white font-black">
+                            {activeActivities[selectedUserForProductivity.id].reqNumber
+                              ? `#${activeActivities[selectedUserForProductivity.id].reqNumber} - `
+                              : ""}
+                            {activeActivities[selectedUserForProductivity.id].title}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-emerald-300 font-mono font-bold bg-emerald-900/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                          {formatElapsedLive(activeActivities[selectedUserForProductivity.id].startedAt, nowMs)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-lg text-slate-400 text-xs font-bold font-mono">
+                        <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
+                        <span className="text-[11px] uppercase tracking-wider">
+                          INATIVO NO MOMENTO (Nenhuma atividade em andamento)
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedUserForProductivity(null)}
-                className="text-white/50 hover:text-white"
-              >
-                <X className="h-6 w-6" />
-              </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
+          </div>
+
+          {/* Corpo do Painel em Tela Cheia */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 custom-scrollbar bg-slate-950/80 flex flex-col">
+            <div className="w-full flex-1 flex flex-col min-h-0">
               <WorkHoursManager initialUserId={selectedUserForProductivity.id} />
             </div>
           </div>
@@ -386,6 +512,8 @@ function UserList({
   selectedUserToEdit,
   setSelectedUserToEdit,
   setSelectedUserForProductivity,
+  activeActivities,
+  nowMs,
 }: {
   profiles: any[];
   loading: boolean;
@@ -393,6 +521,8 @@ function UserList({
   selectedUserToEdit: MemberProfile | null;
   setSelectedUserToEdit: (user: MemberProfile | null) => void;
   setSelectedUserForProductivity: (user: MemberProfile | null) => void;
+  activeActivities: Record<string, { dealId: string; title: string; reqNumber?: string | null; startedAt: string }>;
+  nowMs: number;
 }) {
   const { user: currentUser } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
@@ -458,14 +588,6 @@ function UserList({
             {profiles.length} Membros
           </span>
           <button
-            onClick={() => onRefresh()}
-            className="btn-ghost-neon py-2 px-3 text-[10px] rounded-lg cursor-pointer flex items-center gap-1.5 text-sky-400 border-sky-500/30 hover:bg-sky-500/10"
-            title="Sincronizar e recarregar lista de membros"
-          >
-            <RefreshCw className="h-3 w-3" />
-            <span>SINCRONIZAR</span>
-          </button>
-          <button
             onClick={() => setShowAdminPanel(!showAdminPanel)}
             className="btn-futuristic py-2 px-4 text-[10px] rounded-lg cursor-pointer"
           >
@@ -475,28 +597,48 @@ function UserList({
       </div>
 
       {showAdminPanel && (
-        <div className="mb-6 animate-in slide-in-from-top-4">
-          <AdminPanel
-            onSuccess={() => {
-              setShowAdminPanel(false);
-              onRefresh();
-            }}
-            onCancel={() => setShowAdminPanel(false)}
-          />
+        <div className="mb-6 p-4 rounded-2xl bg-black/40 border border-white/5 animate-in fade-in">
+          <AdminPanel onSuccess={onRefresh} />
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="grid gap-3">
         {profiles.map((p) => {
-          const isCurrentUser = p.id === currentUser?.id;
-          const userRole = p.role || "user";
-          const isAdmin = userRole === "admin";
-          const isFinance = userRole === "financeiro";
+          const isCurrentUser = currentUser?.id === p.id;
+          const isAdmin = p.role === "admin";
+          const isFinance = p.role === "financeiro";
+
+          const roleTheme = isAdmin
+            ? {
+                card: "bg-gradient-to-r from-amber-500/15 via-amber-950/20 to-black/50 border-amber-500/35 hover:border-amber-400 hover:shadow-[0_0_25px_rgba(245,158,11,0.15)] border-l-4 border-l-amber-400",
+                iconBox: "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.3)]",
+                badge: "bg-amber-500/25 text-amber-300 border-amber-400/50 shadow-sm",
+                nameHover: "group-hover:text-amber-300",
+                label: "ADMINISTRADOR",
+                Icon: ShieldCheck,
+              }
+            : isFinance
+            ? {
+                card: "bg-gradient-to-r from-emerald-500/15 via-emerald-950/20 to-black/50 border-emerald-500/35 hover:border-emerald-400 hover:shadow-[0_0_25px_rgba(16,185,129,0.15)] border-l-4 border-l-emerald-400",
+                iconBox: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.3)]",
+                badge: "bg-emerald-500/25 text-emerald-300 border-emerald-400/50 shadow-sm",
+                nameHover: "group-hover:text-emerald-300",
+                label: "FINANCEIRO",
+                Icon: Wallet,
+              }
+            : {
+                card: "bg-gradient-to-r from-sky-500/15 via-sky-950/20 to-black/50 border-sky-500/35 hover:border-sky-400 hover:shadow-[0_0_25px_rgba(56,189,248,0.15)] border-l-4 border-l-sky-400",
+                iconBox: "bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.3)]",
+                badge: "bg-sky-500/25 text-sky-300 border-sky-400/50 shadow-sm",
+                nameHover: "group-hover:text-sky-300",
+                label: "COMERCIAL",
+                Icon: Users,
+              };
 
           return (
             <div
               key={p.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-emerald-500/30 transition-all gap-4 group"
+              className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl transition-all gap-4 group ${roleTheme.card}`}
             >
               <div 
                 onClick={() => setSelectedUserForProductivity(p)}
@@ -504,25 +646,13 @@ function UserList({
                 title={`Clique para visualizar os parâmetros e métricas de produtividade de ${p.name}`}
               >
                 <div
-                  className={`p-3 rounded-2xl transition-all shrink-0 ${
-                    isAdmin
-                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
-                      : isFinance
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
-                      : "bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.25)]"
-                  }`}
+                  className={`p-3 rounded-2xl transition-all shrink-0 ${roleTheme.iconBox}`}
                 >
-                  {isAdmin ? (
-                    <ShieldCheck className="h-5 w-5" />
-                  ) : isFinance ? (
-                    <Wallet className="h-5 w-5" />
-                  ) : (
-                    <Users className="h-5 w-5" />
-                  )}
+                  <roleTheme.Icon className="h-5 w-5" />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-bold text-sm uppercase tracking-widest text-white group-hover:text-emerald-300 transition-colors truncate">
+                    <p className={`font-bold text-sm uppercase tracking-widest text-white transition-colors truncate ${roleTheme.nameHover}`}>
                       {p.name}
                     </p>
                     {isCurrentUser && (
@@ -533,20 +663,31 @@ function UserList({
 
                     {/* Role Badge */}
                     <span
-                      className={`text-[9px] font-mono font-black px-2 py-0.5 rounded-lg border uppercase tracking-wider ${
-                        isAdmin
-                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                          : isFinance
-                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                          : "bg-sky-500/20 text-sky-300 border-sky-500/40"
-                      }`}
+                      className={`text-[9px] font-mono font-black px-2 py-0.5 rounded-lg border uppercase tracking-wider ${roleTheme.badge}`}
                     >
-                      {isAdmin ? "ADMINISTRADOR" : isFinance ? "FINANCEIRO" : "COMERCIAL"}
+                      {roleTheme.label}
                     </span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground font-mono opacity-70 mt-0.5 truncate">
-                    {p.email}
-                  </p>
+
+                  {/* Status da Atividade Atual / Inativo */}
+                  <div className="mt-1.5">
+                    {activeActivities[p.id] ? (
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-bold text-emerald-300 max-w-full">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] shrink-0" />
+                        <span className="font-mono uppercase truncate">
+                          Atividade: {activeActivities[p.id].reqNumber ? `#${activeActivities[p.id].reqNumber} ` : ""}{activeActivities[p.id].title}
+                        </span>
+                        <span className="text-[9px] font-mono text-emerald-400 bg-emerald-900/60 px-1 py-0.2 rounded border border-emerald-500/20 shrink-0">
+                          {formatElapsedLive(activeActivities[p.id].startedAt, nowMs)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900/80 border border-slate-700/50 text-[10px] font-bold text-slate-400 font-mono">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-500 shrink-0" />
+                        <span className="uppercase">Inativo</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -563,10 +704,10 @@ function UserList({
                 <button
                   onClick={() => setSelectedUserToEdit(p)}
                   className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-cyan-300 border-cyan-500/30 flex items-center gap-1.5 hover:bg-cyan-500/10 cursor-pointer"
-                  title="Editar dados e direitos de acesso"
+                  title="Editar dados e perfil do usuário"
                 >
                   <Edit2 className="h-3.5 w-3.5" />
-                  <span>Editar Direitos</span>
+                  <span>Edição</span>
                 </button>
 
                 {!isCurrentUser && (

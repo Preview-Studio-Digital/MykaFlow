@@ -236,3 +236,50 @@ export function getAutoCutoffInfo(startedAtIso: string, now: Date = new Date()):
 
   return { shouldCutoff: false };
 }
+
+// Retorna as métricas da jornada decorrida e restante de um dia de trabalho
+export interface WorkdayProgressInfo {
+  totalShiftSeconds: number;
+  elapsedWorkdaySeconds: number;
+  remainingShiftSeconds: number;
+}
+
+export function getWorkdayProgress(date: Date = new Date()): WorkdayProgressInfo {
+  const day = date.getDay();
+  // Se for fim de semana
+  if (day === 0 || day === 6) {
+    return {
+      totalShiftSeconds: 0,
+      elapsedWorkdaySeconds: 0,
+      remainingShiftSeconds: 0,
+    };
+  }
+
+  const limits = getWorkDayCutoffMinutes(date);
+  const totalShiftMinutes = (limits.endMinutes - limits.startMinutes) - (limits.lunchEndMinutes - limits.lunchStartMinutes);
+  const totalShiftSeconds = totalShiftMinutes * 60;
+
+  const currentMinutes = date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
+
+  let elapsedMinutes = 0;
+  if (currentMinutes <= limits.startMinutes) {
+    elapsedMinutes = 0;
+  } else if (currentMinutes <= limits.lunchStartMinutes) {
+    elapsedMinutes = currentMinutes - limits.startMinutes;
+  } else if (currentMinutes <= limits.lunchEndMinutes) {
+    elapsedMinutes = limits.lunchStartMinutes - limits.startMinutes;
+  } else if (currentMinutes <= limits.endMinutes) {
+    elapsedMinutes = (limits.lunchStartMinutes - limits.startMinutes) + (currentMinutes - limits.lunchEndMinutes);
+  } else {
+    elapsedMinutes = totalShiftMinutes;
+  }
+
+  const elapsedWorkdaySeconds = Math.round(Math.min(totalShiftSeconds, Math.max(0, elapsedMinutes * 60)));
+  const remainingShiftSeconds = Math.max(0, totalShiftSeconds - elapsedWorkdaySeconds);
+
+  return {
+    totalShiftSeconds,
+    elapsedWorkdaySeconds,
+    remainingShiftSeconds,
+  };
+}

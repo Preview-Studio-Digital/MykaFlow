@@ -9,7 +9,8 @@ import { EvolutionChart } from "@/components/EvolutionChart";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { TransactionCreateDialog } from "@/components/TransactionCreateDialog";
-import { LogOut, Zap, ChevronLeft, ShieldCheck, User as UserIcon, Lock, Users, LayoutGrid } from "lucide-react";
+import { MentionsInboxModal, getDealMentions } from "@/components/MentionsInboxModal";
+import { LogOut, Zap, ChevronLeft, ShieldCheck, User as UserIcon, Lock, Users, LayoutGrid, AtSign } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/financeiro")({
@@ -46,6 +47,8 @@ function Dashboard() {
   const [isGeneratingAi, setIsGeneratingAi] = useState<Record<string, boolean>>({});
   const processingAiRef = useRef<Set<string>>(new Set()); // controla quais hashes já estão sendo processados
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isMentionsInboxOpen, setIsMentionsInboxOpen] = useState(false);
+  const [mentionsUnreadCount, setMentionsUnreadCount] = useState(0);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addType, setAddType] = useState<"income" | "expense">("expense");
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -56,6 +59,31 @@ function Dashboard() {
     if (typeof window === "undefined") return 5;
     return Number(localStorage.getItem("mykaflow_employees_count")) || 5;
   });
+
+  useEffect(() => {
+    if (!user) return;
+    const checkUnread = async () => {
+      const { data } = await supabase
+        .from("crm_deals")
+        .select("id, title, stage, notes, req_number, created_at")
+        .like("notes", "%[MENTION:%");
+      if (data) {
+        let count = 0;
+        data.forEach((d: any) => {
+          const mentions = getDealMentions(d);
+          mentions.forEach((m) => {
+            if (m.mentioned_user_id === user.id && !m.read_by_user) {
+              count++;
+            }
+          });
+        });
+        setMentionsUnreadCount(count);
+      }
+    };
+    checkUnread();
+    const interval = setInterval(checkUnread, 15000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const averageMonthlyExpense = useMemo(() => {
     if (rows.length === 0) return 0;
@@ -677,15 +705,13 @@ function Dashboard() {
         <div className="flex items-center gap-3 lg:w-1/4 lg:justify-start">
           <Link
             to="/"
-            className="btn-ghost-neon p-2 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white"
+            className="btn-ghost-neon h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shadow-sm hover:scale-105"
             title="Voltar ao Seletor de Módulos (Hub Inicial)"
           >
             <ChevronLeft className="h-5 w-5" />
           </Link>
-          <Link
-            to="/"
-            className="flex flex-col select-none justify-center cursor-pointer focus:outline-none"
-            title="Voltar à tela inicial"
+          <div
+            className="flex flex-col select-none justify-center focus:outline-none"
           >
             <svg
               className="w-[240px] sm:w-[265px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
@@ -705,7 +731,7 @@ function Dashboard() {
                 GESTÃO FINANCEIRA
               </text>
             </svg>
-          </Link>
+          </div>
         </div>
 
         {/* 4 Glow Buttons / KPI Cards */}
@@ -783,31 +809,40 @@ function Dashboard() {
           </button>
         </div>
 
-        <div className="flex items-center gap-4 justify-between lg:w-1/4 lg:justify-end shrink-0">
-          <div className="flex flex-col items-end">
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
-              {role === "admin" ? "Administrador" : "Funcionário"}
+        <div className="flex items-center gap-3 justify-between lg:w-1/4 lg:justify-end shrink-0">
+          {/* Botão Caixa de Entrada de Menções com @usuario */}
+          <button
+            type="button"
+            onClick={() => setIsMentionsInboxOpen(true)}
+            className="group/mentionbtn relative h-9 flex items-center gap-1.5 px-3 rounded-xl bg-black/40 border border-white/10 hover:border-sky-400/50 hover:bg-sky-500/10 transition-all cursor-pointer shadow-sm text-xs font-black uppercase tracking-widest text-white hover:scale-105"
+            title="Abrir Caixa de Entrada de Menções (@)"
+          >
+            <AtSign className="h-3.5 w-3.5 text-sky-400 group-hover/mentionbtn:scale-110 transition-transform" />
+            <p className="text-xs font-black uppercase tracking-widest text-white group-hover/mentionbtn:text-sky-300">
+              {user?.user_metadata?.display_name || user?.email}
             </p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <button
-                onClick={() => setIsProfileOpen(true)}
-                className="text-accent hover:text-white transition-colors hover:scale-110"
+
+            {/* Badge de Menções Não Lidas no Nome do Usuário */}
+            {mentionsUnreadCount > 0 && (
+              <span
+                className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-mono font-black text-[10px] shadow-[0_0_10px_rgba(244,63,94,0.9)] animate-pulse shrink-0 ml-0.5 leading-none select-none"
+                title={`Você possui ${mentionsUnreadCount} ${
+                  mentionsUnreadCount === 1 ? "menção não lida" : "menções não lidas"
+                }`}
               >
-                <UserIcon className="h-5 w-5" />
-              </button>
-              <p className="text-sm font-black uppercase tracking-widest text-white">
-                {user?.user_metadata?.display_name || user?.email}
-              </p>
-            </div>
-          </div>
+                {mentionsUnreadCount}
+              </span>
+            )}
+          </button>
           <div className="flex items-center gap-2">
             {role === "admin" && (
               <Link
                 to="/admin"
                 search={{ from: "financeiro" }}
-                className="btn-ghost-neon rounded-lg px-3 py-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest"
+                className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-amber-300 hover:text-white border border-amber-500/30 hover:border-amber-400/60 bg-amber-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
               >
-                <ShieldCheck className="h-4 w-4" /> ADM
+                <ShieldCheck className="h-4 w-4 text-amber-400" />
+                <span>ADM</span>
               </Link>
             )}
 
@@ -816,13 +851,21 @@ function Dashboard() {
                 await signOut();
                 navigate({ to: "/login" });
               }}
-              className="btn-ghost-neon rounded-lg px-3.5 py-2 text-xs flex items-center gap-1.5 text-rose-400 hover:text-rose-300"
+              className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-400/60 bg-rose-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
+              title="Sair do Sistema"
             >
-              <LogOut className="h-4 w-4" /> Sair
+              <LogOut className="h-4 w-4" />
+              <span>Sair</span>
             </button>
           </div>
         </div>
       </header>
+
+      <MentionsInboxModal
+        isOpen={isMentionsInboxOpen}
+        onClose={() => setIsMentionsInboxOpen(false)}
+        currentUser={user}
+      />
 
       <ProfileDialog
         isOpen={isProfileOpen}

@@ -153,10 +153,10 @@ export function EditMemberDialog({
             <UserCircle className="h-8 w-8" />
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-wider text-white uppercase">
-            Editar Usuário & Direitos
+            Edição de Usuário
           </h2>
           <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-bold mt-1">
-            Altere os dados de identificação, senha provisória e os níveis de permissão no sistema
+            Altere os dados de identificação, senha provisória e níveis de permissão no sistema
           </p>
         </div>
 

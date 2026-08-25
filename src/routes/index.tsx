@@ -15,7 +15,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { ProfileDialog } from "@/components/ProfileDialog";
-import { MYKAFLOW_LOGO_DATA_URI } from "@/assets/logo";
+import { MYKAFLOW_LOGO_DATA_URI, MYKA_COMPRESSORES_LOGO_DATA_URI } from "@/assets/logo";
 
 export const Route = createFileRoute("/")({
   component: ModuleHub,
@@ -53,13 +53,13 @@ function ModuleHub() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background/95 to-muted/20 text-foreground flex flex-col justify-between">
-      {/* Top Bar */}
+      {/* Top Bar - Logo Myka Compressores no canto superior esquerdo */}
       <header className="w-full px-6 pt-3 pb-2 flex items-center justify-between">
         <div className="flex items-center">
           <img
-            src={MYKAFLOW_LOGO_DATA_URI}
-            alt="Logo MykaFlow"
-            className="h-8 md:h-9 w-auto max-w-[200px] object-contain object-left drop-shadow-[0_0_15px_rgba(34,211,238,0.35)] select-none"
+            src={MYKA_COMPRESSORES_LOGO_DATA_URI}
+            alt="Logo Myka Compressores"
+            className="h-8 md:h-9 w-auto max-w-[220px] object-contain object-left drop-shadow-[0_0_15px_rgba(34,211,238,0.35)] select-none"
           />
         </div>
 

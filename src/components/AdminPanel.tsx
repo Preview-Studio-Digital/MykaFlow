@@ -245,45 +245,47 @@ export function AdminPanel({ onSuccess, onCancel }: { onSuccess?: () => void; on
             />
           </div>
 
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
-              Perfil de Permissão
-            </label>
-            <select
-              value={roleOption}
-              onChange={(e) => setRoleOption(e.target.value as any)}
-              className="input-futuristic w-full rounded-xl px-3 py-2.5 outline-none bg-black/80 font-bold uppercase text-xs cursor-pointer"
-            >
-              <option value="crm" className="bg-slate-900 font-bold text-sky-400">
-                COMERCIAL (CRM)
-              </option>
-              <option value="financeiro" className="bg-slate-900 font-bold text-emerald-400">
-                FINANCEIRO
-              </option>
-              <option value="admin" className="bg-slate-900 font-bold text-accent">
-                ADMINISTRADOR
-              </option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
-              Senha Provisória
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input-futuristic flex-1 rounded-xl px-3 py-2.5 font-mono text-xs outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setPassword(genPassword())}
-                className="btn-ghost-neon px-3 rounded-xl flex items-center gap-1 text-xs cursor-pointer"
-                title="Gerar nova senha"
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                Perfil de Permissão
+              </label>
+              <select
+                value={roleOption}
+                onChange={(e) => setRoleOption(e.target.value as any)}
+                className="input-futuristic w-full rounded-xl px-3 py-2.5 outline-none bg-black/80 font-bold uppercase text-xs cursor-pointer"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
+                <option value="crm" className="bg-slate-900 font-bold text-sky-400">
+                  COMERCIAL
+                </option>
+                <option value="financeiro" className="bg-slate-900 font-bold text-emerald-400">
+                  FINANCEIRO
+                </option>
+                <option value="admin" className="bg-slate-900 font-bold text-accent">
+                  ADMINISTRADOR
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                Senha Provisória
+              </label>
+              <div className="flex gap-2">
+                <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-futuristic flex-1 rounded-xl px-3 py-2.5 font-mono text-xs outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setPassword(genPassword())}
+                  className="btn-ghost-neon px-3 rounded-xl flex items-center gap-1 text-xs cursor-pointer"
+                  title="Gerar nova senha"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           </div>
 

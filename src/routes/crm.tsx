@@ -2232,17 +2232,21 @@ function CrmDashboard() {
   const handleSaveTitle = async () => {
     if (!selectedDealForHistory || !editingTitleValue.trim()) return;
 
-    // Apenas o responsável pela atividade pode alterar o título
-    const canEditTitle = selectedDealForHistory.assigned_user_id === user?.id;
+    // Responsável ou Administrador podem alterar o título
+    const canEditTitle = isAdmin || selectedDealForHistory.assigned_user_id === user?.id;
     if (!canEditTitle) {
-      return toast.error("Apenas o responsável pela atividade pode alterar o título.");
+      return toast.error("Apenas o responsável ou o Administrador podem alterar o título.");
     }
 
     setIsSavingTitle(true);
     const deal = selectedDealForHistory;
     const nowIso = new Date().toISOString();
-    const oldTitleClean = getCleanDealTitle(deal.title);
     const newTitleClean = editingTitleValue.trim().toUpperCase();
+
+    const titleWords = newTitleClean.split(/\s+/).filter(Boolean);
+    if (titleWords.length > 6) {
+      return toast.error(`O título deve conter no máximo 6 palavras (atualmente com ${titleWords.length} palavras).`);
+    }
 
     // Se o título não mudou, apenas fecha a edição
     if (oldTitleClean === newTitleClean) {
@@ -2618,6 +2622,10 @@ function CrmDashboard() {
     if (!subtaskTitle.trim()) {
       return toast.error("Informe o título da vinculada.");
     }
+    const subtaskWords = subtaskTitle.trim().split(/\s+/).filter(Boolean);
+    if (subtaskWords.length > 6) {
+      return toast.error(`O título da vinculada deve conter no máximo 6 palavras (atualmente com ${subtaskWords.length} palavras). Detalhe as orientações no campo de instruções.`);
+    }
     if (!subtaskAssignedTo) {
       return toast.error("Selecione o responsável pela vinculada.");
     }
@@ -2855,10 +2863,10 @@ function CrmDashboard() {
   const handleToggleWorkActivity = async (deal: Deal, forceSwitch: boolean = false) => {
     if (!user) return;
 
-    // 1. Permissão estrita: apenas o próprio responsável atribuído pode iniciar/parar
-    const isAssigned = deal.assigned_user_id === user.id;
+    // 1. Permissão: apenas o próprio responsável atribuído ou Administrador podem iniciar/parar
+    const isAssigned = isAdmin || deal.assigned_user_id === user.id;
     if (!isAssigned) {
-      toast.error("Somente o responsável atribuído a esta atividade pode iniciá-la.");
+      toast.error("Somente o responsável atribuído ou o Administrador podem iniciar esta atividade.");
       return;
     }
 
@@ -3303,6 +3311,10 @@ function CrmDashboard() {
     const reqNum = getDealReqNumber(deal, deals);
     const cleanTitle = getCleanDealTitle(deal.title);
     const originStage = deal.stage === "archived" ? getArchivedOriginStage(deal) : (deal.stage as "lead" | "completed" | "lost");
+    if ((originStage === "completed" || originStage === "lost") && !isAdmin) {
+      toast.error("Apenas administradores podem arquivar atividades de Concluídos e Perdidos.");
+      return;
+    }
     const typeLabel =
       originStage === "lead" ? "Tarefa" : originStage === "completed" ? "Atividade Concluída" : "Atividade Perdida";
     const destColumnName =
@@ -3363,6 +3375,10 @@ function CrmDashboard() {
   async function handleUnarchiveDeal(deal: Deal) {
     const reqNum = getDealReqNumber(deal, deals);
     const originStage = getArchivedOriginStage(deal);
+    if ((originStage === "completed" || originStage === "lost") && !isAdmin) {
+      toast.error("Apenas administradores podem desarquivar atividades de Concluídos e Perdidos.");
+      return;
+    }
     const destColumnName =
       originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos";
     const typeLabel =
@@ -3469,6 +3485,10 @@ function CrmDashboard() {
     }
 
     if (!newDealTitle.trim()) return toast.error("Informe o título da requisição");
+    const dealTitleWords = newDealTitle.trim().split(/\s+/).filter(Boolean);
+    if (dealTitleWords.length > 6) {
+      return toast.error(`O título deve conter no máximo 6 palavras (atualmente com ${dealTitleWords.length} palavras). Detalhe as informações no campo de instruções abaixo.`);
+    }
     if (!newDealAssignedTo) return toast.error("O direcionamento ao responsável é obrigatório");
     if (!newDealNotes.trim()) return toast.error("As instruções da atividade são obrigatórias");
 
@@ -3847,8 +3867,8 @@ function CrmDashboard() {
     e.preventDefault();
     if (!selectedDealForHistory) return;
 
-    if (selectedDealForHistory.assigned_user_id !== user?.id) {
-      return toast.error("Apenas o responsável pela atividade pode inserir novas atualizações.");
+    if (!isAdmin && selectedDealForHistory.assigned_user_id !== user?.id) {
+      return toast.error("Apenas o responsável pela atividade ou o Administrador podem inserir novas atualizações.");
     }
 
     if (!newComment.trim()) {
@@ -4637,7 +4657,7 @@ function CrmDashboard() {
                     const draggedDeal = deals.find((d) => d.id === draggedId);
                     if (draggedDeal && draggedDeal.stage === stageId) {
                       // Usuário comum só pode reordenar se AMBAS as tarefas forem dele
-                      if (role !== "admin") {
+                      if (!isAdmin) {
                         if (draggedDeal.assigned_user_id !== user?.id || deal.assigned_user_id !== user?.id) {
                           return;
                         }
@@ -5852,7 +5872,7 @@ function CrmDashboard() {
                            ? selectedDealForHistory.customer_name
                            : null))
                       : null;
-                    const isAuthor = selectedDealForHistory.assigned_user_id === user?.id;
+                    const isAuthor = isAdmin || selectedDealForHistory.assigned_user_id === user?.id;
                     const cleanTitle = getCleanDealTitle(selectedDealForHistory.title);
 
                     return (
@@ -6475,8 +6495,8 @@ function CrmDashboard() {
                     )}
                   </div>
 
-                  {/* Formulário de Atualização Integrado */}
-                  {selectedDealForHistory.assigned_user_id === user?.id ? (
+                  {/* Formulário de Atualização Integrado (Disponível para o Responsável ou Administrador) */}
+                  {isAdmin || selectedDealForHistory.assigned_user_id === user?.id ? (
                     <div className="flex-1 min-h-0 flex flex-col justify-between gap-2.5 overflow-hidden">
                       <div className="flex-1 min-h-0 flex flex-col p-3.5 rounded-xl bg-white/[0.02] border border-white/10 space-y-2.5">
                         {/* Linha Única de Ações: Tarefa Vinculada, Orçamento, Etapa e Responsável */}
@@ -6854,11 +6874,14 @@ function CrmDashboard() {
                                 );
                               }
 
+                              const originStage =
+                                selectedDealForHistory.stage === "archived"
+                                  ? getArchivedOriginStage(selectedDealForHistory)
+                                  : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
+
                               const isArchivableStage =
-                                selectedDealForHistory.stage === "lead" ||
-                                selectedDealForHistory.stage === "completed" ||
-                                selectedDealForHistory.stage === "lost" ||
-                                selectedDealForHistory.stage === "archived";
+                                originStage === "lead" ||
+                                ((originStage === "completed" || originStage === "lost") && isAdmin);
 
                               if (!isLinkedSubtask && isArchivableStage) {
                                 return selectedDealForHistory.stage === "archived" ? (
@@ -6945,176 +6968,190 @@ function CrmDashboard() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="glass w-full max-w-2xl rounded-2xl border border-white/15 p-5 sm:p-6 flex flex-col shadow-2xl overflow-hidden"
+            className="glass w-full max-w-4xl rounded-2xl border border-white/15 p-5 sm:p-6 flex flex-col shadow-2xl overflow-hidden"
           >
-            <div className="shrink-0 flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="space-y-0.5">
-                <h3 className="text-sm font-black uppercase tracking-widest text-gradient flex items-center gap-2">
-                  {activeReqModal === "interna" ? (
-                    <>
-                      <Building className="h-4 w-4 text-sky-400" /> Nova Tarefa
-                    </>
-                  ) : (
-                    <>
-                      <Globe className="h-4 w-4 text-accent" /> Novo Orçamento
-                    </>
-                  )}
-                </h3>
-                <p className="text-[10px] text-muted-foreground font-medium">
-                  {activeReqModal === "interna"
-                    ? "Atividade interna da empresa (sem cliente e sem faturamento)."
-                    : "Atividade comercial da empresa (com cliente, proposta e faturamento)."}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveReqModal(null)}
-                className="btn-ghost-neon p-1.5 rounded-lg text-muted-foreground hover:text-white"
-                title="Fechar"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="shrink-0 pb-3 border-b border-white/10">
+              <h3 className="text-sm font-black uppercase tracking-widest text-gradient flex items-center gap-2">
+                {activeReqModal === "interna" ? (
+                  <>
+                    <Building className="h-4 w-4 text-sky-400" /> Nova Tarefa Interna
+                  </>
+                ) : (
+                  <>
+                    <Globe className="h-4 w-4 text-accent" /> Novo Orçamento Comercial
+                  </>
+                )}
+              </h3>
+              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+                {activeReqModal === "interna"
+                  ? "Atividade interna da empresa (sem cliente e sem faturamento)."
+                  : "Atividade comercial da empresa (com cliente, proposta e faturamento)."}
+              </p>
             </div>
 
-            <form onSubmit={handleCreateDeal} className="flex flex-col space-y-3 pt-3">
-              {/* Campos do Topo */}
-              <div className="space-y-3">
-                {/* Título da Requisição */}
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                    {activeReqModal === "interna" ? "Título da Tarefa" : "Título do Orçamento"}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder={
-                      activeReqModal === "interna"
-                        ? "Ex: Orçar... Avaliar... Planejar... Verificar... Comprar... Buscar..."
-                        : "Ex: Manutenção... Locação... Peças..."
-                    }
-                    value={newDealTitle}
-                    onChange={(e) => setNewDealTitle(e.target.value.toUpperCase())}
-                    className="input-futuristic w-full rounded-xl px-3 py-2 text-xs uppercase font-bold outline-none"
-                  />
+            <form onSubmit={handleCreateDeal} className="flex flex-col space-y-4 pt-3">
+              {/* Campos do Topo - Mesma Linha para Título, Prazo e Direcionamento */}
+              {activeReqModal === "interna" ? (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  {/* Título da Tarefa */}
+                  <div className="md:col-span-6">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        Título da Tarefa <span className="text-rose-400">*</span>
+                      </label>
+                      <span className={`text-[10px] font-mono font-bold ${newDealTitle.trim().split(/\s+/).filter(Boolean).length > 6 ? "text-rose-400" : "text-sky-400"}`}>
+                        {newDealTitle.trim().split(/\s+/).filter(Boolean).length}/6 palavras
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Verificar vazamento no compressor..."
+                      value={newDealTitle}
+                      onChange={(e) => setNewDealTitle(e.target.value.toUpperCase())}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs uppercase font-bold outline-none"
+                    />
+                  </div>
+
+                  {/* Prazo para Execução */}
+                  <div className="md:col-span-3">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                      Prazo para Execução <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={newDealDeadline}
+                      onChange={(e) => setNewDealDeadline(e.target.value)}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                    />
+                  </div>
+
+                  {/* Direcionamento / Responsável */}
+                  <div className="md:col-span-3">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                      Direcionamento <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={newDealAssignedTo}
+                      onChange={(e) => setNewDealAssignedTo(e.target.value)}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60 font-bold"
+                    >
+                      <option value="">Selecione o responsável</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.id} className="bg-slate-900 font-bold">
+                          {m.display_name || m.email}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-
-                {/* Se for Requisição Interna -> Prazo e Direcionamento na Mesma Linha */}
-                {activeReqModal === "interna" ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                        Prazo para Execução
+              ) : (
+                /* Se for Orçamento -> Título, Cliente, Responsável e Prazo na Mesma Linha */
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  <div className="md:col-span-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        Título do Orçamento <span className="text-rose-400">*</span>
                       </label>
-                      <input
-                        type="date"
-                        required
-                        value={newDealDeadline}
-                        onChange={(e) => setNewDealDeadline(e.target.value)}
-                        className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
-                      />
+                      <span className={`text-[10px] font-mono font-bold ${newDealTitle.trim().split(/\s+/).filter(Boolean).length > 6 ? "text-rose-400" : "text-sky-400"}`}>
+                        {newDealTitle.trim().split(/\s+/).filter(Boolean).length}/6 palavras
+                      </span>
                     </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                        Direcionar para Usuário Responsável
-                      </label>
-                      <select
-                        required
-                        value={newDealAssignedTo}
-                        onChange={(e) => setNewDealAssignedTo(e.target.value)}
-                        className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60"
-                      >
-                        <option value="">Selecione o usuário responsável</option>
-                        {teamMembers.map((m) => (
-                          <option key={m.id} value={m.id} className="bg-slate-900">
-                            {m.display_name || m.email}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Manutenção preventiva em secador..."
+                      value={newDealTitle}
+                      onChange={(e) => setNewDealTitle(e.target.value.toUpperCase())}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs uppercase font-bold outline-none"
+                    />
                   </div>
-                ) : (
-                  /* Se for Orçamento -> Cliente, Responsável e Prazo (Opcional) */
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                        Cliente
-                      </label>
-                      <select
-                        required
-                        value={newDealCustomerId}
-                        onChange={(e) => {
-                          if (e.target.value === "__NEW__") {
-                            setIsNewCustomerModalOpen(true);
-                          } else {
-                            setNewDealCustomerId(e.target.value);
-                          }
-                        }}
-                        className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60 font-semibold"
-                      >
-                        <option value="" disabled>
-                          Selecione o cliente
-                        </option>
-                        <option value="__NEW__" className="text-sky-300 font-bold bg-slate-900">
-                          + CADASTRAR NOVO CLIENTE...
-                        </option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id} className="bg-slate-900">
-                            {c.company_name || c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
 
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                        Responsável
-                      </label>
-                      <select
-                        required
-                        value={newDealAssignedTo}
-                        onChange={(e) => setNewDealAssignedTo(e.target.value)}
-                        className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60"
-                      >
-                        <option value="">Selecione o responsável</option>
-                        {teamMembers.map((m) => (
-                          <option key={m.id} value={m.id} className="bg-slate-900">
-                            {m.display_name || m.email}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                        Prazo de Envio (Opcional)
-                      </label>
-                      <input
-                        type="date"
-                        value={newDealDeadline}
-                        onChange={(e) => setNewDealDeadline(e.target.value)}
-                        className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
-                      />
-                    </div>
+                  <div className="md:col-span-3">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                      Cliente <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={newDealCustomerId}
+                      onChange={(e) => {
+                        if (e.target.value === "__NEW__") {
+                          setIsNewCustomerModalOpen(true);
+                        } else {
+                          setNewDealCustomerId(e.target.value);
+                        }
+                      }}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60 font-semibold"
+                    >
+                      <option value="" disabled>
+                        Selecione o cliente
+                      </option>
+                      <option value="__NEW__" className="text-sky-300 font-bold bg-slate-900">
+                        + CADASTRAR NOVO CLIENTE...
+                      </option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id} className="bg-slate-900">
+                          {c.company_name || c.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
-              </div>
 
-              {/* INSTRUÇÕES DA ATIVIDADE */}
+                  <div className="md:col-span-3">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                      Responsável <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={newDealAssignedTo}
+                      onChange={(e) => setNewDealAssignedTo(e.target.value)}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60 font-bold"
+                    >
+                      <option value="">Selecione o responsável</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.id} className="bg-slate-900 font-bold">
+                          {m.display_name || m.email}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                      Prazo de Envio
+                    </label>
+                    <input
+                      type="date"
+                      value={newDealDeadline}
+                      onChange={(e) => setNewDealDeadline(e.target.value)}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* INSTRUÇÕES DA ATIVIDADE - Campo Grande para Estimular Detalhamento */}
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                  INSTRUÇÕES DA ATIVIDADE
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-sky-300 flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-sky-400" /> INSTRUÇÕES DETALHADAS DA ATIVIDADE <span className="text-rose-400">*</span>
+                  </label>
+                  <span className="text-[10px] text-muted-foreground font-medium">
+                    Descreva detalhadamente o escopo, orientações e critérios de execução
+                  </span>
+                </div>
                 <textarea
                   required
                   placeholder={
                     activeReqModal === "interna"
-                      ? "Descreva detalhadamente o escopo da tarefa interna, instruções de execução, prioridades ou recomendações para o responsável..."
-                      : "Descreva detalhadamente o escopo do orçamento comercial, orientações sobre o cliente, detalhes técnicos para o orçamento ou visita técnica..."
+                      ? "Descreva detalhadamente todo o escopo da tarefa interna, orientações passo a passo para o responsável, especificações técnicas, prioridades, recomendações e critérios de entrega..."
+                      : "Descreva detalhadamente todo o escopo do orçamento comercial, histórico e orientações sobre o cliente, detalhes e necessidades dos equipamentos, observações técnicas para elaboração da proposta ou visita..."
                   }
                   value={newDealNotes}
                   onChange={(e) => setNewDealNotes(e.target.value)}
-                  className="input-futuristic w-full h-[120px] rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed"
+                  className="input-futuristic w-full h-[220px] sm:h-[260px] rounded-xl p-4 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
                 />
               </div>
 
@@ -8077,15 +8114,17 @@ function CrmDashboard() {
                             </button>
 
                             <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleUnarchiveDeal(d)}
-                                className="btn-ghost-neon px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-[10px] font-black uppercase flex items-center gap-1 hover:scale-105 transition-all cursor-pointer"
-                                title={`Restaurar para a coluna de ${originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos"}`}
-                              >
-                                <ArchiveRestore className="h-3 w-3 text-emerald-400" />
-                                <span>Restaurar</span>
-                              </button>
+                              {(originStage === "lead" || isAdmin) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnarchiveDeal(d)}
+                                  className="btn-ghost-neon px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-[10px] font-black uppercase flex items-center gap-1 hover:scale-105 transition-all cursor-pointer"
+                                  title={`Restaurar para a coluna de ${originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos"}`}
+                                >
+                                  <ArchiveRestore className="h-3 w-3 text-emerald-400" />
+                                  <span>Restaurar</span>
+                                </button>
+                              )}
 
                               {role === "admin" && (
                                 <button
@@ -8548,7 +8587,7 @@ function CrmDashboard() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl rounded-2xl border border-emerald-500/40 bg-slate-950/95 p-5 sm:p-6 shadow-2xl flex flex-col backdrop-blur-2xl transition-all text-white space-y-4 shadow-emerald-950/30"
+            className="w-full max-w-4xl rounded-2xl border border-emerald-500/40 bg-slate-950/95 p-5 sm:p-6 shadow-2xl flex flex-col backdrop-blur-2xl transition-all text-white space-y-4 shadow-emerald-950/30"
           >
             {/* Header do Modal Isolado */}
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -8568,31 +8607,51 @@ function CrmDashboard() {
             </div>
 
             {/* Formulário de Criação da Vinculada */}
-            <form onSubmit={handleCreateSubtask} className="space-y-3.5">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                  Título da Vinculada <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Orçar... Avaliar... Planejar... Verificar... Comprar... Buscar..."
-                  value={subtaskTitle}
-                  onChange={(e) => setSubtaskTitle(e.target.value.toUpperCase())}
-                  className="input-futuristic w-full rounded-xl px-3.5 py-2 text-xs uppercase font-bold outline-none"
-                  required
-                  autoFocus
-                />
-              </div>
+            <form onSubmit={handleCreateSubtask} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                {/* Título da Vinculada */}
+                <div className="md:col-span-6">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Título da Vinculada <span className="text-rose-400">*</span>
+                    </label>
+                    <span className={`text-[10px] font-mono font-bold ${subtaskTitle.trim().split(/\s+/).filter(Boolean).length > 6 ? "text-rose-400" : "text-emerald-400"}`}>
+                      {subtaskTitle.trim().split(/\s+/).filter(Boolean).length}/6 palavras
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ex: Orçar... Avaliar... Planejar... Verificar... Comprar..."
+                    value={subtaskTitle}
+                    onChange={(e) => setSubtaskTitle(e.target.value.toUpperCase())}
+                    className="input-futuristic w-full rounded-xl px-3.5 py-2 text-xs uppercase font-bold outline-none"
+                    required
+                    autoFocus
+                  />
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+                {/* Prazo */}
+                <div className="md:col-span-3">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                    Prazo (Opcional)
+                  </label>
+                  <input
+                    type="date"
+                    value={subtaskDeadline}
+                    onChange={(e) => setSubtaskDeadline(e.target.value)}
+                    className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black text-white cursor-pointer font-mono"
+                  />
+                </div>
+
+                {/* Responsável */}
+                <div className="md:col-span-3">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
                     Responsável <span className="text-rose-400">*</span>
                   </label>
                   <select
                     value={subtaskAssignedTo}
                     onChange={(e) => setSubtaskAssignedTo(e.target.value)}
-                    className="input-futuristic w-full rounded-xl px-3 py-2.5 text-xs outline-none bg-black text-white cursor-pointer font-bold"
+                    className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black text-white cursor-pointer font-bold"
                     required
                   >
                     <option value="">Selecione o responsável...</option>
@@ -8603,29 +8662,23 @@ function CrmDashboard() {
                     ))}
                   </select>
                 </div>
-
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                    Prazo de Conclusão (Opcional)
-                  </label>
-                  <input
-                    type="date"
-                    value={subtaskDeadline}
-                    onChange={(e) => setSubtaskDeadline(e.target.value)}
-                    className="input-futuristic w-full rounded-xl px-3 py-2.5 text-xs outline-none bg-black text-white cursor-pointer font-mono"
-                  />
-                </div>
               </div>
 
+              {/* Instruções Grandes e Detalhadas */}
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                  Instruções e Detalhes da Vinculada
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-emerald-300 flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-emerald-400" /> INSTRUÇÕES DETALHADAS DA VINCULADA
+                  </label>
+                  <span className="text-[10px] text-muted-foreground font-medium">
+                    Descreva todas as orientações e critérios para o responsável
+                  </span>
+                </div>
                 <textarea
-                  placeholder="Descreva as orientações, detalhes técnicos ou recomendações para o responsável executar esta atividade vinculada..."
+                  placeholder="Descreva detalhadamente todas as orientações, detalhes técnicos, prioridades ou recomendações para o responsável executar esta atividade vinculada..."
                   value={subtaskNotes}
                   onChange={(e) => setSubtaskNotes(e.target.value)}
-                  className="input-futuristic w-full h-[120px] rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed custom-scrollbar"
+                  className="input-futuristic w-full h-[200px] sm:h-[240px] rounded-xl p-4 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
                 />
               </div>
 
@@ -9045,8 +9098,12 @@ function CrmDashboard() {
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 cursor-pointer animate-in fade-in select-none"
         >
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="glass max-w-md w-full p-7 rounded-3xl border border-sky-400/40 shadow-[0_0_50px_rgba(56,189,248,0.25)] flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 relative overflow-hidden"
+            onClick={handleDismissOffHoursPrompt}
+            className={`glass max-w-md w-full p-7 rounded-3xl border flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 relative overflow-hidden cursor-pointer ${
+              isAdmin
+                ? "border-amber-400/40 shadow-[0_0_50px_rgba(245,158,11,0.25)]"
+                : "border-sky-400/40 shadow-[0_0_50px_rgba(56,189,248,0.25)]"
+            }`}
           >
             <div className={`p-3.5 rounded-2xl ${isAdmin ? "bg-amber-500/20 text-amber-400 border border-amber-400/30 shadow-[0_0_20px_rgba(245,158,11,0.4)]" : "bg-sky-500/20 text-sky-400 border border-sky-400/30 shadow-[0_0_20px_rgba(56,189,248,0.4)]"}`}>
               {isAdmin ? <ShieldCheck className="h-9 w-9 text-amber-400" /> : <Clock className="h-9 w-9 text-sky-400" />}
@@ -9061,43 +9118,41 @@ function CrmDashboard() {
                 !
               </h2>
 
-              <div className="inline-block px-3 py-1 rounded-full bg-slate-950/80 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                {offHoursInfo.reason}
-              </div>
+              {!isAdmin && (
+                <div className="inline-block px-3 py-1 rounded-full bg-slate-950/80 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                  {offHoursInfo.reason}
+                </div>
+              )}
 
               {isAdmin ? (
                 <div className="space-y-2 text-left w-full">
-                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs leading-relaxed space-y-2 shadow-inner">
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs leading-relaxed space-y-1.5 shadow-inner">
                     <p className="font-black text-amber-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                       <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400" />
                       Acesso de Administrador Autorizado
                     </p>
-                    <p className="text-[12px] font-medium text-amber-100">
+                    <p className="text-[12px] font-medium text-amber-100 leading-relaxed">
                       Como <strong>Administrador</strong>, você possui autorização total e irrestrita para trabalhar normalmente na plataforma em qualquer horário, dia ou ocasião.
                     </p>
-                    <div className="pt-1 text-[11px] text-amber-300/90 space-y-0.5 border-t border-amber-500/20 font-mono">
-                      <p>✓ Início e controle de atividades liberados</p>
-                      <p>✓ Cronômetro ativo sem encerramento automático</p>
-                    </div>
                   </div>
+                  <p className="text-[10px] text-center text-muted-foreground/70 uppercase tracking-wider font-bold pt-1">
+                    Clique em qualquer lugar para prosseguir
+                  </p>
                 </div>
               ) : (
-                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
-                  Você pode apenas navegar, consultar e acompanhar tarefas.
-                </p>
+                <>
+                  <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
+                    Você pode apenas navegar, consultar e acompanhar tarefas.
+                  </p>
+                  <button
+                    onClick={handleDismissOffHoursPrompt}
+                    className="w-full py-2.5 px-4 rounded-xl font-black uppercase tracking-wider text-xs shadow-lg transition-all cursor-pointer bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-sky-500/20 mt-2"
+                  >
+                    Entendido
+                  </button>
+                </>
               )}
             </div>
-
-            <button
-              onClick={handleDismissOffHoursPrompt}
-              className={`w-full py-2.5 px-4 rounded-xl font-black uppercase tracking-wider text-xs shadow-lg transition-all cursor-pointer ${
-                isAdmin
-                  ? "bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-500/20"
-                  : "bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-sky-500/20"
-              }`}
-            >
-              {isAdmin ? "Entendido, Prosseguir" : "Entendido"}
-            </button>
           </div>
         </div>
       )}

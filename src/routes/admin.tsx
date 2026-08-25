@@ -541,7 +541,7 @@ function UserList({
                           : "bg-sky-500/20 text-sky-300 border-sky-500/40"
                       }`}
                     >
-                      {isAdmin ? "🛡️ ADMINISTRADOR" : isFinance ? "💵 FINANCEIRO" : "👥 COMERCIAL"}
+                      {isAdmin ? "ADMINISTRADOR" : isFinance ? "FINANCEIRO" : "COMERCIAL"}
                     </span>
                   </div>
                   <p className="text-[10px] text-muted-foreground font-mono opacity-70 mt-0.5 truncate">

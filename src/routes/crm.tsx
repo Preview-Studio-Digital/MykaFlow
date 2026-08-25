@@ -968,6 +968,13 @@ function CrmDashboard() {
   // Modal Detalhes e Histórico de Requisição
   const [selectedDealForHistory, setSelectedDealForHistory] = useState<Deal | null>(null);
   const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<Customer | null>(null);
+  const [isEditingCustomerCard, setIsEditingCustomerCard] = useState(false);
+  const [editCustCompany, setEditCustCompany] = useState("");
+  const [editCustName, setEditCustName] = useState("");
+  const [editCustDoc, setEditCustDoc] = useState("");
+  const [editCustEmail, setEditCustEmail] = useState("");
+  const [editCustPhone, setEditCustPhone] = useState("");
+  const [isSavingCustDetails, setIsSavingCustDetails] = useState(false);
   const [dealHistoryList, setDealHistoryList] = useState<DealHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
@@ -2241,10 +2248,12 @@ function CrmDashboard() {
     setIsSavingTitle(true);
     const deal = selectedDealForHistory;
     const nowIso = new Date().toISOString();
+    const oldTitleClean = getCleanDealTitle(deal.title);
     const newTitleClean = editingTitleValue.trim().toUpperCase();
 
     const titleWords = newTitleClean.split(/\s+/).filter(Boolean);
     if (titleWords.length > 6) {
+      setIsSavingTitle(false);
       return toast.error(`O título deve conter no máximo 6 palavras (atualmente com ${titleWords.length} palavras).`);
     }
 
@@ -2774,13 +2783,13 @@ function CrmDashboard() {
         });
       }
 
-      // Executa a extração inteligente e automática dos dados do orçamento
+      // Executa a extração inteligente e automática de dados se for documento financeiro/orçamento
       let extractedQuoteData: ExtractedQuoteData | null = null;
       try {
-        toast.loading("Lendo e extraindo dados do orçamento...", { id: toastId });
+        toast.loading("Lendo e processando arquivo...", { id: toastId });
         extractedQuoteData = await extractQuoteDataFromDocument(optimizedBlob, file.type || "application/pdf");
       } catch (extErr) {
-        console.warn("Aviso ao extrair dados do orçamento via IA:", extErr);
+        console.warn("Aviso ao extrair dados do arquivo via IA:", extErr);
       }
 
       const nowIso = new Date().toISOString();
@@ -2828,7 +2837,7 @@ function CrmDashboard() {
       await registerHistoryEntry(
         selectedDealForHistory.id,
         "quote_file_uploaded",
-        `[QUOTE_DOC:${docMeta}] ${userName} anexou o documento de orçamento oficial "${fileName}" (${optimizedSizeKb} KB).`
+        `[QUOTE_DOC:${docMeta}] ${userName} anexou o arquivo "${fileName}" (${optimizedSizeKb} KB).`
       );
 
       const updatedDeal: Deal = {
@@ -2847,12 +2856,12 @@ function CrmDashboard() {
       setPreviewingQuoteFile({ url: publicUrl, name: fileName });
 
       // Insere linha imutável no bloco de atualização do card expandido
-      const quoteActionText = `${userName} anexou o orçamento "${fileName}" (${optimizedSizeKb} KB).`;
+      const quoteActionText = `${userName} anexou o arquivo "${fileName}" (${optimizedSizeKb} KB).`;
       appendAutoLog(quoteActionText);
 
-      toast.success(`Orçamento anexado com sucesso! (${optimizedSizeKb} KB)`, { id: toastId });
+      toast.success(`Arquivo anexado com sucesso! (${optimizedSizeKb} KB)`, { id: toastId });
     } catch (err: any) {
-      toast.error("Erro ao anexar orçamento: " + (err.message || "Tente novamente"), { id: toastId });
+      toast.error("Erro ao anexar arquivo: " + (err.message || "Tente novamente"), { id: toastId });
     } finally {
       setIsUploadingQuoteFile(false);
       e.target.value = "";
@@ -3123,13 +3132,13 @@ function CrmDashboard() {
     }
   };
 
-  // Remover Arquivo de Orçamento Oficial
+  // Remover Arquivo Anexado
   function handleRemoveQuoteFile() {
     if (!selectedDealForHistory) return;
     setCrmConfirmConfig({
       isOpen: true,
-      title: "Remover Orçamento",
-      description: "Deseja remover o arquivo de orçamento anexado a esta requisição?",
+      title: "Remover Arquivo",
+      description: "Deseja remover o arquivo anexado a esta atividade?",
       confirmText: "Remover Arquivo",
       variant: "warning",
       onConfirm: async () => {
@@ -3163,7 +3172,7 @@ function CrmDashboard() {
           await registerHistoryEntry(
             selectedDealForHistory.id,
             "quote_file_removed",
-            `${userName} removeu o documento de orçamento.`
+            `${userName} removeu o arquivo anexado.`
           );
 
           const updatedDeal: Deal = {
@@ -3469,16 +3478,76 @@ function CrmDashboard() {
     }
   }
 
+  // Iniciar Edição da Ficha Cadastral do Cliente (Exclusivo ADM)
+  function handleStartEditCustomerCard() {
+    if (!selectedCustomerForDetails || !isAdmin) return;
+    setEditCustCompany(selectedCustomerForDetails.company_name || "");
+    setEditCustName(selectedCustomerForDetails.name || "");
+    setEditCustDoc(selectedCustomerForDetails.document || "");
+    setEditCustEmail(selectedCustomerForDetails.email || "");
+    setEditCustPhone(selectedCustomerForDetails.phone || "");
+    setIsEditingCustomerCard(true);
+  }
+
+  // Salvar Alterações Cadastrais do Cliente (Exclusivo ADM)
+  async function handleSaveCustomerCard(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedCustomerForDetails || !isAdmin) return;
+    if (!editCustCompany.trim() && !editCustName.trim()) {
+      return toast.error("Informe a Razão Social ou o Nome do Cliente");
+    }
+
+    setIsSavingCustDetails(true);
+    try {
+      const updatedData = {
+        company_name: editCustCompany.trim().toUpperCase() || null,
+        name: editCustName.trim().toUpperCase() || editCustCompany.trim().toUpperCase(),
+        document: editCustDoc.trim() || null,
+        email: editCustEmail.trim() || null,
+        phone: editCustPhone.trim() || null,
+      };
+
+      const { error } = await supabase
+        .from("crm_customers")
+        .update(updatedData)
+        .eq("id", selectedCustomerForDetails.id);
+
+      if (error) throw error;
+
+      const updatedCustomer: Customer = {
+        ...selectedCustomerForDetails,
+        ...updatedData,
+        company_name: updatedData.company_name || undefined,
+        document: updatedData.document || undefined,
+        email: updatedData.email || undefined,
+        phone: updatedData.phone || undefined,
+      };
+
+      // Atualiza lista de clientes em memória
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === selectedCustomerForDetails.id ? updatedCustomer : c))
+      );
+
+      // Atualiza o cliente aberto no modal
+      setSelectedCustomerForDetails(updatedCustomer);
+      setIsEditingCustomerCard(false);
+      toast.success("Dados do cliente atualizados com sucesso!");
+    } catch (err: any) {
+      toast.error("Erro ao atualizar dados do cliente: " + (err.message || "Tente novamente"));
+    } finally {
+      setIsSavingCustDetails(false);
+    }
+  }
+
   // Criar Requisição
   async function handleCreateDeal(e: React.FormEvent) {
     e.preventDefault();
 
-    let targetCustomerId = newDealCustomerId;
+    let targetCustomerId = newDealCustomerId || null;
 
     if (activeReqModal === "externa") {
       if (!targetCustomerId) return toast.error("Selecione ou cadastre um cliente");
     } else {
-      targetCustomerId = null;
       if (!newDealDeadline) {
         return toast.error("Informe o prazo de execução da tarefa interna");
       }
@@ -5853,25 +5922,18 @@ function CrmDashboard() {
 
                 {/* Estrutura Centralizada de Textos do Cabeçalho */}
                 <div className="flex-1 min-w-0 flex flex-col items-center justify-center px-4">
-                  {/* LINHA 1 - TÍTULO E CLIENTE NA MESMA LINHA (CLIENTE CLICÁVEL APENAS PARA ORÇAMENTOS/COMERCIAIS) + EDIÇÃO DE TÍTULO */}
+                  {/* LINHA 1 - TÍTULO E CLIENTE NA MESMA LINHA + EDIÇÃO DE TÍTULO */}
                   {(() => {
                     const parentInfo = getParentDealInfo(selectedDealForHistory);
                     const isSubtaskModal = Boolean(parentInfo);
-                    const isTask = !isSubtaskModal && (
-                      selectedDealForHistory.title.includes("[TAREFA]") ||
-                      selectedDealForHistory.title.includes("[REQ. INTERNA]") ||
-                      selectedDealForHistory.stage === "lead" ||
-                      (!selectedDealForHistory.customer_id && selectedDealForHistory.customer_name === "Uso Interno / Empresa")
-                    );
 
-                    const dealCust = !isTask ? getDealCustomer(selectedDealForHistory) : null;
-                    const modalCustomerName = !isTask
-                      ? (dealCust?.company_name ||
-                         dealCust?.name ||
-                         (selectedDealForHistory.customer_name && selectedDealForHistory.customer_name !== "Uso Interno / Empresa"
-                           ? selectedDealForHistory.customer_name
-                           : null))
-                      : null;
+                    const dealCust = getDealCustomer(selectedDealForHistory);
+                    const modalCustomerName =
+                      dealCust?.company_name ||
+                      dealCust?.name ||
+                      (selectedDealForHistory.customer_name && selectedDealForHistory.customer_name !== "Uso Interno / Empresa"
+                        ? selectedDealForHistory.customer_name
+                        : null);
                     const isAuthor = isAdmin || selectedDealForHistory.assigned_user_id === user?.id;
                     const cleanTitle = getCleanDealTitle(selectedDealForHistory.title);
 
@@ -5917,8 +5979,8 @@ function CrmDashboard() {
                               className="text-lg sm:text-xl font-black uppercase tracking-wider text-sky-300 leading-snug flex items-center justify-center flex-wrap gap-2"
                               title={
                                 modalCustomerName && modalCustomerName.trim() !== ""
-                                  ? `${isSubtaskModal ? "[TAREFA] " : ""}${modalCustomerName.trim().toUpperCase()} - ${cleanTitle}`
-                                  : `${isSubtaskModal ? "[TAREFA] " : ""}${selectedDealForHistory.title}`
+                                  ? `${isSubtaskModal ? "[VINCULADA] " : ""}${modalCustomerName.trim().toUpperCase()} - ${cleanTitle}`
+                                  : `${isSubtaskModal ? "[VINCULADA] " : ""}${selectedDealForHistory.title}`
                               }
                             >
                               {isSubtaskModal && (
@@ -5926,7 +5988,7 @@ function CrmDashboard() {
                                   VINCULADA
                                 </span>
                               )}
-                              {!isTask && modalCustomerName && modalCustomerName.trim() !== "" ? (
+                              {modalCustomerName && modalCustomerName.trim() !== "" ? (
                                 <>
                                   <button
                                     type="button"
@@ -5956,16 +6018,16 @@ function CrmDashboard() {
                                   <span className="text-sky-300/60 mx-1">-</span>
                                   <span>{cleanTitle}</span>
                                 </>
-                              ) : !isTask && role === "admin" ? (
+                              ) : role === "admin" ? (
                                 <>
                                   <span>{cleanTitle}</span>
                                   <button
                                     type="button"
                                     onClick={handleStartEditCustomer}
                                     className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/30 transition-all cursor-pointer ml-1"
-                                    title="Vincular cliente a esta atividade comercial (Administrador)"
+                                    title="Atribuir cliente a esta tarefa / atividade (Administrador)"
                                   >
-                                    + Vincular Cliente
+                                    + Atribuir Cliente
                                   </button>
                                 </>
                               ) : (
@@ -6990,11 +7052,11 @@ function CrmDashboard() {
             </div>
 
             <form onSubmit={handleCreateDeal} className="flex flex-col space-y-4 pt-3">
-              {/* Campos do Topo - Mesma Linha para Título, Prazo e Direcionamento */}
+              {/* Campos do Topo - Mesma Linha para Título, Cliente, Prazo e Direcionamento */}
               {activeReqModal === "interna" ? (
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                   {/* Título da Tarefa */}
-                  <div className="md:col-span-6">
+                  <div className="md:col-span-4">
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                         Título da Tarefa <span className="text-rose-400">*</span>
@@ -7013,10 +7075,40 @@ function CrmDashboard() {
                     />
                   </div>
 
-                  {/* Prazo para Execução */}
+                  {/* Cliente (Opcional para Tarefas) */}
                   <div className="md:col-span-3">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                      Prazo para Execução <span className="text-rose-400">*</span>
+                      Cliente (Opcional)
+                    </label>
+                    <select
+                      value={newDealCustomerId}
+                      onChange={(e) => {
+                        if (e.target.value === "__NEW__") {
+                          setIsNewCustomerModalOpen(true);
+                        } else {
+                          setNewDealCustomerId(e.target.value);
+                        }
+                      }}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60 font-semibold"
+                    >
+                      <option value="">
+                        Uso Interno (Sem cliente)
+                      </option>
+                      <option value="__NEW__" className="text-sky-300 font-bold bg-slate-900">
+                        + CADASTRAR NOVO CLIENTE...
+                      </option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id} className="bg-slate-900">
+                          {c.company_name || c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Prazo para Execução */}
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                      Prazo <span className="text-rose-400">*</span>
                     </label>
                     <input
                       type="date"
@@ -8159,7 +8251,10 @@ function CrmDashboard() {
       {/* Modal: Ficha Completa e Detalhes do Cliente */}
       {selectedCustomerForDetails && (
         <div
-          onClick={() => setSelectedCustomerForDetails(null)}
+          onClick={() => {
+            setSelectedCustomerForDetails(null);
+            setIsEditingCustomerCard(false);
+          }}
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-5 animate-in fade-in select-none"
         >
           <div
@@ -8181,95 +8276,196 @@ function CrmDashboard() {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedCustomerForDetails(null)}
-                className="btn-ghost-neon p-2 rounded-xl text-muted-foreground hover:text-white cursor-pointer"
-                title="Fechar"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {isAdmin && !isEditingCustomerCard && (
+                  <button
+                    type="button"
+                    onClick={handleStartEditCustomerCard}
+                    className="btn-ghost-neon px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 border border-sky-400/30 hover:border-sky-400 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    title="Editar dados cadastrais do cliente (Administrador)"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Editar Dados</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Dados Cadastrais */}
+            {/* Dados Cadastrais: Modo Exibição vs Modo Edição */}
             <div className="flex-1 overflow-y-auto space-y-4 py-4 custom-scrollbar">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
-                    Nome da Empresa / Razão Social
-                  </span>
-                  <p className="text-xs font-bold text-white uppercase">
-                    {selectedCustomerForDetails.company_name || "-"}
-                  </p>
-                </div>
+              {isEditingCustomerCard ? (
+                <form onSubmit={handleSaveCustomerCard} className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-400/30 space-y-3">
+                    <p className="text-xs font-black uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
+                      <Pencil className="h-3.5 w-3.5" /> Editando Dados do Cliente
+                    </p>
 
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
-                    CNPJ / CPF
-                  </span>
-                  <p className="text-xs font-mono font-bold text-sky-300">
-                    {selectedCustomerForDetails.document || "-"}
-                  </p>
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                          Razão Social / Nome da Empresa
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: INDÚSTRIA SILVA LTDA"
+                          value={editCustCompany}
+                          onChange={(e) => setEditCustCompany(e.target.value.toUpperCase())}
+                          className="input-futuristic w-full rounded-xl px-3 py-2 text-xs uppercase font-bold outline-none"
+                        />
+                      </div>
 
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
-                    Contato Principal
-                  </span>
-                  <p className="text-xs font-bold text-white uppercase">
-                    {selectedCustomerForDetails.name || "-"}
-                  </p>
-                </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                          CNPJ / CPF
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="00.000.000/0001-00"
+                          value={editCustDoc}
+                          onChange={(e) => setEditCustDoc(e.target.value)}
+                          className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                        />
+                      </div>
 
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
-                    E-mail de Contato
-                  </span>
-                  <p className="text-xs font-mono text-slate-200 truncate">
-                    {selectedCustomerForDetails.email ? (
-                      <a
-                        href={`mailto:${selectedCustomerForDetails.email}`}
-                        className="text-sky-400 hover:underline"
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                          Contato Principal
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: João da Silva"
+                          value={editCustName}
+                          onChange={(e) => setEditCustName(e.target.value.toUpperCase())}
+                          className="input-futuristic w-full rounded-xl px-3 py-2 text-xs uppercase font-bold outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                          E-mail de Contato
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="contato@empresa.com"
+                          value={editCustEmail}
+                          onChange={(e) => setEditCustEmail(e.target.value)}
+                          className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                          Telefone / WhatsApp
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="(11) 98765-4321"
+                          value={editCustPhone}
+                          onChange={(e) => setEditCustPhone(e.target.value)}
+                          className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+                      <button
+                        type="button"
+                        disabled={isSavingCustDetails}
+                        onClick={() => setIsEditingCustomerCard(false)}
+                        className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
                       >
-                        {selectedCustomerForDetails.email}
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
-                    Telefone / WhatsApp
-                  </span>
-                  <p className="text-xs font-mono text-slate-200">
-                    {selectedCustomerForDetails.phone ? (
-                      <a
-                        href={`https://wa.me/${selectedCustomerForDetails.phone.replace(/\D/g, "")}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-emerald-400 hover:underline inline-flex items-center gap-1.5"
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingCustDetails}
+                        className="btn-futuristic px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
-                        <Phone className="h-3 w-3" />
-                        {selectedCustomerForDetails.phone}
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </p>
-                </div>
+                        <Check className="h-4 w-4" />
+                        <span>{isSavingCustDetails ? "Salvando..." : "Salvar Alterações"}</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
+                      Nome da Empresa / Razão Social
+                    </span>
+                    <p className="text-xs font-bold text-white uppercase">
+                      {selectedCustomerForDetails.company_name || "-"}
+                    </p>
+                  </div>
 
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
-                    Status do Cliente
-                  </span>
-                  <p className="text-xs font-bold uppercase text-emerald-400 flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                    {selectedCustomerForDetails.status || "Ativo"}
-                  </p>
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
+                      CNPJ / CPF
+                    </span>
+                    <p className="text-xs font-mono font-bold text-sky-300">
+                      {selectedCustomerForDetails.document || "-"}
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
+                      Contato Principal
+                    </span>
+                    <p className="text-xs font-bold text-white uppercase">
+                      {selectedCustomerForDetails.name || "-"}
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
+                      E-mail de Contato
+                    </span>
+                    <p className="text-xs font-mono text-slate-200 truncate">
+                      {selectedCustomerForDetails.email ? (
+                        <a
+                          href={`mailto:${selectedCustomerForDetails.email}`}
+                          className="text-sky-400 hover:underline"
+                        >
+                          {selectedCustomerForDetails.email}
+                        </a>
+                      ) : (
+                        "-"
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
+                      Telefone / WhatsApp
+                    </span>
+                    <p className="text-xs font-mono text-slate-200">
+                      {selectedCustomerForDetails.phone ? (
+                        <a
+                          href={`https://wa.me/${selectedCustomerForDetails.phone.replace(/\D/g, "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-emerald-400 hover:underline inline-flex items-center gap-1.5"
+                        >
+                          <Phone className="h-3 w-3" />
+                          {selectedCustomerForDetails.phone}
+                        </a>
+                      ) : (
+                        "-"
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
+                      Status do Cliente
+                    </span>
+                    <p className="text-xs font-bold uppercase text-emerald-400 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      {selectedCustomerForDetails.status || "Ativo"}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Atividades Vinculadas a este Cliente */}
               {(() => {

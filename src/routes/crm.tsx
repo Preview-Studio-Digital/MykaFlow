@@ -7170,6 +7170,10 @@ function CrmDashboard() {
                           const dealReplies = getDealMentionReplies(selectedDealForHistory);
                           const dealSubtaskCompletions = getDealSubtaskCompletions(selectedDealForHistory);
 
+                          const userMention = dealMentions.find((m) => m.mentioned_user_id === user?.id);
+                          const canMarkAsRead = Boolean(userMention && !userMention.read);
+                          const isReplyingCurrent = Boolean(replyingToMentionId && (replyingToMentionId === (userMention?.id || dealMentions[0]?.id || "latest_update")));
+
                           const pendingNotif = getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance");
                           const isAuthor = Boolean(user?.id && selectedDealForHistory.user_id && user.id === selectedDealForHistory.user_id);
                           const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);

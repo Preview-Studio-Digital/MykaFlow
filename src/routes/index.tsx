@@ -173,11 +173,15 @@ function ModuleHub() {
               <ul className="space-y-2.5 pt-1 text-xs text-muted-foreground font-medium">
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
-                  Atividades e Tarefas Individuais
+                  Atividades Individuais
                 </li>
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
-                  Eficiência e Produtividade
+                  Acompanhamento de Fluxo
+                </li>
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
+                  Produtividade & Eficiência
                 </li>
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />

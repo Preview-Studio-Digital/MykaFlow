@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { AlertTriangle, AlertCircle, Info, CheckCircle2, X } from "lucide-react";
+import { AlertTriangle, AlertCircle, Info, CheckCircle2 } from "lucide-react";
 
 export interface ConfirmModalProps {
   isOpen: boolean;
@@ -105,28 +105,18 @@ export function ConfirmModal({
         className={`w-full max-w-md rounded-2xl border ${variantStyles.border} bg-slate-950/95 p-6 space-y-5 ${variantStyles.glow} backdrop-blur-xl transition-all animate-in zoom-in-95 duration-150`}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl border ${variantStyles.iconBg}`}>
-              {variantStyles.icon}
-            </div>
-            <div>
-              <h3 className={`text-sm font-black uppercase tracking-wider ${variantStyles.title}`}>
-                {title}
-              </h3>
-              <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-mono">
-                Confirmação do Sistema
-              </span>
-            </div>
+        <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+          <div className={`p-2.5 rounded-xl border ${variantStyles.iconBg}`}>
+            {variantStyles.icon}
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-ghost-neon p-1.5 rounded-lg text-muted-foreground hover:text-white cursor-pointer"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div>
+            <h3 className={`text-sm font-black uppercase tracking-wider ${variantStyles.title}`}>
+              {title}
+            </h3>
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-mono">
+              Confirmação do Sistema
+            </span>
+          </div>
         </div>
 
         {/* Mensagem / Descrição */}

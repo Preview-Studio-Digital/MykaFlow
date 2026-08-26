@@ -9,8 +9,8 @@ import { EvolutionChart } from "@/components/EvolutionChart";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { TransactionCreateDialog } from "@/components/TransactionCreateDialog";
-import { MentionsInboxModal, getDealMentions } from "@/components/MentionsInboxModal";
-import { LogOut, Zap, ChevronLeft, ShieldCheck, User as UserIcon, Lock, Users, LayoutGrid, AtSign } from "lucide-react";
+import { InboxModal, getDealMentions, getDealCompletionNotifications } from "@/components/InboxModal";
+import { LogOut, Zap, ChevronLeft, ShieldCheck, User as UserIcon, Lock, Users, LayoutGrid, AtSign, Inbox } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/financeiro")({
@@ -47,8 +47,8 @@ function Dashboard() {
   const [isGeneratingAi, setIsGeneratingAi] = useState<Record<string, boolean>>({});
   const processingAiRef = useRef<Set<string>>(new Set()); // controla quais hashes já estão sendo processados
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isMentionsInboxOpen, setIsMentionsInboxOpen] = useState(false);
-  const [mentionsUnreadCount, setMentionsUnreadCount] = useState(0);
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addType, setAddType] = useState<"income" | "expense">("expense");
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -63,10 +63,9 @@ function Dashboard() {
   useEffect(() => {
     if (!user) return;
     const checkUnread = async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("crm_deals")
-        .select("id, title, stage, notes, req_number, created_at")
-        .like("notes", "%[MENTION:%");
+        .select("id, title, stage, notes, req_number, created_at, user_id, assigned_user_id");
       if (data) {
         let count = 0;
         data.forEach((d: any) => {
@@ -76,8 +75,14 @@ function Dashboard() {
               count++;
             }
           });
+          const notifs = getDealCompletionNotifications(d);
+          notifs.forEach((n) => {
+            if ((n.author_id === user.id || (!n.author_id && d.user_id === user.id)) && n.status === "pending_acceptance") {
+              count++;
+            }
+          });
         });
-        setMentionsUnreadCount(count);
+        setInboxUnreadCount(count);
       }
     };
     checkUnread();
@@ -810,27 +815,25 @@ function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3 justify-between lg:w-1/4 lg:justify-end shrink-0">
-          {/* Botão Caixa de Entrada de Menções com @usuario */}
+          {/* Botão Caixa de Entrada Unificada (Inbox: Notificações + Menções) */}
           <button
             type="button"
-            onClick={() => setIsMentionsInboxOpen(true)}
-            className="group/mentionbtn relative h-9 flex items-center gap-1.5 px-3 rounded-xl bg-black/40 border border-white/10 hover:border-sky-400/50 hover:bg-sky-500/10 transition-all cursor-pointer shadow-sm text-xs font-black uppercase tracking-widest text-white hover:scale-105"
-            title="Abrir Caixa de Entrada de Menções (@)"
+            onClick={() => setIsInboxOpen(true)}
+            className="btn-ghost-neon h-9 px-3 rounded-xl flex items-center justify-center gap-1.5 text-cyan-300 hover:text-white border border-cyan-500/30 hover:border-cyan-400/60 bg-cyan-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer text-xs font-black uppercase tracking-wider"
+            title="Abrir Inbox (Notificações e Menções)"
           >
-            <AtSign className="h-3.5 w-3.5 text-sky-400 group-hover/mentionbtn:scale-110 transition-transform" />
-            <p className="text-xs font-black uppercase tracking-widest text-white group-hover/mentionbtn:text-sky-300">
-              {(user?.user_metadata?.display_name || user?.email || "USUÁRIO").split(" ")[0].split("@")[0]}
-            </p>
+            <Inbox className="h-3.5 w-3.5 text-cyan-400" />
+            <span>INBOX</span>
 
-            {/* Badge de Menções Não Lidas no Nome do Usuário */}
-            {mentionsUnreadCount > 0 && (
+            {/* Badge de Pendências Não Lidas */}
+            {inboxUnreadCount > 0 && (
               <span
                 className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-mono font-black text-[10px] shadow-[0_0_10px_rgba(244,63,94,0.9)] animate-pulse shrink-0 ml-0.5 leading-none select-none"
-                title={`Você possui ${mentionsUnreadCount} ${
-                  mentionsUnreadCount === 1 ? "menção não lida" : "menções não lidas"
+                title={`Você possui ${inboxUnreadCount} ${
+                  inboxUnreadCount === 1 ? "pendência no Inbox" : "pendências no Inbox"
                 }`}
               >
-                {mentionsUnreadCount}
+                {inboxUnreadCount}
               </span>
             )}
           </button>
@@ -861,9 +864,9 @@ function Dashboard() {
         </div>
       </header>
 
-      <MentionsInboxModal
-        isOpen={isMentionsInboxOpen}
-        onClose={() => setIsMentionsInboxOpen(false)}
+      <InboxModal
+        isOpen={isInboxOpen}
+        onClose={() => setIsInboxOpen(false)}
         currentUser={user}
       />
 

@@ -369,6 +369,18 @@ function formatDurationHoursMinutes(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
 }
 
+function formatElapsedLive(startedAt: string, currentMs: number = Date.now()): string {
+  const startMs = new Date(startedAt).getTime();
+  if (isNaN(startMs)) return "0s";
+  const sec = Math.max(0, Math.floor((currentMs - startMs) / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -1007,6 +1019,13 @@ function CrmDashboard() {
   const [userSearchTerms, setUserSearchTerms] = useState<Record<string, string>>({});
   const [openSearchUserId, setOpenSearchUserId] = useState<string | null>(null);
   const [hoveredSubcolUser, setHoveredSubcolUser] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  // Atualização contínua a cada segundo para contagem de tempo ao vivo
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Fechar barra de pesquisa e menu de visão do quadro ao clicar fora
   useEffect(() => {
@@ -1236,8 +1255,9 @@ function CrmDashboard() {
         if (activeWorker && activeWorker.userId === user.id) {
           const cutoffInfo = getAutoCutoffInfo(activeWorker.startedAt, now);
           const schedule = isBusinessWorkTime(now);
+          const shouldStop = cutoffInfo.shouldCutoff || (!isAdmin && !schedule.allowed);
 
-          if (cutoffInfo.shouldCutoff || !schedule.allowed) {
+          if (shouldStop) {
             const nowIso = new Date().toISOString();
             const cutoffTimeIso = cutoffInfo.cutoffTimeIso || nowIso;
             const startTime = new Date(activeWorker.startedAt).getTime();
@@ -1399,6 +1419,7 @@ function CrmDashboard() {
   const handleDismissOffHoursPrompt = () => {
     // Fecha o aviso único de fora de expediente e não exibe mais durante este período
     setShowOffHoursPrompt(false);
+    setInterruptedActivityTitle(null);
   };
 
   const saveParentAlerts = (newAlerts: Record<string, number>) => {
@@ -3057,8 +3078,6 @@ function CrmDashboard() {
 
         setSelectedDealForHistory(updatedDeal);
         setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
-
-        toast.success(`Atividade pausada! (${formattedDuration} registrados para métricas ADM)`);
       } catch (err: any) {
         toast.error("Erro ao pausar atividade: " + (err.message || "Tente novamente"));
       }
@@ -3150,8 +3169,6 @@ function CrmDashboard() {
       setSelectedDealForHistory(updatedDeal);
       setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
       setWorkingConflictModal(null);
-
-      toast.success("Atividade iniciada com sucesso! Cronômetro ativo.");
     } catch (err: any) {
       toast.error("Erro ao iniciar atividade: " + (err.message || "Tente novamente"));
     }
@@ -4766,6 +4783,71 @@ function CrmDashboard() {
               </div>
             );
           })()}
+
+          {/* Indicador de Status ao Vivo do Usuário nos Quadros Individuais */}
+          {effectiveFilterUser !== "ALL" && effectiveFilterUser !== "unassigned" && (() => {
+            const targetUserId = effectiveFilterUser;
+            const targetMember = teamMembers.find((m) => m.id === targetUserId);
+            const isMe = targetUserId === user?.id;
+            const displayName = isMe 
+              ? (user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email || "Você")
+              : (targetMember?.display_name || targetMember?.email || "Colaborador");
+            const firstName = getFirstName(displayName);
+
+            const activeDeal = deals.find((d) => {
+              const worker = getDealActiveWorker(d);
+              return Boolean(worker && worker.userId === targetUserId);
+            });
+            const activeWorker = activeDeal ? getDealActiveWorker(activeDeal) : null;
+            const activeReqNumber = activeDeal ? getDealReqNumber(activeDeal, deals) : null;
+
+            return (
+              <div className="flex items-center gap-2.5 pl-2.5 border-l border-white/10 animate-in fade-in select-none">
+                <div
+                  className={`h-8 w-8 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                    activeWorker
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.35)]"
+                      : "bg-slate-900 text-slate-500 border-white/10"
+                  }`}
+                >
+                  <Clock className={`h-4 w-4 ${activeWorker ? "animate-pulse" : ""}`} />
+                </div>
+                <div className="min-w-0 flex flex-col justify-center">
+                  <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white truncate leading-none">
+                    {firstName}
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {activeWorker && activeDeal ? (
+                      <div 
+                        onClick={() => openDealHistory(activeDeal)}
+                        className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-full text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 transition-colors"
+                        title="Clique para abrir detalhes da atividade em andamento"
+                      >
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
+                        <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[200px] sm:max-w-[300px] md:max-w-[400px]">
+                          TRABALHANDO EM:{" "}
+                          <span className="text-white font-black">
+                            {activeReqNumber ? `#${activeReqNumber} ` : ""}
+                            {getCleanDealTitle(activeDeal.title)}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-emerald-300 font-mono font-bold bg-emerald-900/60 px-1.5 py-0.5 rounded-md border border-emerald-500/30 shrink-0">
+                          {formatElapsedLive(activeWorker.startedAt, nowMs)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
+                        <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
+                        <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
+                          INATIVO NO MOMENTO
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Centro do Cabeçalho: Tag Centralizada de Isolamento de Etapa */}
@@ -4846,7 +4928,7 @@ function CrmDashboard() {
           >
             <AtSign className="h-3.5 w-3.5 text-sky-400 group-hover/mentionbtn:scale-110 transition-transform" />
             <p className="text-xs font-black uppercase tracking-widest text-white group-hover/mentionbtn:text-sky-300">
-              {user?.user_metadata?.display_name || user?.email}
+              {getFirstName(teamMembers.find((m) => m.id === user?.id)?.display_name || user?.user_metadata?.display_name || user?.email)}
             </p>
 
             {/* Badge de Menções Não Lidas no Nome do Usuário */}
@@ -6181,33 +6263,33 @@ function CrmDashboard() {
                     <button
                       type="button"
                       onClick={() => handleToggleWorkActivity(selectedDealForHistory)}
-                      className={`w-[105px] shrink-0 rounded-2xl flex flex-col items-center justify-center p-2.5 transition-all cursor-pointer shadow-lg select-none border text-center ${
+                      className={`w-[105px] shrink-0 rounded-2xl flex flex-col items-center justify-center p-2.5 transition-all cursor-pointer shadow-lg select-none border text-center group ${
                         isWorking
-                          ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-400/60 shadow-[0_0_20px_rgba(251,191,36,0.35)] animate-pulse"
-                          : "bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 hover:text-white border-sky-400/50 hover:border-sky-300 shadow-[0_0_15px_rgba(56,189,248,0.2)]"
+                          ? "bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.35)] animate-pulse"
+                          : "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-white border-emerald-500/50 hover:border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:scale-105"
                       }`}
                       title={isWorking ? "Clique para pausar o trabalho nesta atividade" : "Clique para iniciar o trabalho nesta atividade"}
                     >
                       {isWorking ? (
                         <>
                           <div className="relative flex items-center justify-center mb-1.5">
-                            <span className="h-3 w-3 rounded-full bg-amber-400 animate-ping absolute" />
-                            <span className="h-3 w-3 rounded-full bg-amber-400" />
+                            <span className="h-3 w-3 rounded-full bg-rose-500 animate-ping absolute" />
+                            <span className="h-3 w-3 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)]" />
                           </div>
-                          <span className="font-mono text-[10px] font-black uppercase tracking-wider leading-tight text-amber-200">
+                          <span className="font-mono text-[10px] font-black uppercase tracking-wider leading-tight text-rose-200">
                             PARAR
                           </span>
-                          <span className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-amber-400/90">
+                          <span className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-rose-400/90">
                             ATIVIDADE
                           </span>
                         </>
                       ) : (
                         <>
-                          <Play className="h-6 w-6 text-sky-400 fill-sky-400 mb-1.5 transition-transform group-hover:scale-110" />
-                          <span className="font-mono text-[10px] font-black uppercase tracking-wider leading-tight text-sky-200">
+                          <Play className="h-6 w-6 text-emerald-400 fill-emerald-400 mb-1.5 transition-transform group-hover:scale-110" />
+                          <span className="font-mono text-[10px] font-black uppercase tracking-wider leading-tight text-emerald-200">
                             INICIAR
                           </span>
-                          <span className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-sky-400/90">
+                          <span className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-emerald-400/90">
                             ATIVIDADE
                           </span>
                         </>
@@ -9304,9 +9386,8 @@ function CrmDashboard() {
                   const prev = workingConflictModal.previousDeal;
                   setWorkingConflictModal(null);
                   openDealHistory(prev);
-                  toast.info("Continuando na atividade anterior.");
                 }}
-                className="btn-ghost-neon px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 cursor-pointer text-center"
+                className="btn-ghost-neon px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 cursor-pointer text-center transition-all"
               >
                 Prosseguir com a Anterior
               </button>
@@ -9318,9 +9399,9 @@ function CrmDashboard() {
                   const target = workingConflictModal.targetDeal;
                   handleToggleWorkActivity(target, true);
                 }}
-                className="btn-futuristic px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-slate-950 bg-gradient-to-r from-sky-400 to-cyan-400 hover:from-sky-300 hover:to-cyan-300 cursor-pointer shadow-lg shadow-sky-500/20 text-center"
+                className="btn-ghost-neon px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-sky-400 hover:text-white bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/40 cursor-pointer text-center transition-all"
               >
-                Pausar Anterior e Iniciar Nova
+                Iniciar a Nova
               </button>
             </div>
           </div>
@@ -9550,7 +9631,7 @@ function CrmDashboard() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-black font-mono uppercase text-sky-300">
-                      @{user?.user_metadata?.display_name || user?.email}
+                      @{getFirstName(teamMembers.find((m) => m.id === user?.id)?.display_name || user?.user_metadata?.display_name || user?.email)}
                     </span>
                     {userMentionsData.unreadCount > 0 && (
                       <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white font-mono text-[10px] font-black animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]">
@@ -9776,7 +9857,7 @@ function CrmDashboard() {
               <h2 className={`text-base sm:text-lg font-black uppercase tracking-wider ${isAdmin ? "text-amber-400" : "text-sky-400"}`}>
                 {getGreeting()},{" "}
                 <span className="text-white">
-                  {user?.user_metadata?.display_name || user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Usuário")}
+                  {getFirstName(user?.user_metadata?.display_name || user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Usuário"))}
                 </span>
                 !
               </h2>
@@ -9789,8 +9870,17 @@ function CrmDashboard() {
                 <div className="space-y-2 text-left w-full">
                   <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs leading-relaxed space-y-2.5 shadow-inner">
                     <p className="font-black text-amber-300 uppercase tracking-wider text-xs flex items-center gap-1.5">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
-                      Atividade Interrompida
+                      {interruptedActivityTitle ? (
+                        <>
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                          Atividade Interrompida
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400" />
+                          Acesso Fora do Expediente
+                        </>
+                      )}
                     </p>
                     {interruptedActivityTitle && (
                       <div className="p-2.5 rounded-xl bg-black/40 border border-amber-500/20 text-[11px] font-mono text-amber-200">
@@ -9799,7 +9889,15 @@ function CrmDashboard() {
                       </div>
                     )}
                     <p className="text-[12px] text-amber-100 leading-relaxed">
-                      A sua atividade ativa foi interrompida, mas como <strong>administrador</strong> você tem permissão para iniciar novas atividades nesse horário.
+                      {interruptedActivityTitle ? (
+                        <>
+                          A sua atividade ativa foi interrompida pelo corte de horário, mas como <strong>administrador</strong> você tem permissão para iniciar novas atividades nesse horário se desejar.
+                        </>
+                      ) : (
+                        <>
+                          Você está acessando fora do horário de expediente comercial. Como <strong>administrador</strong>, você tem permissão liberada para navegar e iniciar atividades se desejar.
+                        </>
+                      )}
                     </p>
                   </div>
                   <p className="text-[10px] text-center text-muted-foreground/70 uppercase tracking-wider font-bold pt-1">
@@ -9808,6 +9906,12 @@ function CrmDashboard() {
                 </div>
               ) : (
                 <>
+                  {interruptedActivityTitle && (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] font-mono text-amber-200 text-left w-full">
+                      <span className="text-muted-foreground block text-[9px] uppercase">Atividade pausada:</span>
+                      <span className="font-bold text-white truncate block">{interruptedActivityTitle}</span>
+                    </div>
+                  )}
                   <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
                     Você pode apenas navegar, consultar e acompanhar tarefas.
                   </p>
@@ -9842,7 +9946,7 @@ function CrmDashboard() {
               <h2 className="text-lg sm:text-xl font-black uppercase tracking-wider text-sky-400 drop-shadow-[0_0_15px_rgba(56,189,248,0.5)]">
                 {getGreeting()},{" "}
                 <span className="text-white">
-                  {user?.user_metadata?.display_name || user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Usuário")}
+                  {getFirstName(user?.user_metadata?.display_name || user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Usuário"))}
                 </span>
                 !
               </h2>

@@ -463,11 +463,11 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     if (!metrics.activities || metrics.activities.length === 0) return [];
     return metrics.activities.map((act, index) => {
       const valH = Math.round((act.seconds / 3600) * 100) / 100;
-      const label = act.reqNumber ? `#${act.reqNumber} - ${act.title}` : act.title;
+      const label = act.title;
       return {
         id: act.id,
         name: label,
-        shortLabel: act.reqNumber ? `#${act.reqNumber}` : act.title.slice(0, 15),
+        shortLabel: act.title.slice(0, 15),
         value: valH,
         rawSeconds: act.seconds,
         color: ACTIVITY_PALETTE[index % ACTIVITY_PALETTE.length],
@@ -483,8 +483,12 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
   const activeHoveredData = useMemo(() => {
     if (!hoveredSlice) return null;
-    return currentChartData.find(c => c.name === hoveredSlice.name || (c.id && c.id === hoveredSlice.id)) || hoveredSlice;
-  }, [hoveredSlice, currentChartData]);
+    const match = currentChartData.find(c => c.name === hoveredSlice.name || (c.id && c.id === hoveredSlice.id));
+    if (match) return match;
+    if (isExpandedActive && hoveredSlice.name === "Tempo Ativo") return null;
+    if (!isExpandedActive && hoveredSlice.id) return null;
+    return hoveredSlice;
+  }, [hoveredSlice, currentChartData, isExpandedActive]);
 
   if (loading) {
     return (
@@ -502,7 +506,10 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         
         {/* Tempo Ativo */}
         <div 
-          onClick={() => setIsExpandedActive((prev) => !prev)}
+          onClick={() => {
+            setHoveredSlice(null);
+            setIsExpandedActive((prev) => !prev);
+          }}
           className={`p-4 rounded-xl border transition-all flex items-center justify-between cursor-pointer group ${
             isExpandedActive
               ? "bg-emerald-950/40 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400"
@@ -638,13 +645,19 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
             {/* Botão VOLTAR no Centro do Gráfico quando expandido */}
             {isExpandedActive && (
               <div 
-                onClick={() => setIsExpandedActive(false)}
-                className="absolute inset-0 flex items-center justify-center cursor-pointer z-10 select-none group pointer-events-auto"
-                title="Clique para voltar à composição geral"
+                className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 select-none"
               >
-                <div className="px-4 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/40 text-emerald-300 group-hover:bg-emerald-950 group-hover:border-emerald-400 group-hover:text-white group-hover:scale-105 transition-all shadow-[0_0_15px_rgba(16,185,129,0.25)] font-mono text-xs font-black uppercase tracking-widest text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHoveredSlice(null);
+                    setIsExpandedActive(false);
+                  }}
+                  className="pointer-events-auto px-3.5 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950 hover:border-emerald-400 hover:text-white hover:scale-105 transition-all shadow-[0_0_15px_rgba(16,185,129,0.25)] font-mono text-xs font-black uppercase tracking-widest text-center cursor-pointer"
+                  title="Clique para voltar à composição geral"
+                >
                   VOLTAR
-                </div>
+                </button>
               </div>
             )}
             {metrics.totalActiveSeconds === 0 && metrics.inactiveSeconds === 0 && metrics.remainingSeconds === 0 ? (
@@ -654,7 +667,10 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                 <p className="text-xs text-muted-foreground italic">Nenhuma atividade registrada para fatiamento.</p>
                 <button
                   type="button"
-                  onClick={() => setIsExpandedActive(false)}
+                  onClick={() => {
+                    setHoveredSlice(null);
+                    setIsExpandedActive(false);
+                  }}
                   className="px-3 py-1 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white cursor-pointer"
                 >
                   Voltar ao Gráfico Geral
@@ -672,7 +688,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                   : tooltipCorner === "bottom-left" 
                   ? "bottom-2 left-2" 
                   : "bottom-2 right-2"
-              } z-20 p-3.5 rounded-2xl bg-slate-950/95 border border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl min-w-[220px] max-w-[260px] pointer-events-none select-none transition-all duration-150`}>
+              } z-20 p-3.5 rounded-2xl bg-slate-950/95 border border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl min-w-[220px] max-w-[280px] pointer-events-none select-none transition-all duration-150`}>
                 <div className="flex items-center gap-2.5 mb-2 pb-1.5 border-b border-white/10">
                   <span
                     className={`h-3 w-3 rounded-full shrink-0 ${activeHoveredData.isRemaining ? "border-2 border-dashed border-slate-400 bg-transparent" : "shadow-sm"}`}
@@ -686,12 +702,12 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                   </span>
                 </div>
                 <div className="space-y-1.5">
-                  <p className={`text-base font-black font-mono leading-none ${activeHoveredData.isRemaining ? "text-slate-400" : "text-white"}`}>
+                  <p className={`text-base font-black font-mono leading-none ${activeHoveredData.isRemaining ? "text-slate-400" : isExpandedActive ? "text-emerald-300" : "text-white"}`}>
                     {formatSeconds(activeHoveredData.rawSeconds)}
                   </p>
 
                   {activeHoveredData.description && (
-                    <p className="text-[9px] text-muted-foreground italic leading-tight">
+                    <p className="text-[10px] text-muted-foreground font-mono leading-tight">
                       {activeHoveredData.description}
                     </p>
                   )}
@@ -699,7 +715,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                   <div className="pt-0.5">
                     <span className="font-bold text-slate-300 bg-white/10 px-1.5 py-0.5 rounded text-[10px] font-mono inline-block">
                       {isExpandedActive 
-                        ? `${metrics.totalActiveSeconds > 0 ? Math.round((activeHoveredData.rawSeconds / metrics.totalActiveSeconds) * 100) : 0}% ativo`
+                        ? `${metrics.totalActiveSeconds > 0 ? Math.round((activeHoveredData.rawSeconds / metrics.totalActiveSeconds) * 100) : 0}% do tempo ativo`
                         : `${metrics.expectedWorkSeconds > 0 ? Math.round((activeHoveredData.rawSeconds / metrics.expectedWorkSeconds) * 100) : 0}% da jornada`
                       }
                     </span>
@@ -710,6 +726,13 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                     <div className="pt-2 mt-1.5 border-t border-white/10 flex items-center gap-1.5 text-[10px] font-mono text-emerald-300 font-bold">
                       <Briefcase className="h-3 w-3 text-emerald-400" />
                       <span>{metrics.activities.length} {metrics.activities.length === 1 ? "atividade realizada" : "atividades realizadas"}</span>
+                    </div>
+                  )}
+
+                  {isExpandedActive && activeHoveredData.hasActiveSession && (
+                    <div className="pt-1.5 mt-1 border-t border-emerald-500/20 flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 font-bold">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+                      <span>Sessão em andamento</span>
                     </div>
                   )}
                 </div>
@@ -763,9 +786,9 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                       </text>
                     );
                   }}
-                  onMouseEnter={(entry: any) => {
-                    const payload = entry?.payload || entry;
-                    if (payload) setHoveredSlice(payload);
+                  onMouseEnter={(_: any, index: number) => {
+                    const item = currentChartData[index];
+                    if (item) setHoveredSlice(item);
                   }}
                   onMouseLeave={() => {
                     setHoveredSlice(null);
@@ -775,6 +798,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                       const sliceName = entry?.name || entry?.payload?.name;
                       // Só expande se o clique for EXCLUSIVAMENTE na fatia de Tempo Ativo
                       if (sliceName === "Tempo Ativo") {
+                        setHoveredSlice(null);
                         setIsExpandedActive(true);
                       }
                     } else {
@@ -803,6 +827,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                               ? "cursor-pointer hover:brightness-110 transition-all duration-150" 
                               : "cursor-default pointer-events-auto"
                           }
+                          onMouseEnter={() => setHoveredSlice(entry)}
+                          onMouseLeave={() => setHoveredSlice(null)}
                         />
                       );
                     }
@@ -815,6 +841,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                         stroke={isHovered ? "#ffffff" : "rgba(0,0,0,0.6)"}
                         strokeWidth={isHovered ? 4 : 2}
                         className="cursor-pointer hover:brightness-110 transition-all duration-150"
+                        onMouseEnter={() => setHoveredSlice(entry)}
+                        onMouseLeave={() => setHoveredSlice(null)}
                       />
                     );
                   })}

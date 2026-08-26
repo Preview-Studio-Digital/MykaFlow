@@ -481,7 +481,7 @@ function AdminPage() {
                       <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-lg text-slate-400 text-xs font-bold font-mono">
                         <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
                         <span className="text-[11px] uppercase tracking-wider">
-                          INATIVO NO MOMENTO (Nenhuma atividade em andamento)
+                          INATIVO NO MOMENTO
                         </span>
                       </div>
                     )}

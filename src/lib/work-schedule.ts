@@ -148,14 +148,13 @@ export function isBusinessWorkTime(date: Date = new Date()): WorkScheduleInfo {
   // 5. Após o encerramento do expediente
   if (currentMinutes >= limits.endMinutes) {
     const isFriday = day === 5;
-    const endStr = isFriday ? "16h30" : "17h30";
     return {
       allowed: false,
       isWorkHours: false,
       isLunch: false,
       isWeekend: false,
       isHoliday: false,
-      reason: `Expediente encerrado para hoje (${endStr}).`,
+      reason: "Expediente encerrado para hoje.",
       scheduleDescription,
       nextWorkTimeLabel: isFriday ? "Segunda-feira às 07h30" : "Amanhã às 07h30",
     };

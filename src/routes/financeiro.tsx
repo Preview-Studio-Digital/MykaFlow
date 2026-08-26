@@ -819,7 +819,7 @@ function Dashboard() {
           >
             <AtSign className="h-3.5 w-3.5 text-sky-400 group-hover/mentionbtn:scale-110 transition-transform" />
             <p className="text-xs font-black uppercase tracking-widest text-white group-hover/mentionbtn:text-sky-300">
-              {user?.user_metadata?.display_name || user?.email}
+              {(user?.user_metadata?.display_name || user?.email || "USUÁRIO").split(" ")[0].split("@")[0]}
             </p>
 
             {/* Badge de Menções Não Lidas no Nome do Usuário */}

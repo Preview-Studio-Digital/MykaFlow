@@ -2069,6 +2069,25 @@ function CrmDashboard() {
     };
   };
 
+  // Helper para verificar se a atividade é relevante para o usuário selecionado no filtro:
+  // - Se estiver aguardando aceite: aparece tanto para o AUTOR (que deve aceitar) quanto para o RESPONSÁVEL (que armazenou)
+  // - Se estiver em andamento: aparece apenas para o RESPONSÁVEL
+  const isDealUserMatching = (deal: Deal, targetUserId: string | null | undefined): boolean => {
+    if (!targetUserId || targetUserId === "ALL") return true;
+    if (targetUserId === "unassigned") return !deal.assigned_user_id;
+    if (isDealPendingAuthorAcceptance(deal)) {
+      return deal.user_id === targetUserId || deal.assigned_user_id === targetUserId;
+    }
+    return deal.assigned_user_id === targetUserId;
+  };
+
+  const getDealEffectiveUserId = (deal: Deal): string | null => {
+    if (isDealPendingAuthorAcceptance(deal)) {
+      return deal.user_id || deal.assigned_user_id || null;
+    }
+    return deal.assigned_user_id || null;
+  };
+
   // Helper para formatar @menções em texto com destaque visual padronizado (branco, caixa alta, com @) e torná-las clicáveis
   const formatMentionsInText = (text: string) => {
     if (!text) return "";
@@ -3098,6 +3117,11 @@ function CrmDashboard() {
     const isAssigned = isAdmin || deal.assigned_user_id === user.id;
     if (!isAssigned) {
       toast.error("Somente o responsável atribuído ou o Administrador podem iniciar esta atividade.");
+      return;
+    }
+
+    if (isDealPendingAuthorAcceptance(deal) || deal.stage === "archived" || deal.stage === "completed" || deal.stage === "won" || deal.stage === "lost") {
+      toast.error("Esta atividade já foi finalizada/armazenada e não pode ser iniciada.");
       return;
     }
 
@@ -4571,14 +4595,24 @@ function CrmDashboard() {
 
   // Filtro de Visibilidade por Permissão:
   // - Administrador: visualiza todas as atividades de todos os usuários
-  // - Usuário comum: visualiza estritamente as suas próprias atividades (como responsável ou criador)
+  // - Usuário comum: visualiza as atividades sob sua responsabilidade (ativas ou aguardando aceite) e as atividades que criou que estão aguardando seu aceite
   const visibleDeals = useMemo(() => {
     if (role === "admin") {
       return deals;
     }
-    return deals.filter(
-      (d) => d.assigned_user_id === user?.id || (d as any).user_id === user?.id
-    );
+    return deals.filter((d) => {
+      const isAssigned = d.assigned_user_id === user?.id;
+      const isAuthor = (d as any).user_id === user?.id;
+      const isPending = isDealPendingAuthorAcceptance(d);
+
+      // Se o usuário é o responsável: vê enquanto ativa e quando estiver aguardando aceite
+      if (isAssigned) return true;
+
+      // Se o usuário é o autor: vê quando ela foi finalizada/armazenada pelo responsável aguardando seu aceite
+      if (isAuthor && isPending) return true;
+
+      return false;
+    });
   }, [deals, role, user?.id]);
 
   // Alertas automáticos para Administradores (apenas requisições internas ativas possuem prazo)
@@ -4590,6 +4624,7 @@ function CrmDashboard() {
         d.stage !== "won" &&
         d.stage !== "lost" &&
         d.stage !== "archived" &&
+        !isDealPendingAuthorAcceptance(d) &&
         getDeadlineInfo(d.expected_close_date).diffDays !== undefined &&
         getDeadlineInfo(d.expected_close_date).diffDays! < 0
     );
@@ -4790,11 +4825,7 @@ function CrmDashboard() {
     const effectiveUser = internalFilterUser === "ME" ? (user?.id || "ALL") : internalFilterUser;
     let list = (visibleDeals || []).filter((d) => d.stage === stageId);
     if (effectiveUser !== "ALL") {
-      if (effectiveUser === "unassigned") {
-        list = list.filter((d) => !d.assigned_user_id);
-      } else {
-        list = list.filter((d) => d.assigned_user_id === effectiveUser);
-      }
+      list = list.filter((d) => isDealUserMatching(d, effectiveUser));
     }
     return list;
   };
@@ -4987,7 +5018,6 @@ function CrmDashboard() {
                         <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[220px] sm:max-w-[340px] md:max-w-[460px]">
                           ATIVO EM:{" "}
                           <span className="text-white font-black">
-                            {activeReqNumber ? `#${activeReqNumber} ` : ""}
                             {getCleanDealTitle(activeDeal.title)}
                           </span>
                         </span>
@@ -5046,7 +5076,7 @@ function CrmDashboard() {
                             }`}
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <UserCheck className={`h-4 w-4 shrink-0 ${isMeUserActive ? myTheme.iconColor : "text-slate-400"}`} />
+                              <UserCheck className={`h-4 w-4 shrink-0 ${isMeUserActive ? "text-emerald-400" : "text-slate-400"}`} />
                               {isMeUserActive ? (
                                 <span className="text-[8px] font-mono font-black px-1.5 py-0.2 rounded border uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.35)] shrink-0">
                                   ATIVO
@@ -5066,7 +5096,7 @@ function CrmDashboard() {
                               </span>
                             </div>
                             <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-black/50 ${myTheme.text} border ${myTheme.border} shrink-0`}>
-                              {deals.filter((d) => d.assigned_user_id === user?.id && d.stage !== "archived").length}
+                              {deals.filter((d) => isDealUserMatching(d, user?.id) && d.stage !== "archived").length}
                             </span>
                           </button>
                         );
@@ -5101,11 +5131,26 @@ function CrmDashboard() {
                         Quadro por Colaborador
                       </div>
 
-                      {/* Lista de Membros da Equipe */}
+                      {/* Lista de Membros da Equipe (Usuários ativos no topo) */}
                       {teamMembers
                         .filter((m) => m.id !== user?.id)
+                        .sort((a, b) => {
+                          const isAActive = deals.some((d) => {
+                            const worker = getDealActiveWorker(d);
+                            return Boolean(worker && worker.userId === a.id);
+                          });
+                          const isBActive = deals.some((d) => {
+                            const worker = getDealActiveWorker(d);
+                            return Boolean(worker && worker.userId === b.id);
+                          });
+                          if (isAActive && !isBActive) return -1;
+                          if (!isAActive && isBActive) return 1;
+                          const nameA = a.display_name || a.email || "";
+                          const nameB = b.display_name || b.email || "";
+                          return nameA.localeCompare(nameB);
+                        })
                         .map((m) => {
-                          const count = deals.filter((d) => d.assigned_user_id === m.id && d.stage !== "archived").length;
+                          const count = deals.filter((d) => isDealUserMatching(d, m.id) && d.stage !== "archived").length;
                           const isSelected = effectiveFilterUser === m.id;
                           const mFirstName = getFirstName(m.display_name || m.email || "Membro");
                           const mRole = (m.id === user?.id && isAdmin) ? "admin" : m.role;
@@ -5131,7 +5176,7 @@ function CrmDashboard() {
                               }`}
                             >
                               <div className="flex items-center gap-2 min-w-0">
-                                <User className={`h-3.5 w-3.5 shrink-0 ${isMemberActive ? theme.iconColor : "text-slate-500"}`} />
+                                <User className={`h-3.5 w-3.5 shrink-0 ${isMemberActive ? "text-emerald-400" : "text-slate-400"}`} />
                                 {isMemberActive ? (
                                   <span className="text-[8px] font-mono font-black px-1.5 py-0.2 rounded border uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.35)] shrink-0">
                                     ATIVO
@@ -5227,8 +5272,8 @@ function CrmDashboard() {
             <span className="hidden sm:inline">Prazos</span>
             <span className="px-1.5 py-0.2 rounded-md bg-sky-500/20 text-sky-300 font-mono text-[10px] font-bold border border-sky-400/40">
               {role === "admin"
-                ? deals.filter((d) => Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost").length
-                : deals.filter((d) => d.assigned_user_id === user?.id && Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost").length
+                ? deals.filter((d) => Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost" && !isDealPendingAuthorAcceptance(d)).length
+                : deals.filter((d) => d.assigned_user_id === user?.id && Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost" && !isDealPendingAuthorAcceptance(d)).length
               }
             </span>
           </button>
@@ -5262,9 +5307,9 @@ function CrmDashboard() {
               <Link
                 to="/admin"
                 search={{ from: "crm" }}
-                className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-amber-300 hover:text-white border border-amber-500/30 hover:border-amber-400/60 bg-amber-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
+                className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-cyan-300 hover:text-white border border-cyan-500/30 hover:border-cyan-400/60 bg-cyan-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
               >
-                <ShieldCheck className="h-4 w-4 text-amber-400" />
+                <ShieldCheck className="h-4 w-4 text-cyan-400" />
                 <span>ADM</span>
               </Link>
             )}
@@ -5331,10 +5376,10 @@ function CrmDashboard() {
             const reqNumber = getDealReqNumber(deal, deals);
             const canModifyDeal = role === "admin" || deal.assigned_user_id === user?.id;
 
-            const hasDeadline = Boolean(deal.expected_close_date);
+            const isPendingAcceptance = isDealPendingAuthorAcceptance(deal);
+            const hasDeadline = !isPendingAcceptance && Boolean(deal.expected_close_date);
             const internalStyle = getInternalDeadlineStyle(deal.expected_close_date);
             const aging = getDealAgingStyle(deal.latest_update_at || deal.created_at);
-            const isPendingAcceptance = isDealPendingAuthorAcceptance(deal);
 
             const cardBgClass = isPendingAcceptance
               ? "!bg-black !bg-none border-2 !border-zinc-700 shadow-[0_0_15px_rgba(0,0,0,0.9)] text-white"
@@ -5363,53 +5408,37 @@ function CrmDashboard() {
                     return;
                   }
                   isDraggingRef.current = true;
-                  draggingDealIdRef.current = deal.id;
-                  
-                  // Define o elemento arrastado com opacidade nítida no cursor
-                  const targetEl = e.currentTarget as HTMLElement;
-                  const rect = targetEl.getBoundingClientRect();
-                  const clone = targetEl.cloneNode(true) as HTMLElement;
-                  clone.style.width = `${rect.width}px`;
-                  clone.style.height = `${rect.height}px`;
-                  clone.style.position = "absolute";
-                  clone.style.top = "-9999px";
-                  clone.style.left = "-9999px";
-                  clone.style.opacity = "0.95";
-                  clone.style.pointerEvents = "none";
-                  clone.style.zIndex = "99999";
-                  clone.classList.remove("opacity-50", "border-dashed");
-                  document.body.appendChild(clone);
-                  e.dataTransfer.setDragImage(clone, e.clientX - rect.left, e.clientY - rect.top);
-                  setTimeout(() => {
-                    if (document.body.contains(clone)) {
-                      document.body.removeChild(clone);
-                    }
-                  }, 0);
-
                   setDraggingDealId(deal.id);
+                  draggingDealIdRef.current = deal.id;
+                  setDragOverTargetDealId(null);
                   e.dataTransfer.setData("text/plain", deal.id);
                   e.dataTransfer.effectAllowed = "move";
                 }}
                 onDragEnd={() => {
+                  setDraggingDealId(null);
+                  draggingDealIdRef.current = null;
+                  setDragOverTargetDealId(null);
+                  setDragOverStageId(null);
                   setTimeout(() => {
-                    draggingDealIdRef.current = null;
-                    setDraggingDealId(null);
-                    setDragOverStageId(null);
-                    setDragOverTargetDealId(null);
                     isDraggingRef.current = false;
-                  }, 200);
+                  }, 100);
                 }}
                 onDragOver={(e) => {
-                  if (!canModifyDeal) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.dataTransfer.dropEffect = "move";
+                  if (!draggingDealIdRef.current && !draggingDealId) return;
                   const draggedId = draggingDealIdRef.current || draggingDealId;
                   if (draggedId && draggedId !== deal.id) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+
                     const rect = e.currentTarget.getBoundingClientRect();
                     const midY = rect.top + rect.height / 2;
                     const pos = e.clientY < midY ? "before" : "after";
-                    
+
+                    if (dragOverTargetDealId !== deal.id) {
+                      setDragOverTargetDealId(deal.id);
+                    }
+
+                    // Se a tarefa arrastada pertence ao mesmo estágio, atualiza ordenação em tempo real (arraste contínuo fluido)
                     const draggedDeal = deals.find((d) => d.id === draggedId);
                     if (draggedDeal && draggedDeal.stage === stageId) {
                       // Usuário comum só pode reordenar se AMBAS as tarefas forem dele
@@ -5481,31 +5510,10 @@ function CrmDashboard() {
                   </div>
                 ) : (
                   <>
-
-
-
-
-
-                {/* STATUS OFICIAL EM TEMPO REAL: PENDENTE DE ACEITE OU PULSO TRABALHANDO/VENCIDA */}
+                {/* STATUS OFICIAL EM TEMPO REAL: PULSO TRABALHANDO/VENCIDA */}
                 {(() => {
-                  if (isPendingAcceptance) {
-                    return (
-                      <div
-                        className="absolute inset-0 rounded-xl bg-black/95 backdrop-blur-[2px] p-2.5 flex flex-col items-center justify-center text-center z-20 pointer-events-none transition-all duration-300 group-hover:opacity-0"
-                      >
-                        <span className="font-mono text-xs sm:text-[13px] font-black uppercase tracking-[0.2em] text-amber-400 drop-shadow-[0_0_12px_rgba(245,158,11,0.8)] animate-pulse">
-                          CONCLUÍDO
-                        </span>
-                        <div className="w-24 sm:w-28 h-[2px] rounded-full bg-gradient-to-r from-transparent via-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.9)] to-transparent my-1.5" />
-                        <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-200/90 truncate max-w-[210px]">
-                          AGUARDANDO ACEITE
-                        </span>
-                      </div>
-                    );
-                  }
-
                   const activeWorker = getDealActiveWorker(deal);
-                  const isExpiredTask = internalStyle.isExpired && deal.stage !== "completed" && deal.stage !== "won" && deal.stage !== "lost" && deal.stage !== "archived";
+                  const isExpiredTask = !isPendingAcceptance && internalStyle.isExpired && deal.stage !== "completed" && deal.stage !== "won" && deal.stage !== "lost" && deal.stage !== "archived";
                   
                   if (!activeWorker && !isExpiredTask) return null;
 
@@ -5728,8 +5736,8 @@ function CrmDashboard() {
                   })()}
                 </div>
 
-                {/* 3. RODAPÉ DO CARD: PRAZO SE HOUVER (INTERNAS OU EXTERNAS COM PRAZO) / DIAS EM ABERTO SE NÃO HOUVER PRAZO */}
-                <div className="flex items-center justify-between gap-2 text-[10px] h-[20px] min-h-[20px] max-h-[20px] min-w-0">
+                {/* 3. RODAPÉ DO CARD: PRAZO SE HOUVER (INTERNAS OU EXTERNAS COM PRAZO) / AGUARDANDO ACEITE / DIAS EM ABERTO */}
+                <div className={`flex items-center justify-between gap-2 text-[10px] min-w-0 ${isPendingAcceptance ? "pt-1 mt-0.5 border-t border-white/10" : "h-[20px] min-h-[20px] max-h-[20px]"}`}>
                   {hasDeadline ? (
                     <div className="flex items-center gap-1.5 truncate min-w-0">
                       {internalStyle.isExpired ? (
@@ -5757,6 +5765,22 @@ function CrmDashboard() {
                           </span>
                         </>
                       )}
+                    </div>
+                  ) : isPendingAcceptance ? (
+                    <div className="flex items-center justify-start w-full min-w-0 pl-0.5">
+                      {(() => {
+                        const authorRawName = deal.creator_name || teamMembers.find((m) => m.id === deal.user_id)?.display_name || "AUTOR";
+                        const authorFirstName = getFirstName(authorRawName).toUpperCase();
+                        return (
+                          <span
+                            title={`Atividade finalizada pelo responsável. Aguardando aceite de conclusão por ${authorRawName}.`}
+                            className="text-[9px] font-mono font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5 truncate"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.9)] shrink-0" />
+                            AGUARDANDO ACEITE DE {authorFirstName}
+                          </span>
+                        );
+                      })()}
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5 truncate min-w-0">
@@ -5848,11 +5872,7 @@ function CrmDashboard() {
             let stageDeals = visibleDeals.filter((d) => d.stage === currentStage.id);
 
             if (effectiveFilterUser !== "ALL") {
-              if (effectiveFilterUser === "unassigned") {
-                stageDeals = stageDeals.filter((d) => !d.assigned_user_id);
-              } else {
-                stageDeals = stageDeals.filter((d) => d.assigned_user_id === effectiveFilterUser);
-              }
+              stageDeals = stageDeals.filter((d) => isDealUserMatching(d, effectiveFilterUser));
             }
 
             const currentStageTerm = (stageSearchTerms[currentStage.id] || "").trim().toLowerCase();
@@ -5869,15 +5889,34 @@ function CrmDashboard() {
               );
             }
 
-            // Agrupamento por Usuário
+            // Agrupamento por Usuário (se estiver aguardando aceite, inclui para o Autor e para o Responsável)
             const userGroupsMap = new Map<string, { id: string; name: string; deals: Deal[] }>();
             stageDeals.forEach((deal) => {
-              const uId = deal.assigned_user_id || "unassigned";
-              const uName = deal.assigned_user_name || "Sem Responsável";
-              if (!userGroupsMap.has(uId)) {
-                userGroupsMap.set(uId, { id: uId, name: uName, deals: [] });
+              const isPending = isDealPendingAuthorAcceptance(deal);
+              if (isPending && deal.user_id && deal.assigned_user_id && deal.user_id !== deal.assigned_user_id) {
+                // Adiciona para o Autor
+                const authorId = deal.user_id;
+                const authorName = deal.creator_name || teamMembers.find((m) => m.id === authorId)?.display_name || "Autor";
+                if (!userGroupsMap.has(authorId)) {
+                  userGroupsMap.set(authorId, { id: authorId, name: authorName, deals: [] });
+                }
+                userGroupsMap.get(authorId)!.deals.push(deal);
+
+                // Adiciona para o Responsável
+                const respId = deal.assigned_user_id;
+                const respName = deal.assigned_user_name || "Sem Responsável";
+                if (!userGroupsMap.has(respId)) {
+                  userGroupsMap.set(respId, { id: respId, name: respName, deals: [] });
+                }
+                userGroupsMap.get(respId)!.deals.push(deal);
+              } else {
+                const uId = deal.assigned_user_id || "unassigned";
+                const uName = deal.assigned_user_name || "Sem Responsável";
+                if (!userGroupsMap.has(uId)) {
+                  userGroupsMap.set(uId, { id: uId, name: uName, deals: [] });
+                }
+                userGroupsMap.get(uId)!.deals.push(deal);
               }
-              userGroupsMap.get(uId)!.deals.push(deal);
             });
 
             const userGroups = Array.from(userGroupsMap.values()).sort((a, b) => {
@@ -6122,13 +6161,7 @@ function CrmDashboard() {
                 let stageDeals = visibleDeals.filter((d) => d.stage === stage.id);
 
                 if (effectiveFilterUser !== "ALL") {
-                  if (effectiveFilterUser === "unassigned") {
-                    stageDeals = stageDeals.filter((d) => !d.assigned_user_id);
-                  } else {
-                    stageDeals = stageDeals.filter(
-                      (d) => d.assigned_user_id === effectiveFilterUser
-                    );
-                  }
+                  stageDeals = stageDeals.filter((d) => isDealUserMatching(d, effectiveFilterUser));
                 }
 
                 const stageTerm = (stageSearchTerms[stage.id] || "").trim().toLowerCase();
@@ -6598,10 +6631,10 @@ function CrmDashboard() {
       </div>
 
       {selectedDealForHistory && (() => {
-        const hasModalDeadline = Boolean(selectedDealForHistory.expected_close_date);
+        const isPendingModal = isDealPendingAuthorAcceptance(selectedDealForHistory);
+        const hasModalDeadline = !isPendingModal && Boolean(selectedDealForHistory.expected_close_date);
         const modalStyle = getInternalDeadlineStyle(selectedDealForHistory.expected_close_date);
         const aging = getDealAgingStyle(selectedDealForHistory.latest_update_at || selectedDealForHistory.created_at);
-        const isPendingModal = isDealPendingAuthorAcceptance(selectedDealForHistory);
         const modalBgClass = isPendingModal ? "!bg-black border-2 !border-zinc-700 shadow-2xl text-white" : aging.cardClass;
 
         return (
@@ -6628,8 +6661,13 @@ function CrmDashboard() {
             >
               {/* Header Fixo do Card Expandido com Botão Lateral Quadrado à Esquerda e Textos Centralizados */}
               <div className="shrink-0 flex items-stretch border-b border-white/10 pb-3 relative min-h-[105px]">
-                {/* BOTÃO QUADRADO NO CANTO ESQUERDO: INICIAR ATIVIDADE / PARAR ATIVIDADE (Apenas para o responsável atribuído) */}
+                {/* BOTÃO QUADRADO NO CANTO ESQUERDO: INICIAR ATIVIDADE / PARAR ATIVIDADE (Apenas para o responsável atribuído em atividades ativas) */}
                 {(() => {
+                  const isPending = isPendingModal;
+                  const isArchived = selectedDealForHistory.stage === "archived";
+                  const isCompleted = selectedDealForHistory.stage === "completed" || selectedDealForHistory.stage === "won" || selectedDealForHistory.stage === "lost";
+                  if (isPending || isArchived || isCompleted) return <div className="w-[105px] shrink-0" />;
+
                   const activeWorker = getDealActiveWorker(selectedDealForHistory);
                   const isWorking = Boolean(activeWorker && activeWorker.userId === user?.id);
                   const isAssigned = selectedDealForHistory.assigned_user_id === user?.id;
@@ -8450,7 +8488,7 @@ function CrmDashboard() {
             {(() => {
               // Atividades ativas com prazo definido respeitando o usuário / ADM
               const activeDealsWithDeadline = deals.filter((d) => {
-                const hasDeadline = Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost";
+                const hasDeadline = Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost" && !isDealPendingAuthorAcceptance(d);
                 if (!hasDeadline) return false;
 
                 if (role !== "admin") {

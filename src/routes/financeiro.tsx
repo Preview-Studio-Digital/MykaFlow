@@ -842,9 +842,9 @@ function Dashboard() {
               <Link
                 to="/admin"
                 search={{ from: "financeiro" }}
-                className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-amber-300 hover:text-white border border-amber-500/30 hover:border-amber-400/60 bg-amber-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
+                className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-cyan-300 hover:text-white border border-cyan-500/30 hover:border-cyan-400/60 bg-cyan-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
               >
-                <ShieldCheck className="h-4 w-4 text-amber-400" />
+                <ShieldCheck className="h-4 w-4 text-cyan-400" />
                 <span>ADM</span>
               </Link>
             )}

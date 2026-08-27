@@ -1,5 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// Flag global de controle de restrição de IP (Defina como true quando quiser reativar o bloqueio de IP)
+export const IS_NETWORK_RESTRICTION_ENABLED = false;
+
 // IP Padrão Inicial (IP atual da sua conexão)
 export const DEFAULT_ALLOWED_IPS = ["177.212.224.153"];
 
@@ -12,6 +15,9 @@ export interface NetworkSecurityCheck {
 
 // Helper para obter o IP público real do cliente
 export async function getClientPublicIp(): Promise<string> {
+  if (!IS_NETWORK_RESTRICTION_ENABLED) {
+    return "0.0.0.0";
+  }
   try {
     const res = await fetch("https://api.ipify.org?format=json", { cache: "no-store" });
     if (!res.ok) throw new Error("Falha ipify");

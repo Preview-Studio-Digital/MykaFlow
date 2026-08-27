@@ -5,6 +5,7 @@ import {
   getClientPublicIp,
   fetchAllowedIps,
   registerUnauthorizedAccessAttempt,
+  IS_NETWORK_RESTRICTION_ENABLED,
 } from "@/lib/network-security";
 import { recordLoginAudit } from "@/lib/work-time-tracker";
 
@@ -42,15 +43,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function checkNetwork(currentUser?: User | null, currentRole?: Role) {
     try {
-      const [ip, ips] = await Promise.all([getClientPublicIp(), fetchAllowedIps()]);
-      setClientIp(ip);
-      setAllowedIps(ips);
-
-      // Admin tem acesso irrestrito
-      if (currentRole === "admin" || (currentUser?.email && currentUser.email.includes("admin"))) {
+      // Se a restrição de rede estiver globalmente desabilitada, libera imediatamente
+      if (!IS_NETWORK_RESTRICTION_ENABLED) {
         setIsNetworkAllowed(true);
         return;
       }
+
+      // Se não há usuário logado ou se for admin, não precisa checar nem bloquear
+      if (!currentUser || currentRole === "admin" || (currentUser?.email && currentUser.email.includes("admin"))) {
+        setIsNetworkAllowed(true);
+        return;
+      }
+
+      const [ip, ips] = await Promise.all([getClientPublicIp(), fetchAllowedIps()]);
+      setClientIp(ip);
+      setAllowedIps(ips);
 
       // Usuário comum: verifica se o IP está na lista de autorizados
       const isAllowed = ip === "0.0.0.0" || ips.includes(ip);
@@ -76,8 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    checkNetwork(user, role);
-  }, [user, role]);
+    if (!loading && user) {
+      checkNetwork(user, role);
+    }
+  }, [user, role, loading]);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
@@ -165,8 +174,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Se não for admin e tentar entrar fora da rede da empresa:
-    const isAllowed = loggedRole === "admin" || ip === "0.0.0.0" || ips.includes(ip);
+    // Se não for admin e tentar entrar fora da rede da empresa (e a restrição estiver ativa):
+    const isAllowed = !IS_NETWORK_RESTRICTION_ENABLED || loggedRole === "admin" || ip === "0.0.0.0" || ips.includes(ip);
     if (!isAllowed) {
       setIsNetworkAllowed(false);
       // Registra a tentativa de acesso para alertar o ADM

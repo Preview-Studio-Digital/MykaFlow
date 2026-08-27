@@ -378,14 +378,15 @@ function formatDurationHoursMinutes(totalSeconds: number): string {
 
 function formatElapsedLive(startedAt: string, currentMs: number = Date.now()): string {
   const startMs = new Date(startedAt).getTime();
-  if (isNaN(startMs)) return "0s";
+  if (isNaN(startMs)) return "00m 00s";
   const sec = Math.max(0, Math.floor((currentMs - startMs) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  const mFormatted = String(m).padStart(2, "0");
+  const sFormatted = String(s).padStart(2, "0");
+  if (h > 0) return `${h}h ${mFormatted}m ${sFormatted}s`;
+  return `${mFormatted}m ${sFormatted}s`;
 }
 
 export interface Customer {
@@ -1001,6 +1002,262 @@ function getDealAgingStyle(updatedAtStr: string) {
   };
 }
 
+// ==========================================
+// COMPONENTES DE INPUT DE ALTA PERFORMANCE (ISOLADOS DE RE-RENDER DO KANBAN)
+// ==========================================
+interface FastDealCommentInputProps {
+  dealId: string;
+  onTextChange: (text: string) => void;
+  teamMembers: Array<{ id: string; display_name?: string | null; email?: string }>;
+  initialValue?: string;
+  resetCounter?: number;
+}
+
+function FastDealCommentInput({
+  dealId,
+  onTextChange,
+  teamMembers,
+  initialValue = "",
+  resetCounter = 0,
+}: FastDealCommentInputProps) {
+  const [localText, setLocalText] = useState(initialValue);
+  const [mentionSuggestions, setMentionSuggestions] = useState<Array<{ id: string; name: string }>>([]);
+  const [mentionCursorIndex, setMentionCursorIndex] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setLocalText("");
+    onTextChange("");
+    setMentionSuggestions([]);
+    setMentionCursorIndex(null);
+  }, [dealId, resetCounter]);
+
+  const handleSelectMention = (member: { id: string; name: string }) => {
+    if (mentionCursorIndex === null) return;
+    const nameToInsert = `@${member.name.split(" ")[0]} `;
+    const before = localText.slice(0, mentionCursorIndex);
+    const after = localText.slice(
+      localText.indexOf(" ", mentionCursorIndex) === -1
+        ? localText.length
+        : localText.indexOf(" ", mentionCursorIndex)
+    );
+    const newText = before + nameToInsert + after;
+    setLocalText(newText);
+    onTextChange(newText);
+    setMentionSuggestions([]);
+    setMentionCursorIndex(null);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
+  return (
+    <div className="relative flex-1 min-h-[140px] flex flex-col">
+      <textarea
+        ref={textareaRef}
+        placeholder="Descreva a nova atualização desta atividade... Use @ para mencionar um colega (ex: @João)"
+        value={localText}
+        onChange={(e) => {
+          const val = e.target.value;
+          const cursor = e.target.selectionStart;
+          setLocalText(val);
+          onTextChange(val);
+
+          // Detecta digitação de @ para exibir sugestões de menção
+          const textBeforeCursor = val.slice(0, cursor || 0);
+          const atMatch = textBeforeCursor.match(/@([A-Za-z0-9À-ÿ._-]*)$/);
+          if (atMatch) {
+            const query = atMatch[1].toLowerCase();
+            const filtered = teamMembers
+              .filter((m) => {
+                const name = (m.display_name || m.email || "").toLowerCase();
+                return name.includes(query);
+              })
+              .map((m) => ({ id: m.id, name: m.display_name || m.email || "Usuário" }));
+            setMentionSuggestions(filtered);
+            setMentionCursorIndex((cursor || 0) - atMatch[0].length);
+          } else {
+            setMentionSuggestions([]);
+            setMentionCursorIndex(null);
+          }
+        }}
+        className="input-futuristic flex-1 min-h-[140px] w-full rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+        autoFocus
+      />
+
+      {/* Menu Flutuante de Autocomplete de Menção (@usuario) */}
+      {mentionSuggestions.length > 0 && mentionCursorIndex !== null && (
+        <div className="absolute bottom-2 left-2 z-30 max-h-48 w-64 overflow-y-auto rounded-xl border border-sky-400/50 bg-slate-950/95 p-1 shadow-2xl backdrop-blur-md custom-scrollbar animate-in fade-in">
+          <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-300 border-b border-white/10 flex items-center gap-1.5">
+            <AtSign className="h-3 w-3 text-sky-400" />
+            <span>Mencionar Membro</span>
+          </div>
+          {mentionSuggestions.map((member) => (
+            <button
+              key={member.id}
+              type="button"
+              onClick={() => handleSelectMention(member)}
+              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-500/20 text-xs font-bold text-white hover:text-sky-300 flex items-center justify-between transition-colors cursor-pointer"
+            >
+              <span className="truncate">{member.name}</span>
+              <span className="text-[10px] text-sky-400 font-mono">@{member.name.split(" ")[0]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface FastNewDealNotesInputProps {
+  placeholder: string;
+  onTextChange: (text: string) => void;
+  resetTrigger?: any;
+}
+
+function FastNewDealNotesInput({ placeholder, onTextChange, resetTrigger }: FastNewDealNotesInputProps) {
+  const [localText, setLocalText] = useState("");
+
+  useEffect(() => {
+    setLocalText("");
+    onTextChange("");
+  }, [resetTrigger]);
+
+  return (
+    <textarea
+      required
+      placeholder={placeholder}
+      value={localText}
+      onChange={(e) => {
+        const val = e.target.value;
+        setLocalText(val);
+        onTextChange(val);
+      }}
+      className="input-futuristic w-full h-[220px] sm:h-[260px] rounded-xl p-4 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+    />
+  );
+}
+
+interface FastMentionReplyInputProps {
+  targetId: string;
+  deal: Deal;
+  teamMembers: Array<{ id: string; display_name?: string | null; email?: string }>;
+  onSend: (deal: Deal, mentionId: string, replyText: string) => Promise<any>;
+}
+
+function FastMentionReplyInput({ targetId, deal, teamMembers, onSend }: FastMentionReplyInputProps) {
+  const [localText, setLocalText] = useState("");
+  const [mentionSuggestions, setMentionSuggestions] = useState<Array<{ id: string; name: string }>>([]);
+  const [mentionCursorIndex, setMentionCursorIndex] = useState<number | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleSelectMention = (member: { id: string; name: string }) => {
+    if (mentionCursorIndex === null) return;
+    const nameToInsert = `@${member.name.split(" ")[0]} `;
+    const before = localText.slice(0, mentionCursorIndex);
+    const after = localText.slice(
+      localText.indexOf(" ", mentionCursorIndex) === -1
+        ? localText.length
+        : localText.indexOf(" ", mentionCursorIndex)
+    );
+    const newText = before + nameToInsert + after;
+    setLocalText(newText);
+    setMentionSuggestions([]);
+    setMentionCursorIndex(null);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  const handleSend = async () => {
+    const text = localText.trim();
+    if (!text || isSending) return;
+    setIsSending(true);
+    try {
+      await onSend(deal, targetId, text);
+      setLocalText("");
+      setMentionSuggestions([]);
+      setMentionCursorIndex(null);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <div className="relative flex-1 flex items-center">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder="Responder a esta menção com @..."
+        value={localText}
+        onChange={(e) => {
+          const text = e.target.value;
+          const cursor = e.target.selectionStart;
+          setLocalText(text);
+
+          const textBeforeCursor = text.slice(0, cursor || 0);
+          const atMatch = textBeforeCursor.match(/@([A-Za-z0-9À-ÿ._-]*)$/);
+          if (atMatch) {
+            const query = atMatch[1].toLowerCase();
+            const filtered = teamMembers
+              .filter((m) => {
+                const name = (m.display_name || m.email || "").toLowerCase();
+                return name.includes(query);
+              })
+              .map((m) => ({ id: m.id, name: m.display_name || m.email || "Usuário" }));
+            setMentionSuggestions(filtered);
+            setMentionCursorIndex((cursor || 0) - atMatch[0].length);
+          } else {
+            setMentionSuggestions([]);
+            setMentionCursorIndex(null);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleSend();
+          }
+        }}
+        className="input-futuristic flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none bg-slate-900/90"
+        autoFocus
+      />
+
+      {mentionSuggestions.length > 0 && mentionCursorIndex !== null && (
+        <div className="absolute bottom-[110%] left-0 z-50 max-h-48 w-64 overflow-y-auto rounded-xl border border-sky-400/50 bg-slate-950/95 p-1 shadow-2xl backdrop-blur-md custom-scrollbar animate-in fade-in mt-1">
+          <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-300 border-b border-white/10 flex items-center gap-1.5">
+            <AtSign className="h-3 w-3 text-sky-400" />
+            <span>Mencionar Membro</span>
+          </div>
+          {mentionSuggestions.map((member) => (
+            <button
+              key={member.id}
+              type="button"
+              onClick={() => handleSelectMention(member)}
+              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-500/20 text-xs font-bold text-white hover:text-sky-300 flex items-center justify-between transition-colors cursor-pointer"
+            >
+              <span className="truncate">{member.name}</span>
+              <span className="text-[10px] text-sky-400 font-mono">@{member.name.split(" ")[0]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="shrink-0 flex items-center gap-1.5 ml-2 select-none">
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={isSending}
+          className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+          title="enviar"
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CrmDashboard() {
   const { user, loading: authLoading, role, signOut } = useAuth();
   const isAdmin = role === "admin" || (user?.email ? user.email.includes("admin") : false);
@@ -1022,6 +1279,7 @@ function CrmDashboard() {
     new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0]
   );
   const [newDealNotes, setNewDealNotes] = useState("");
+  const newDealNotesRef = useRef("");
   const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState(false);
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
   const [inlineCompanyName, setInlineCompanyName] = useState("");
@@ -1076,6 +1334,8 @@ function CrmDashboard() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
   const [newComment, setNewComment] = useState("");
+  const newCommentRef = useRef("");
+  const [commentResetCounter, setCommentResetCounter] = useState(0);
   const [autoGeneratedLogs, setAutoGeneratedLogs] = useState<string[]>([]);
   const [stageToMove, setStageToMove] = useState<Deal["stage"] | null>(null);
   const [reassignTo, setReassignTo] = useState("");
@@ -2768,16 +3028,16 @@ function CrmDashboard() {
 
   function handleDeleteDeal(deal: Deal) {
     if (role !== "admin") {
-      return toast.error("Apenas administradores podem remover requisições do sistema");
+      return toast.error("Apenas administradores podem remover atividades do sistema");
     }
 
     const reqNum = getDealReqNumber(deal, deals);
-    const cleanTitle = deal.title.replace(/^\[REQ\.\s*(INTERNA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "");
+    const cleanTitle = getCleanDealTitle(deal.title);
 
     setCrmConfirmConfig({
       isOpen: true,
-      title: `Excluir Requisição Nº ${reqNum}`,
-      description: `Tem certeza que deseja excluir permanentemente a Requisição Nº ${reqNum} ("${cleanTitle}")?\n\nEsta ação removerá a requisição e todo o seu histórico e não poderá ser desfeita.`,
+      title: `Excluir Atividade Nº ${reqNum}`,
+      description: `Tem certeza que deseja excluir permanentemente a Atividade Nº ${reqNum} ("${cleanTitle}")?\n\nEsta ação removerá a atividade, seus anexos e todo o seu histórico do sistema. Esta ação não poderá ser desfeita.`,
       confirmText: "Excluir Definitivamente",
       variant: "danger",
       onConfirm: async () => {
@@ -2791,10 +3051,10 @@ function CrmDashboard() {
               .delete()
               .eq("deal_id", deal.id);
           } catch (hErr) {
-            console.warn("Aviso ao remover histórico da requisição:", hErr);
+            console.warn("Aviso ao remover histórico da atividade:", hErr);
           }
 
-          // 2. Remove a requisição do CRM
+          // 2. Remove a atividade do CRM
           const { error } = await supabase
             .from("crm_deals")
             .delete()
@@ -2805,9 +3065,9 @@ function CrmDashboard() {
           // 3. Atualiza estado local
           setDeals((prev) => prev.filter((d) => d.id !== deal.id));
           setSelectedDealForHistory(null);
-          toast.success(`Requisição Nº ${reqNum} excluída com sucesso!`);
+          toast.success(`Atividade Nº ${reqNum} excluída com sucesso!`);
         } catch (err: any) {
-          toast.error("Erro ao excluir requisição: " + (err.message || "Tente novamente"));
+          toast.error("Erro ao excluir atividade: " + (err.message || "Tente novamente"));
         } finally {
           setIsDeletingDeal(false);
         }
@@ -3126,21 +3386,22 @@ function CrmDashboard() {
     }
 
     const activeWorker = getDealActiveWorker(deal);
-    const isCurrentlyWorkingThisDeal = Boolean(activeWorker && activeWorker.userId === user.id);
+    const isCurrentlyWorkingThisDeal = Boolean(activeWorker && (activeWorker.userId === user.id || isAdmin));
 
-    // Se já está trabalhando nesta atividade, executa a PARADA
-    if (isCurrentlyWorkingThisDeal) {
+    // Se já está trabalhando nesta atividade (ou o Administrador está parando), executa a PARADA
+    if (isCurrentlyWorkingThisDeal && activeWorker) {
       const nowIso = new Date().toISOString();
       const startTime = new Date(activeWorker.startedAt).getTime();
       const durationSeconds = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
       const formattedDuration = formatDurationHoursMinutes(durationSeconds);
-      const userName = user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || "Usuário";
+      const workerUserId = activeWorker.userId || user.id;
+      const workerUserName = activeWorker.userName || getFirstName(user.user_metadata?.display_name || user.email || "Usuário");
 
       const session: DealTimeSession = {
         id: crypto.randomUUID(),
         deal_id: deal.id,
-        user_id: user.id,
-        user_name: userName,
+        user_id: workerUserId,
+        user_name: workerUserName,
         started_at: activeWorker.startedAt,
         ended_at: nowIso,
         duration_seconds: durationSeconds,
@@ -3151,13 +3412,14 @@ function CrmDashboard() {
       recordActivitySessionAudit({
         dealId: deal.id,
         dealTitle: deal.title,
-        userId: user.id,
-        userName,
+        userId: workerUserId,
+        userName: workerUserName,
         startedAtIso: activeWorker.startedAt,
         endedAtIso: nowIso,
         durationSeconds,
         durationFormatted: formattedDuration,
         closeType: "manual",
+        notes: user.id !== workerUserId ? `Encerrado pelo Administrador (${user.email})` : undefined,
       });
 
       const sessionTag = `[WORK_LOG:${JSON.stringify(session)}]`;
@@ -3329,9 +3591,9 @@ function CrmDashboard() {
   };
 
   // Responder à Menção (Fica vinculada diretamente à menção original, sem gerar nova atualização na atividade)
-  const handleSendMentionReply = async (deal: Deal, mentionId: string) => {
+  const handleSendMentionReply = async (deal: Deal, mentionId: string, explicitText?: string) => {
     if (!user) return;
-    const replyText = (mentionReplyText[mentionId] || "").trim();
+    const replyText = (explicitText !== undefined ? explicitText : (mentionReplyText[mentionId] || "")).trim();
     if (!replyText) {
       return toast.error("Digite uma resposta antes de enviar.");
     }
@@ -3485,7 +3747,8 @@ function CrmDashboard() {
 
   // Concluir Vinculada (Fecha e armazena como concluída, gera linhas automáticas na vinculada e na atividade mãe)
   function handleCompleteSubtask(deal: Deal) {
-    if (!newComment.trim()) {
+    const rawComment = (newCommentRef.current || newComment).trim();
+    if (!rawComment) {
       toast.error("É obrigatório preencher o campo de atualização com o andamento/conclusão da vinculada.");
       return;
     }
@@ -3507,7 +3770,7 @@ function CrmDashboard() {
         try {
           const nowIso = new Date().toISOString();
           const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-          const completionText = newComment.trim();
+          const completionText = rawComment;
 
           const completionNotif: TaskCompletionNotification = {
             id: crypto.randomUUID(),
@@ -3647,7 +3910,7 @@ function CrmDashboard() {
         try {
           const nowIso = new Date().toISOString();
           const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-          const userNotes = newComment.trim();
+          const userNotes = (newCommentRef.current || newComment).trim();
 
           const existingTags = (deal.notes || "").match(/\[(QUOTE_FILE|PARENT_DEAL|WORK_LOG|WORK_ACTIVE|QUOTE_DATA|MENTION|MENTION_REPLY|SUBTASK_COMPLETION|TASK_COMPLETION_NOTIFICATION):.*?\]/g) || [];
           const cleanOldNotes = (deal.notes || "")
@@ -3971,8 +4234,8 @@ function CrmDashboard() {
     if (dealTitleWords.length > 6) {
       return toast.error(`O título deve conter no máximo 6 palavras (atualmente com ${dealTitleWords.length} palavras). Detalhe as informações no campo de instruções abaixo.`);
     }
-    if (!newDealAssignedTo) return toast.error("O direcionamento ao responsável é obrigatório");
-    if (!newDealNotes.trim()) return toast.error("As instruções da atividade são obrigatórias");
+    const notesToSave = (newDealNotesRef.current || newDealNotes).trim();
+    if (!notesToSave) return toast.error("As instruções da atividade são obrigatórias");
 
     const typePrefix =
       activeReqModal === "interna"
@@ -3999,7 +4262,7 @@ function CrmDashboard() {
           user_id: user?.id,
           assigned_user_id: newDealAssignedTo,
           expected_close_date: newDealDeadline ? newDealDeadline : null,
-          notes: newDealNotes.trim(),
+          notes: notesToSave,
         })
         .select()
         .single();
@@ -4012,7 +4275,7 @@ function CrmDashboard() {
           deal_id: createdData.id,
           user_id: user?.id,
           user_name: user?.user_metadata?.display_name || user?.email || "Usuário",
-          description: `Atividade criada e direcionada para ${assignedName}. Instruções: ${newDealNotes.trim()}`,
+          description: `Atividade criada e direcionada para ${assignedName}. Instruções: ${notesToSave}`,
         });
       } catch (hErr) {
         console.warn("Aviso ao registrar histórico inicial:", hErr);
@@ -4358,7 +4621,8 @@ function CrmDashboard() {
       return toast.error("Apenas o responsável pela atividade ou o Administrador podem inserir novas atualizações.");
     }
 
-    if (!newComment.trim()) {
+    const commentRaw = (newCommentRef.current || newComment).trim();
+    if (!commentRaw) {
       return toast.error("É obrigatório preencher o campo de atualização com o andamento da atividade.");
     }
 
@@ -4378,11 +4642,10 @@ function CrmDashboard() {
       const targetStage = stageToMove || deal.stage;
       const isStageChanged = Boolean(stageToMove && stageToMove !== deal.stage);
 
-      const combinedNotesText = [...autoGeneratedLogs, newComment.trim()].filter(Boolean).join("\n\n");
+      const combinedNotesText = [...autoGeneratedLogs, commentRaw].filter(Boolean).join("\n\n");
 
       // Detecção e criação de Menções (@usuario)
       const mentionTags: string[] = [];
-      const commentRaw = newComment.trim();
       const currentUserName = user?.user_metadata?.display_name || user?.email || "Você";
 
       teamMembers.forEach((member) => {
@@ -4425,35 +4688,35 @@ function CrmDashboard() {
         .eq("id", deal.id);
 
       let desc = "";
+      let actionType: DealHistoryItem["action_type"] = "comment";
+
       if (isReturnedToCreator) {
-        desc = `🔄 ALERTA ADM: Atividade devolvida ao criador original (${newAssignedName}) por ${currentAssigned}.${
-          combinedNotesText ? ` Motivo: "${combinedNotesText}"` : ""
-        }`;
-      } else if (isReassigned && combinedNotesText) {
-        desc = `Encaminhado de ${currentAssigned} para ${newAssignedName}. Motivo/Instrução: "${combinedNotesText}"`;
+        actionType = "reassigned";
+        desc = `↩ Atividade DEVOLVIDA ao criador (${newAssignedName}) com a atualização:\n${commentRaw}`;
       } else if (isReassigned) {
-        desc = `Encaminhado de ${currentAssigned} para ${newAssignedName}.`;
+        actionType = "reassigned";
+        desc = `↪ Atividade reencaminhada para ${newAssignedName} (${currentAssigned} → ${newAssignedName}) com a atualização:\n${commentRaw}`;
+      } else if (isStageChanged) {
+        actionType = "stage_change";
+        desc = `Etapa alterada para ${getStageDisplayName(targetStage)} com a atualização:\n${commentRaw}`;
       } else {
-        desc = `Atualização de andamento: "${combinedNotesText}"`;
+        actionType = "comment";
+        desc = `Atualização de andamento:\n${commentRaw}`;
       }
 
-      const actionType = isReturnedToCreator
-        ? "returned_to_creator"
-        : isStageChanged
-        ? "stage_change"
-        : isReassigned
-        ? "reassigned"
-        : "comment";
+      const { data: histData, error: histError } = await supabase
+        .from("crm_deal_history")
+        .insert({
+          deal_id: deal.id,
+          user_id: user?.id,
+          user_name: user?.user_metadata?.display_name || user?.email || "Você",
+          action_type: actionType,
+          description: desc,
+        })
+        .select()
+        .single();
 
-      await registerHistoryEntry(
-        deal.id,
-        actionType,
-        desc,
-        currentAssigned,
-        newAssignedName
-      );
-
-      const newHistoryItem: DealHistoryItem = {
+      const newHistoryItem: DealHistoryItem = histData || {
         id: crypto.randomUUID(),
         deal_id: deal.id,
         user_name: user?.user_metadata?.display_name || user?.email || "Você",
@@ -4484,6 +4747,8 @@ function CrmDashboard() {
       );
 
       setSelectedDealForHistory(null);
+      newCommentRef.current = "";
+      setCommentResetCounter((c) => c + 1);
       setNewComment("");
       setAutoGeneratedLogs([]);
       setStageToMove(null);
@@ -5011,19 +5276,21 @@ function CrmDashboard() {
                     {activeWorker && activeDeal ? (
                       <div 
                         onClick={() => openDealHistory(activeDeal)}
-                        className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-full text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 transition-colors"
+                        className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 transition-colors"
                         title="Clique para abrir detalhes da atividade em andamento"
                       >
-                        <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
-                        <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[220px] sm:max-w-[340px] md:max-w-[460px]">
-                          ATIVO EM:{" "}
-                          <span className="text-white font-black">
-                            {getCleanDealTitle(activeDeal.title)}
+                        <div className="flex items-center gap-2 pl-2.5 pr-2 py-0.5">
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
+                          <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[220px] sm:max-w-[340px] md:max-w-[460px]">
+                            ATIVO EM:{" "}
+                            <span className="text-white font-black">
+                              {getCleanDealTitle(activeDeal.title)}
+                            </span>
                           </span>
-                        </span>
-                        <span className="text-[10px] text-emerald-300 font-mono font-bold bg-emerald-900/60 px-1.5 py-0.5 rounded-md border border-emerald-500/30 shrink-0">
-                          ({formatElapsedLive(activeWorker.startedAt, nowMs)})
-                        </span>
+                        </div>
+                        <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2.5 py-0.5 text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
+                          {formatElapsedLive(activeWorker.startedAt, nowMs)}
+                        </div>
                       </div>
                     ) : isAll ? (
                       <div className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
@@ -5049,9 +5316,8 @@ function CrmDashboard() {
                     onClick={(e) => e.stopPropagation()}
                     className="absolute top-full left-3 mt-2 w-[350px] max-w-[90vw] rounded-2xl bg-slate-950/98 border border-white/15 backdrop-blur-2xl p-2 shadow-[0_15px_40px_rgba(0,0,0,0.85)] z-50 animate-in fade-in zoom-in-95 duration-150"
                   >
-                    <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 px-3 py-1.5 mb-1 border-b border-white/10 flex items-center justify-between">
-                      <span>VISÃO DO QUADRO KANBAN</span>
-                      <span className="text-[8px] text-muted-foreground">Clique para trocar</span>
+                    <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 px-3 py-1.5 mb-1 border-b border-white/10 flex items-center">
+                      <span>Visão das Atividades</span>
                     </div>
 
                     <div className="space-y-1 max-h-80 overflow-y-auto custom-scrollbar p-0.5">
@@ -6669,9 +6935,11 @@ function CrmDashboard() {
                   if (isPending || isArchived || isCompleted) return <div className="w-[105px] shrink-0" />;
 
                   const activeWorker = getDealActiveWorker(selectedDealForHistory);
-                  const isWorking = Boolean(activeWorker && activeWorker.userId === user?.id);
-                  const isAssigned = selectedDealForHistory.assigned_user_id === user?.id;
+                  const isWorking = Boolean(activeWorker && (activeWorker.userId === user?.id || isAdmin));
+                  const isAssigned = isAdmin || selectedDealForHistory.assigned_user_id === user?.id || isWorking;
                   if (!isAssigned) return <div className="w-[105px] shrink-0" />;
+
+                  const isOtherUserWorking = Boolean(activeWorker && activeWorker.userId !== user?.id);
 
                   return (
                     <button
@@ -6682,7 +6950,13 @@ function CrmDashboard() {
                           ? "bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.35)] animate-pulse"
                           : "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-white border-emerald-500/50 hover:border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:scale-105"
                       }`}
-                      title={isWorking ? "Clique para pausar o trabalho nesta atividade" : "Clique para iniciar o trabalho nesta atividade"}
+                      title={
+                        isWorking
+                          ? isOtherUserWorking
+                            ? `Pausar trabalho de ${activeWorker?.userName || "colaborador"}`
+                            : "Clique para pausar o trabalho nesta atividade"
+                          : "Clique para iniciar o trabalho nesta atividade"
+                      }
                     >
                       {isWorking ? (
                         <>
@@ -6918,8 +7192,19 @@ function CrmDashboard() {
                   )}
                 </div>
 
-                {/* Botão Fechar no Canto Superior Direito com proteção de texto digitado */}
-                <div className="w-[105px] shrink-0 flex items-start justify-end">
+                {/* Botão Fechar e Excluir no Canto Superior Direito */}
+                <div className="w-[105px] shrink-0 flex items-start justify-end gap-1.5">
+                  {role === "admin" && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDeal(selectedDealForHistory)}
+                      disabled={isDeletingDeal}
+                      className="btn-ghost-neon p-2 rounded-xl text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer shadow-sm"
+                      title="Excluir permanentemente esta atividade (Administrador)"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleCloseSelectedDealModal}
@@ -7165,13 +7450,14 @@ function CrmDashboard() {
                           // Obtém a atualização mais recente: seja do histórico mais recente ou das notas
                           const latestHistoryItem = dealHistoryList.length > 0 ? dealHistoryList[0] : null;
                           const effectiveText = (latestHistoryItem?.description && latestHistoryItem.description.trim()) || cleanNotes;
+                          const latestTimestamp = latestHistoryItem?.created_at || selectedDealForHistory.updated_at || selectedDealForHistory.created_at;
 
                           const dealMentions = getDealMentions(selectedDealForHistory);
                           const dealReplies = getDealMentionReplies(selectedDealForHistory);
                           const dealSubtaskCompletions = getDealSubtaskCompletions(selectedDealForHistory);
 
                           const userMention = dealMentions.find((m) => m.mentioned_user_id === user?.id);
-                          const canMarkAsRead = Boolean(userMention && !userMention.read);
+                          const canMarkAsRead = Boolean(userMention && !userMention.read_by_user);
                           const isReplyingCurrent = Boolean(replyingToMentionId && (replyingToMentionId === (userMention?.id || dealMentions[0]?.id || "latest_update")));
 
                           const pendingNotif = getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance");
@@ -7249,7 +7535,7 @@ function CrmDashboard() {
                                       </div>
 
                                       <div className="shrink-0 flex items-center gap-1.5 ml-2 pt-0.5 select-none">
-                                        {canMarkAsRead && (
+                                        {canMarkAsRead && userMention && (
                                           <button
                                             type="button"
                                             onClick={() => handleMarkMentionAsRead(selectedDealForHistory, userMention.id)}
@@ -7273,99 +7559,30 @@ function CrmDashboard() {
                                       </div>
                                     </div>
 
-                                  {isReplyingCurrent && (() => {
-                                    const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
-                                    return (
-                                      <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
-                                        <input
-                                          type="text"
-                                          placeholder="Digite sua resposta vinculada a esta atualização..."
-                                          value={mentionReplyText[targetId] || ""}
-                                          onChange={(e) => {
-                                            const text = e.target.value;
-                                            const cursor = e.target.selectionStart || 0;
-                                            setMentionReplyText((prev) => ({
-                                              ...prev,
-                                              [targetId]: text,
-                                            }));
-
-                                            // Detecta digitação de @ para exibir sugestões de menção
-                                            const textBeforeCursor = text.slice(0, cursor);
-                                            const atMatch = textBeforeCursor.match(/@([A-Za-z0-9À-ÿ._-]*)$/);
-                                            if (atMatch) {
-                                              const query = atMatch[1].toLowerCase();
-                                              const filtered = teamMembers
-                                                .filter((m) => {
-                                                  const name = (m.display_name || m.email || "").toLowerCase();
-                                                  return name.includes(query);
-                                                })
-                                                .map((m) => ({ id: m.id, name: m.display_name || m.email || "Usuário" }));
-                                              setMentionSuggestions(filtered);
-                                              setMentionCursorIndex(cursor - atMatch[0].length);
-                                              setActiveMentionInputId(targetId);
-                                            } else {
-                                              setMentionSuggestions([]);
-                                              setMentionCursorIndex(null);
-                                              setActiveMentionInputId(null);
-                                            }
-                                          }}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                              e.preventDefault();
-                                              handleSendMentionReply(selectedDealForHistory, targetId);
-                                            }
-                                          }}
-                                          className="input-futuristic flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none bg-slate-900/90"
-                                          autoFocus
-                                        />
-                                        
-                                        {/* Menu de Sugestões de Menção para a Resposta */}
-                                        {mentionSuggestions.length > 0 && mentionCursorIndex !== null && activeMentionInputId === targetId && (
-                                          <div className="absolute bottom-[110%] left-0 z-50 max-h-48 w-64 overflow-y-auto rounded-xl border border-sky-400/50 bg-slate-950/95 p-1 shadow-2xl backdrop-blur-md custom-scrollbar animate-in fade-in mt-1">
-                                            <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-300 border-b border-white/10 flex items-center gap-1.5">
-                                              <AtSign className="h-3 w-3 text-sky-400" />
-                                              <span>Mencionar Membro</span>
-                                            </div>
-                                            {mentionSuggestions.map((member) => (
-                                              <button
-                                                key={member.id}
-                                                type="button"
-                                                onClick={() => handleSelectMention(member)}
-                                                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-500/20 text-xs font-bold text-white hover:text-sky-300 flex items-center justify-between transition-colors cursor-pointer"
-                                              >
-                                                <span className="truncate">{member.name}</span>
-                                                <span className="text-[10px] text-sky-400 font-mono">@{member.name.split(" ")[0]}</span>
-                                              </button>
-                                            ))}
-                                          </div>
-                                        )}
-
-                                        <div className="shrink-0 flex items-center gap-1.5 ml-2 select-none">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              handleSendMentionReply(selectedDealForHistory, targetId);
-                                            }}
-                                            className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
-                                            title="enviar"
-                                          >
-                                            <Send className="h-4 w-4" />
-                                          </button>
+                                    {isReplyingCurrent && (() => {
+                                      const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
+                                      return (
+                                        <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
+                                          <FastMentionReplyInput
+                                            targetId={targetId}
+                                            deal={selectedDealForHistory}
+                                            teamMembers={teamMembers}
+                                            onSend={handleSendMentionReply}
+                                          />
                                           <button
                                             type="button"
                                             onClick={() => setReplyingToMentionId(null)}
-                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center shrink-0"
                                             title="cancelar"
                                           >
                                             <X className="h-4 w-4" />
                                           </button>
                                         </div>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              )
-                            )}
+                                      );
+                                    })()}
+                                  </div>
+                                )
+                              )}
 
                               {/* Lista de Conclusões de Vinculadas com Destaque de Notificação 'NOVA' */}
                               {dealSubtaskCompletions.length > 0 && (
@@ -7769,60 +7986,14 @@ function CrmDashboard() {
                               </div>
                             )}
 
-                            <div className="relative flex-1 min-h-[140px] flex flex-col">
-                              <textarea
-                                placeholder="Descreva a nova atualização desta atividade... Use @ para mencionar um colega (ex: @João)"
-                                value={newComment}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  const cursor = e.target.selectionStart;
-                                  setNewComment(val);
-
-                                  // Detecta digitação de @ para exibir sugestões de menção
-                                  const textBeforeCursor = val.slice(0, cursor);
-                                  const atMatch = textBeforeCursor.match(/@([A-Za-z0-9À-ÿ._-]*)$/);
-                                  if (atMatch) {
-                                    const query = atMatch[1].toLowerCase();
-                                    const filtered = teamMembers
-                                      .filter((m) => {
-                                        const name = (m.display_name || m.email || "").toLowerCase();
-                                        return name.includes(query);
-                                      })
-                                      .map((m) => ({ id: m.id, name: m.display_name || m.email || "Usuário" }));
-                                    setMentionSuggestions(filtered);
-                                    setMentionCursorIndex(cursor - atMatch[0].length);
-                                    setActiveMentionInputId("new_comment");
-                                  } else {
-                                    setMentionSuggestions([]);
-                                    setMentionCursorIndex(null);
-                                    setActiveMentionInputId(null);
-                                  }
-                                }}
-                                className="input-futuristic flex-1 min-h-[140px] w-full rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed custom-scrollbar"
-                                autoFocus
-                              />
-
-                              {/* Menu Flutuante de Autocomplete de Menção (@usuario) */}
-                              {mentionSuggestions.length > 0 && mentionCursorIndex !== null && activeMentionInputId === "new_comment" && (
-                                <div className="absolute bottom-2 left-2 z-30 max-h-48 w-64 overflow-y-auto rounded-xl border border-sky-400/50 bg-slate-950/95 p-1 shadow-2xl backdrop-blur-md custom-scrollbar animate-in fade-in">
-                                  <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-300 border-b border-white/10 flex items-center gap-1.5">
-                                    <AtSign className="h-3 w-3 text-sky-400" />
-                                    <span>Mencionar Membro</span>
-                                  </div>
-                                  {mentionSuggestions.map((member) => (
-                                    <button
-                                      key={member.id}
-                                      type="button"
-                                      onClick={() => handleSelectMention(member)}
-                                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-500/20 text-xs font-bold text-white hover:text-sky-300 flex items-center justify-between transition-colors cursor-pointer"
-                                    >
-                                      <span className="truncate">{member.name}</span>
-                                      <span className="text-[10px] text-sky-400 font-mono">@{member.name.split(" ")[0]}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <FastDealCommentInput
+                              dealId={selectedDealForHistory.id}
+                              onTextChange={(text) => {
+                                newCommentRef.current = text;
+                              }}
+                              teamMembers={teamMembers}
+                              resetCounter={commentResetCounter}
+                            />
 
                             {/* Botões de Ação */}
                             <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
@@ -8144,16 +8315,16 @@ function CrmDashboard() {
                     Descreva detalhadamente o escopo, orientações e critérios de execução
                   </span>
                 </div>
-                <textarea
-                  required
+                <FastNewDealNotesInput
                   placeholder={
                     activeReqModal === "interna"
                       ? "Descreva detalhadamente todo o escopo da tarefa interna, orientações passo a passo para o responsável, especificações técnicas, prioridades, recomendações e critérios de entrega..."
                       : "Descreva detalhadamente todo o escopo do orçamento comercial, histórico e orientações sobre o cliente, detalhes e necessidades dos equipamentos, observações técnicas para elaboração da proposta ou visita..."
                   }
-                  value={newDealNotes}
-                  onChange={(e) => setNewDealNotes(e.target.value)}
-                  className="input-futuristic w-full h-[220px] sm:h-[260px] rounded-xl p-4 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+                  onTextChange={(text) => {
+                    newDealNotesRef.current = text;
+                  }}
+                  resetTrigger={activeReqModal}
                 />
               </div>
 
@@ -8900,7 +9071,7 @@ function CrmDashboard() {
         </div>
       )}
 
-      {/* Modal / Repositório de Atividades Arquivadas (Tarefas, Concluídos e Perdidos) */}
+      {/* Tela Completa: Repositório de Atividades Arquivadas (Tarefas, Concluídos e Perdidos) */}
       {isArchivedModalOpen && (() => {
         const leadArchivedCount = getArchivedDealsForStage("lead", deals).length;
         const completedArchivedCount = getArchivedDealsForStage("completed", deals).length;
@@ -8927,119 +9098,146 @@ function CrmDashboard() {
 
         return (
           <div
-            onClick={() => setIsArchivedModalOpen(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in overflow-y-auto"
+            className="fixed inset-0 z-50 flex flex-col bg-slate-950/98 backdrop-blur-2xl p-4 sm:p-6 overflow-hidden animate-in fade-in"
           >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-4xl rounded-2xl border border-sky-500/30 bg-slate-950/95 p-6 space-y-4 shadow-2xl my-8 backdrop-blur-xl transition-all max-h-[90vh] flex flex-col"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400">
-                    <FolderArchive className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black uppercase tracking-wider text-white flex items-center gap-2">
-                      {stageTitle}
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/40">
-                        {archivedDealsList.length} {archivedDealsList.length === 1 ? "atividade" : "atividades"}
-                      </span>
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground">
-                      {stageSubtitle}
-                    </p>
-                  </div>
+            {/* Header Principal da Página Inteira */}
+            <div className="shrink-0 flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsArchivedModalOpen(false)}
+                  className="btn-ghost-neon h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shadow-sm hover:scale-105"
+                  title="Voltar ao Quadro Comercial"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+
+                <div className="flex flex-col select-none justify-center focus:outline-none shrink-0">
+                  <svg
+                    className="w-[260px] sm:w-[290px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
+                    viewBox="0 0 290 26"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <text
+                      x="0"
+                      y="21"
+                      className="font-saira-stencil"
+                      fontSize="22"
+                      fill="#22d3ee"
+                      textLength="290"
+                      lengthAdjust="spacing"
+                    >
+                      ATIVIDADES ARQUIVADAS
+                    </text>
+                  </svg>
                 </div>
 
-                <button
-                  onClick={() => setIsArchivedModalOpen(false)}
-                  className="btn-ghost-neon p-2 rounded-xl text-muted-foreground hover:text-white cursor-pointer"
-                >
-                  ✕
-                </button>
+                <div className="h-6 w-px bg-white/15 hidden sm:block shrink-0" />
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/40 font-bold">
+                    {archivedDealsList.length} {archivedDealsList.length === 1 ? "atividade" : "atividades"}
+                  </span>
+                  <span className="text-xs text-muted-foreground hidden lg:inline">
+                    {stageSubtitle}
+                  </span>
+                </div>
               </div>
 
-              {/* Controles de Filtro: Origem da Etapa e Período (Data, Semana, Mês) */}
-              <div className="space-y-2 shrink-0">
-                {/* Linha 1: Abas por Origem da Coluna */}
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/40 border border-white/10 shrink-0 overflow-x-auto">
-                    <button
-                      type="button"
-                      onClick={() => setArchivedFilterStage("ALL")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                        archivedFilterStage === "ALL"
-                          ? "bg-white/15 text-white border border-white/30 shadow-sm"
-                          : "text-muted-foreground hover:text-white hover:bg-white/5"
-                      }`}
-                    >
-                      <span>Todas as Origens</span>
-                      <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-white">
-                        {allArchivedCount}
-                      </span>
-                    </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsArchivedModalOpen(false)}
+                  className="btn-ghost-neon px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-slate-300 hover:text-white border border-white/15 hover:bg-white/10 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <X className="h-4 w-4 text-slate-400" />
+                  <span>Fechar</span>
+                </button>
+              </div>
+            </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setArchivedFilterStage("lead")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                        archivedFilterStage === "lead"
-                          ? "bg-sky-500/20 text-sky-300 border border-sky-400/50 shadow-sm"
-                          : "text-muted-foreground hover:text-sky-300 hover:bg-sky-500/10"
-                      }`}
-                    >
-                      <span>Tarefas</span>
-                      <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500/20 text-sky-300">
-                        {leadArchivedCount}
-                      </span>
-                    </button>
+            {/* Barra de Filtros e Controles */}
+            <div className="shrink-0 space-y-2.5 py-3.5 border-b border-white/10">
+              {/* Linha 1: Abas por Origem da Coluna */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/50 border border-white/10 shrink-0 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setArchivedFilterStage("ALL")}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+                      archivedFilterStage === "ALL"
+                        ? "bg-white/15 text-white border border-white/30 shadow-sm"
+                        : "text-muted-foreground hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    <span>Todas as Origens</span>
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white font-bold">
+                      {allArchivedCount}
+                    </span>
+                  </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setArchivedFilterStage("completed")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                        archivedFilterStage === "completed"
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 shadow-sm"
-                          : "text-muted-foreground hover:text-emerald-300 hover:bg-emerald-500/10"
-                      }`}
-                    >
-                      <span>Concluídos</span>
-                      <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300">
-                        {completedArchivedCount}
-                      </span>
-                    </button>
+                  <button
+                    type="button"
+                    onClick={() => setArchivedFilterStage("lead")}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+                      archivedFilterStage === "lead"
+                        ? "bg-sky-500/20 text-sky-300 border border-sky-400/50 shadow-sm"
+                        : "text-muted-foreground hover:text-sky-300 hover:bg-sky-500/10"
+                    }`}
+                  >
+                    <span>Tarefas</span>
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-bold">
+                      {leadArchivedCount}
+                    </span>
+                  </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setArchivedFilterStage("lost")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                        archivedFilterStage === "lost"
-                          ? "bg-rose-500/20 text-rose-300 border border-rose-400/50 shadow-sm"
-                          : "text-muted-foreground hover:text-rose-300 hover:bg-rose-500/10"
-                      }`}
-                    >
-                      <span>Perdidos</span>
-                      <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300">
-                        {lostArchivedCount}
-                      </span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setArchivedFilterStage("completed")}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+                      archivedFilterStage === "completed"
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 shadow-sm"
+                        : "text-muted-foreground hover:text-emerald-300 hover:bg-emerald-500/10"
+                    }`}
+                  >
+                    <span>Concluídos</span>
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">
+                      {completedArchivedCount}
+                    </span>
+                  </button>
 
-                  {/* Contador de Atividades Filtradas */}
-                  <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
-                    <span>Exibindo:</span>
-                    <strong className="text-white font-bold">{archivedDealsList.length}</strong>
-                    <span>de</span>
-                    <strong className="text-sky-300">{allArchivedCount}</strong>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setArchivedFilterStage("lost")}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+                      archivedFilterStage === "lost"
+                        ? "bg-rose-500/20 text-rose-300 border border-rose-400/50 shadow-sm"
+                        : "text-muted-foreground hover:text-rose-300 hover:bg-rose-500/10"
+                    }`}
+                  >
+                    <span>Perdidos</span>
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-bold">
+                      {lostArchivedCount}
+                    </span>
+                  </button>
                 </div>
 
-                {/* Linha 2: Filtros por Período (Todas, Hoje, Esta Semana, Este Mês, Data Específica) */}
-                <div className="flex items-center justify-between gap-2 flex-wrap p-1.5 rounded-xl bg-black/50 border border-white/10">
+                {/* Contador de Atividades Filtradas */}
+                <div className="text-xs font-mono text-slate-400 flex items-center gap-1.5 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/5">
+                  <span>Exibindo:</span>
+                  <strong className="text-white font-bold">{archivedDealsList.length}</strong>
+                  <span>de</span>
+                  <strong className="text-sky-300">{allArchivedCount}</strong>
+                </div>
+              </div>
+
+              {/* Linha 2: Filtros por Período e Campo de Busca Integrados */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-center">
+                {/* Filtros de Período */}
+                <div className="lg:col-span-7 flex items-center justify-between gap-2 flex-wrap p-1.5 rounded-xl bg-black/50 border border-white/10">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1 pl-1 pr-2">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1 pl-1 pr-1.5">
                       <Calendar className="h-3.5 w-3.5 text-cyan-400" />
                       Período:
                     </span>
@@ -9141,8 +9339,8 @@ function CrmDashboard() {
                   </div>
                 </div>
 
-                {/* Linha 3: Campo de Busca com Ícone e Botão Limpar */}
-                <div className="relative">
+                {/* Campo de Busca */}
+                <div className="lg:col-span-5 relative">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
                     type="text"
@@ -9163,125 +9361,130 @@ function CrmDashboard() {
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* Lista de Atividades Arquivadas */}
-              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[300px] max-h-[55vh] custom-scrollbar">
-                {archivedDealsList.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground space-y-2">
-                    <Archive className="h-10 w-10 text-white/20" />
-                    <p className="text-xs font-semibold uppercase tracking-wider">
-                      {archivedSearchTerm ? "Nenhuma atividade arquivada encontrada para a busca" : "Nenhuma atividade arquivada nesta categoria"}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {archivedDealsList.map((d) => {
-                      const originStage = getArchivedOriginStage(d);
-                      const originBadge =
-                        originStage === "lead"
-                          ? { label: "TAREFA", cls: "bg-sky-500/20 text-sky-300 border-sky-400/30" }
-                          : originStage === "completed"
-                          ? { label: "CONCLUÍDO", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-400/30" }
-                          : { label: "PERDIDO", cls: "bg-rose-500/20 text-rose-300 border-rose-500/30" };
+            {/* Lista de Atividades Arquivadas (Linha Única Inteira por Atividade) */}
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 pt-3 custom-scrollbar">
+              {archivedDealsList.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 text-muted-foreground space-y-3 border border-dashed border-white/10 rounded-2xl bg-white/[0.01]">
+                  <Archive className="h-12 w-12 text-white/20" />
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    {archivedSearchTerm ? "Nenhuma atividade arquivada encontrada para a busca" : "Nenhuma atividade arquivada nesta categoria"}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {archivedDealsList.map((d) => {
+                    const originStage = getArchivedOriginStage(d);
+                    const originBadge =
+                      originStage === "lead"
+                        ? { label: "TAREFA", cls: "bg-sky-500/20 text-sky-300 border-sky-400/40" }
+                        : originStage === "completed"
+                        ? { label: "CONCLUÍDO", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-400/40" }
+                        : { label: "PERDIDO", cls: "bg-rose-500/20 text-rose-300 border-rose-500/40" };
 
-                      const cardCustomer = getDealCustomer(d);
-                      const customerName = cardCustomer?.company_name || cardCustomer?.name || d.customer_name;
+                    const cardCustomer = getDealCustomer(d);
+                    const customerName = cardCustomer?.company_name || cardCustomer?.name || d.customer_name;
 
-                      return (
-                        <div
-                          key={d.id}
-                          className="p-3.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-sky-400/40 transition-all space-y-2.5 shadow-sm flex flex-col justify-between"
-                        >
-                          <div className="space-y-1.5 min-w-0">
-                            <div className="flex items-center justify-between gap-1 flex-wrap">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-mono text-[9px] font-black px-2 py-0.5 rounded bg-white/10 text-white border border-white/15">
-                                  Nº {getDealReqNumber(d, deals)}
-                                </span>
-                                <span className={`font-mono text-[8px] font-black px-1.5 py-0.5 rounded border ${originBadge.cls}`}>
-                                  {originBadge.label}
-                                </span>
-                              </div>
-                              <span className="text-[9px] text-muted-foreground font-mono truncate">
-                                {new Date(d.updated_at || d.created_at).toLocaleDateString("pt-BR")}
-                              </span>
-                            </div>
-
-                            <h4
-                              className="text-xs font-bold text-white uppercase tracking-wide truncate cursor-pointer hover:text-sky-300"
-                              onClick={() => {
-                                setIsArchivedModalOpen(false);
-                                openDealHistory(d);
-                              }}
-                              title="Clique para ver detalhes e histórico"
-                            >
-                              {getCleanDealTitle(d.title)}
-                            </h4>
-
-                            {customerName && customerName !== "Uso Interno / Empresa" && (
-                              <p className="text-[10px] text-slate-300 truncate">
-                                Cliente: <strong className="text-white font-medium">{customerName}</strong>
-                              </p>
-                            )}
-
-                            <p className="text-[10px] text-muted-foreground truncate">
-                              Resp: <strong className="text-emerald-400 font-medium">{d.assigned_user_name || "Sem responsável"}</strong>
-                            </p>
+                    return (
+                      <div
+                        key={d.id}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-sky-400/40 transition-all shadow-sm group"
+                      >
+                        {/* Informações da Atividade na Linha */}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/* Badges: Registro e Origem */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono text-xs font-black px-2.5 py-1 rounded-lg bg-white/10 text-white border border-white/15 shadow-sm">
+                              Nº {getDealReqNumber(d, deals)}
+                            </span>
+                            <span className={`font-mono text-[10px] font-black px-2 py-0.5 rounded-md border ${originBadge.cls}`}>
+                              {originBadge.label}
+                            </span>
                           </div>
 
-                          {/* Botões de Ação */}
-                          <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-white/5">
+                          {/* Título Clicável */}
+                          <h4
+                            className="text-xs sm:text-sm font-bold text-white uppercase tracking-wide truncate cursor-pointer hover:text-sky-300 transition-colors flex-1 min-w-[180px]"
+                            onClick={() => {
+                              setIsArchivedModalOpen(false);
+                              openDealHistory(d);
+                            }}
+                            title="Clique para ver detalhes e histórico completo"
+                          >
+                            {getCleanDealTitle(d.title)}
+                          </h4>
+
+                          {/* Cliente */}
+                          {customerName && customerName !== "Uso Interno / Empresa" && (
+                            <div className="shrink-0 items-center gap-1.5 text-xs text-slate-300 hidden md:flex bg-white/5 px-2.5 py-1 rounded-lg border border-white/5">
+                              <span className="text-muted-foreground text-[10px] uppercase font-bold">Cliente:</span>
+                              <strong className="text-white font-medium truncate max-w-[200px]">{customerName}</strong>
+                            </div>
+                          )}
+
+                          {/* Responsável */}
+                          <div className="shrink-0 items-center gap-1.5 text-xs text-muted-foreground hidden lg:flex bg-white/5 px-2.5 py-1 rounded-lg border border-white/5">
+                            <span className="text-muted-foreground text-[10px] uppercase font-bold">Resp:</span>
+                            <strong className="text-emerald-400 font-medium truncate max-w-[150px]">{d.assigned_user_name || "Sem responsável"}</strong>
+                          </div>
+
+                          {/* Data de Atualização / Arquivamento */}
+                          <span className="shrink-0 font-mono text-[11px] text-slate-400 hidden sm:inline-block">
+                            {new Date(d.updated_at || d.created_at).toLocaleDateString("pt-BR")}
+                          </span>
+                        </div>
+
+                        {/* Botões de Ação na Direita */}
+                        <div className="shrink-0 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsArchivedModalOpen(false);
+                              openDealHistory(d);
+                            }}
+                            className="btn-ghost-neon px-3 py-1.5 rounded-lg text-sky-300 hover:text-white hover:bg-sky-500/20 transition-all text-xs uppercase font-bold flex items-center gap-1.5 cursor-pointer shadow-sm border border-sky-400/30"
+                            title="Ver histórico e notas"
+                          >
+                            <History className="h-3.5 w-3.5 text-sky-400" />
+                            <span>Detalhes</span>
+                          </button>
+
+                          {(originStage === "lead" || isAdmin) && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setIsArchivedModalOpen(false);
-                                openDealHistory(d);
-                              }}
-                              className="btn-ghost-neon px-2.5 py-1 rounded-lg text-sky-300 hover:text-white hover:bg-sky-500/20 transition-colors text-[10px] uppercase font-bold flex items-center gap-1 cursor-pointer"
-                              title="Ver histórico e notas"
+                              onClick={() => handleUnarchiveDeal(d)}
+                              className="btn-ghost-neon px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-xs font-black uppercase flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer shadow-sm"
+                              title={`Restaurar para a coluna de ${originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos"}`}
                             >
-                              <History className="h-3 w-3" />
-                              <span>Detalhes</span>
+                              <ArchiveRestore className="h-3.5 w-3.5 text-emerald-400" />
+                              <span>Restaurar</span>
                             </button>
+                          )}
 
-                            <div className="flex items-center gap-1.5">
-                              {(originStage === "lead" || isAdmin) && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleUnarchiveDeal(d)}
-                                  className="btn-ghost-neon px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-[10px] font-black uppercase flex items-center gap-1 hover:scale-105 transition-all cursor-pointer"
-                                  title={`Restaurar para a coluna de ${originStage === "lead" ? "Tarefas" : originStage === "completed" ? "Concluídos" : "Perdidos"}`}
-                                >
-                                  <ArchiveRestore className="h-3 w-3 text-emerald-400" />
-                                  <span>Restaurar</span>
-                                </button>
-                              )}
-
-                              {role === "admin" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteDeal(d)}
-                                  disabled={isDeletingDeal}
-                                  className="btn-ghost-neon p-1 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
-                                  title="Excluir permanentemente"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
+                          {role === "admin" && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDeal(d)}
+                              disabled={isDeletingDeal}
+                              className="btn-ghost-neon p-2 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
+                              title="Excluir permanentemente"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-              {/* Rodapé Informativo Simples */}
-              <div className="shrink-0 flex items-center justify-between pt-3 border-t border-white/10 text-[11px] text-muted-foreground font-mono">
-                <span>Total exibido: {archivedDealsList.length} {archivedDealsList.length === 1 ? "atividade" : "atividades"}</span>
-                <span className="text-[10px] text-muted-foreground/60 italic">Clique fora para fechar</span>
-              </div>
+            {/* Rodapé Informativo */}
+            <div className="shrink-0 flex items-center justify-between pt-3 border-t border-white/10 text-xs text-muted-foreground font-mono">
+              <span>Total exibido: <strong className="text-white">{archivedDealsList.length}</strong> {archivedDealsList.length === 1 ? "atividade" : "atividades"}</span>
+              <span className="text-[11px] text-muted-foreground/70 hidden sm:inline">Use o botão Voltar ao CRM para retornar ao quadro Kanban</span>
             </div>
           </div>
         );
@@ -10294,9 +10497,13 @@ function CrmDashboard() {
                       )}
                     </p>
                   </div>
-                  <p className="text-[10px] text-center text-muted-foreground/70 uppercase tracking-wider font-bold pt-1">
-                    Clique em qualquer lugar para prosseguir
-                  </p>
+                  <button
+                    type="button"
+                    onClick={handleDismissOffHoursPrompt}
+                    className="w-full py-3 px-4 rounded-xl font-black uppercase tracking-wider text-xs shadow-lg transition-all cursor-pointer bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-500/20 mt-2"
+                  >
+                    OK
+                  </button>
                 </div>
               ) : (
                 <>
@@ -10310,10 +10517,11 @@ function CrmDashboard() {
                     Você pode apenas navegar, consultar e acompanhar tarefas.
                   </p>
                   <button
+                    type="button"
                     onClick={handleDismissOffHoursPrompt}
-                    className="w-full py-2.5 px-4 rounded-xl font-black uppercase tracking-wider text-xs shadow-lg transition-all cursor-pointer bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-sky-500/20 mt-2"
+                    className="w-full py-3 px-4 rounded-xl font-black uppercase tracking-wider text-xs shadow-lg transition-all cursor-pointer bg-sky-400 hover:bg-sky-300 text-slate-950 shadow-sky-500/20 mt-2"
                   >
-                    Entendido
+                    OK
                   </button>
                 </>
               )}
@@ -10329,8 +10537,8 @@ function CrmDashboard() {
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 cursor-pointer animate-in fade-in select-none"
         >
           <div
-            onClick={handleDismissActivityPrompt}
-            className="glass max-w-md w-full p-8 rounded-3xl border border-sky-400/50 shadow-[0_0_50px_rgba(56,189,248,0.25)] flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 cursor-pointer relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            className="glass max-w-md w-full p-7 sm:p-8 rounded-3xl border border-sky-400/50 shadow-[0_0_50px_rgba(56,189,248,0.25)] flex flex-col items-center text-center space-y-5 animate-in zoom-in-95 relative overflow-hidden"
           >
             <div className="p-4 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-400/30 shadow-[0_0_20px_rgba(56,189,248,0.4)] animate-pulse">
               <Play className="h-10 w-10 fill-sky-400" />
@@ -10349,6 +10557,14 @@ function CrmDashboard() {
                 Selecione uma atividade e clique em <strong className="text-white font-black">INICIAR ATIVIDADE</strong>.
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={handleDismissActivityPrompt}
+              className="w-full py-3 px-6 rounded-2xl font-black uppercase tracking-wider text-xs shadow-lg transition-all cursor-pointer bg-sky-400 hover:bg-sky-300 text-slate-950 shadow-sky-500/30 hover:scale-[1.02] active:scale-[0.98] border border-sky-300"
+            >
+              OK
+            </button>
           </div>
         </div>
       )}

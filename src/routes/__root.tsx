@@ -104,13 +104,14 @@ function ScrollDirectionListener() {
 }
 
 import { useAuth } from "@/lib/auth-context";
+import { IS_NETWORK_RESTRICTION_ENABLED } from "@/lib/network-security";
 import { ShieldAlert, RefreshCw, LogOut, WifiOff } from "lucide-react";
 
 function NetworkSecurityGuard({ children }: { children: React.ReactNode }) {
-  const { user, role, isNetworkAllowed, clientIp, signOut, refreshNetworkSecurity } = useAuth();
+  const { user, role, isNetworkAllowed, clientIp, signOut, refreshNetworkSecurity, loading } = useAuth();
 
-  // Se não está logado ou for admin, ou a rede for autorizada, renderiza normal
-  if (!user || role === "admin" || isNetworkAllowed) {
+  // Se a restrição de rede estiver desabilitada, carregando, sem usuário, admin ou autorizada -> libera acesso
+  if (!IS_NETWORK_RESTRICTION_ENABLED || loading || !user || role === "admin" || isNetworkAllowed) {
     return <>{children}</>;
   }
 

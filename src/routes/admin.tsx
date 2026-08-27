@@ -54,14 +54,15 @@ interface Category {
 
 function formatElapsedLive(startedAt: string, currentMs: number = Date.now()) {
   const startMs = new Date(startedAt).getTime();
-  if (isNaN(startMs)) return "0s";
+  if (isNaN(startMs)) return "00m 00s";
   const sec = Math.max(0, Math.floor((currentMs - startMs) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  const mFormatted = String(m).padStart(2, "0");
+  const sFormatted = String(s).padStart(2, "0");
+  if (h > 0) return `${h}h ${mFormatted}m ${sFormatted}s`;
+  return `${mFormatted}m ${sFormatted}s`;
 }
 
 function AdminPage() {
@@ -79,6 +80,12 @@ function AdminPage() {
     } else {
       navigate({ to: "/" });
     }
+  };
+
+  const handleOpenDeal = (dealId?: string) => {
+    if (!dealId) return;
+    sessionStorage.setItem("mykaflow_open_deal_id", dealId);
+    navigate({ to: "/crm", search: { dealId } as any });
   };
 
   const [activeTab, setActiveTab] = useState<"analytics" | "alerts" | "users" | "categories" | "integration">(() => {
@@ -462,25 +469,28 @@ function AdminPage() {
                   {/* Status ao vivo da Atividade no Cabeçalho */}
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     {activeActivities[selectedUserForProductivity.id] ? (
-                      <div className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-lg text-emerald-300 shadow-sm text-xs font-bold">
-                        <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
-                        <span className="font-mono text-[11px] uppercase tracking-wider">
-                          TRABALHANDO EM:{" "}
-                          <span className="text-white font-black">
-                            {activeActivities[selectedUserForProductivity.id].reqNumber
-                              ? `#${activeActivities[selectedUserForProductivity.id].reqNumber} - `
-                              : ""}
-                            {activeActivities[selectedUserForProductivity.id].title}
+                      <div 
+                        onClick={() => handleOpenDeal(activeActivities[selectedUserForProductivity.id].dealId)}
+                        className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 transition-colors"
+                        title="Clique para abrir detalhes da atividade em andamento no CRM"
+                      >
+                        <div className="flex items-center gap-2 pl-2.5 pr-2 py-0.5">
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
+                          <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[220px] sm:max-w-[340px] md:max-w-[460px]">
+                            TRABALHANDO EM:{" "}
+                            <span className="text-white font-black">
+                              {activeActivities[selectedUserForProductivity.id].title}
+                            </span>
                           </span>
-                        </span>
-                        <span className="text-[10px] text-emerald-300 font-mono font-bold bg-emerald-900/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                        </div>
+                        <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2.5 py-0.5 text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
                           {formatElapsedLive(activeActivities[selectedUserForProductivity.id].startedAt, nowMs)}
-                        </span>
+                        </div>
                       </div>
                     ) : (
-                      <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-lg text-slate-400 text-xs font-bold font-mono">
+                      <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
                         <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
-                        <span className="text-[11px] uppercase tracking-wider">
+                        <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
                           INATIVO NO MOMENTO
                         </span>
                       </div>
@@ -672,10 +682,14 @@ function UserList({
                   {/* Status da Atividade Atual / Inativo */}
                   <div className="mt-1.5">
                     {activeActivities[p.id] ? (
-                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-bold text-emerald-300 max-w-full">
+                      <div 
+                        onClick={() => handleOpenDeal(activeActivities[p.id].dealId)}
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-bold text-emerald-300 max-w-full cursor-pointer hover:bg-emerald-900/80 hover:border-emerald-400 transition-all"
+                        title="Clique para abrir detalhes da atividade no CRM"
+                      >
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] shrink-0" />
                         <span className="font-mono uppercase truncate">
-                          Atividade: {activeActivities[p.id].reqNumber ? `#${activeActivities[p.id].reqNumber} ` : ""}{activeActivities[p.id].title}
+                          Atividade: {activeActivities[p.id].title}
                         </span>
                         <span className="text-[9px] font-mono text-emerald-400 bg-emerald-900/60 px-1 py-0.2 rounded border border-emerald-500/20 shrink-0">
                           {formatElapsedLive(activeActivities[p.id].startedAt, nowMs)}

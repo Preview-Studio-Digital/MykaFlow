@@ -15,14 +15,107 @@ interface DealTimeSession {
   ended_at?: string | null;
   duration_seconds?: number;
   stop_reason?: string;
+  isInternal?: boolean;
 }
 
 interface Deal {
   id: string;
   title: string;
+  stage?: string | null;
   notes?: string | null;
   req_number?: string | null;
   created_at?: string;
+}
+
+function isInternalDeal(deal?: Deal | any): boolean {
+  if (!deal) return false;
+  const stage = deal.stage;
+  const title = deal.title || "";
+  return stage === "lead" || title.includes("[TAREFA]") || title.includes("[REQ. INTERNA]") || title.toLowerCase().includes("tarefa");
+}
+
+const STAGE_COLOR_MAP: Record<
+  string,
+  {
+    color: string;
+    hex: string;
+    glow: string;
+    textClass: string;
+    activeCardClass: string;
+    activeBadgeClass: string;
+    activeDotClass: string;
+  }
+> = {
+  lead: {
+    color: "#f59e0b",
+    hex: "#f59e0b",
+    glow: "rgba(245, 158, 11, 0.8)",
+    textClass: "text-amber-400",
+    activeCardClass: "bg-amber-950/30 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/40 hover:border-amber-400 hover:bg-amber-950/50",
+    activeBadgeClass: "bg-amber-500/25 text-amber-300 border-amber-400/50",
+    activeDotClass: "bg-amber-400",
+  },
+  qualification: {
+    color: "#38bdf8",
+    hex: "#38bdf8",
+    glow: "rgba(56, 189, 248, 0.8)",
+    textClass: "text-sky-400",
+    activeCardClass: "bg-sky-950/30 border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.2)] ring-1 ring-sky-400/40 hover:border-sky-400 hover:bg-sky-950/50",
+    activeBadgeClass: "bg-sky-500/25 text-sky-300 border-sky-400/50",
+    activeDotClass: "bg-sky-400",
+  },
+  negotiation: {
+    color: "#38bdf8",
+    hex: "#38bdf8",
+    glow: "rgba(56, 189, 248, 0.8)",
+    textClass: "text-sky-400",
+    activeCardClass: "bg-sky-950/30 border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.2)] ring-1 ring-sky-400/40 hover:border-sky-400 hover:bg-sky-950/50",
+    activeBadgeClass: "bg-sky-500/25 text-sky-300 border-sky-400/50",
+    activeDotClass: "bg-sky-400",
+  },
+  won: {
+    color: "#38bdf8",
+    hex: "#38bdf8",
+    glow: "rgba(56, 189, 248, 0.8)",
+    textClass: "text-sky-400",
+    activeCardClass: "bg-sky-950/30 border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.2)] ring-1 ring-sky-400/40 hover:border-sky-400 hover:bg-sky-950/50",
+    activeBadgeClass: "bg-sky-500/25 text-sky-300 border-sky-400/50",
+    activeDotClass: "bg-sky-400",
+  },
+  completed: {
+    color: "#10b981",
+    hex: "#10b981",
+    glow: "rgba(16, 185, 129, 0.8)",
+    textClass: "text-emerald-400",
+    activeCardClass: "bg-emerald-950/30 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.2)] ring-1 ring-emerald-400/40 hover:border-emerald-400 hover:bg-emerald-950/50",
+    activeBadgeClass: "bg-emerald-500/25 text-emerald-300 border-emerald-400/50",
+    activeDotClass: "bg-emerald-400",
+  },
+  lost: {
+    color: "#f43f5e",
+    hex: "#f43f5e",
+    glow: "rgba(244, 63, 94, 0.8)",
+    textClass: "text-rose-400",
+    activeCardClass: "bg-rose-950/30 border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.2)] ring-1 ring-rose-400/40 hover:border-rose-400 hover:bg-rose-950/50",
+    activeBadgeClass: "bg-rose-500/25 text-rose-300 border-rose-400/50",
+    activeDotClass: "bg-rose-400",
+  },
+};
+
+function getStageStyle(stage?: string | null, isInternal?: boolean, title?: string) {
+  if (isInternal || stage === "lead" || (title && (title.includes("[TAREFA]") || title.includes("[REQ. INTERNA]")))) {
+    return STAGE_COLOR_MAP.lead;
+  }
+  if (stage === "completed" || (title && title.includes("[CONCLUÍDO]"))) {
+    return STAGE_COLOR_MAP.completed;
+  }
+  if (stage === "lost" || (title && title.includes("[PERDIDO]"))) {
+    return STAGE_COLOR_MAP.lost;
+  }
+  if (stage && STAGE_COLOR_MAP[stage]) {
+    return STAGE_COLOR_MAP[stage];
+  }
+  return STAGE_COLOR_MAP.qualification; // default sky (orçamentos / externas)
 }
 
 function getDealReqNumber(deal: Deal, allDeals?: Deal[]): string {
@@ -198,10 +291,11 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
   // Parse all work sessions from deals notes (concluídas e em andamento)
   const allSessions = useMemo(() => {
-    const sessions: (DealTimeSession & { dealTitle: string; reqNumber: string; isActive?: boolean })[] = [];
+    const sessions: (DealTimeSession & { dealTitle: string; reqNumber: string; isActive?: boolean; isInternal?: boolean; stage?: string | null })[] = [];
     deals.forEach((deal) => {
       if (!deal.notes) return;
       const dealReqNum = getDealReqNumber(deal, deals);
+      const isInternal = isInternalDeal(deal);
 
       // 1. Sessões Concluídas (WORK_LOG)
       try {
@@ -215,6 +309,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
               dealTitle: deal.title,
               reqNumber: dealReqNum,
               isActive: false,
+              isInternal,
+              stage: deal.stage,
             });
           }
         }
@@ -242,6 +338,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                 dealTitle: deal.title,
                 reqNumber: dealReqNum,
                 isActive: true,
+                isInternal,
+                stage: deal.stage,
               });
             }
           }
@@ -296,7 +394,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     const uniqueDays = new Set<string>();
     const activityMap: Record<
       string,
-      { title: string; reqNumber: string; seconds: number; sessionsCount: number; hasActiveSession: boolean }
+      { title: string; reqNumber: string; seconds: number; sessionsCount: number; hasActiveSession: boolean; isInternal: boolean; stage?: string | null; latestStartedAt?: string; firstStartedAt?: string }
     > = {};
 
     filteredSessions.forEach((session) => {
@@ -316,75 +414,125 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
           seconds: 0,
           sessionsCount: 0,
           hasActiveSession: false,
+          isInternal: Boolean(session.isInternal),
+          stage: session.stage,
+          latestStartedAt: session.started_at,
+          firstStartedAt: session.started_at,
         };
       }
       activityMap[dealId].seconds += duration;
       activityMap[dealId].sessionsCount += 1;
+
+      const sessionStartMs = new Date(session.started_at).getTime();
+      const currentLatestMs = activityMap[dealId].latestStartedAt ? new Date(activityMap[dealId].latestStartedAt!).getTime() : 0;
+      if (sessionStartMs > currentLatestMs) {
+        activityMap[dealId].latestStartedAt = session.started_at;
+      }
+
+      const currentFirstMs = activityMap[dealId].firstStartedAt ? new Date(activityMap[dealId].firstStartedAt!).getTime() : Infinity;
+      if (sessionStartMs < currentFirstMs) {
+        activityMap[dealId].firstStartedAt = session.started_at;
+      }
+
       if (session.isActive) {
         activityMap[dealId].hasActiveSession = true;
       }
     });
 
-    const effectiveDays = new Set(uniqueDays);
-    if (dateFilter === "today" && effectiveDays.size === 0) {
-      effectiveDays.add(new Date(currentTime).toDateString());
-    }
-
-    // Calcula dia a dia: horas esperadas de turno, horas já decorridas do expediente até agora, e horas restantes
-    let autoExpectedSeconds = 0;
-    let elapsedWorkdaySeconds = 0;
-    let remainingShiftSeconds = 0;
-
     const todayStr = new Date(currentTime).toDateString();
     const todayProgress = getWorkdayProgress(new Date(currentTime));
 
-    effectiveDays.forEach((dateStr) => {
-      const d = new Date(dateStr);
-      const dayOfWeek = d.getDay(); // 0 = Dom, 1 = Seg, ..., 5 = Sex, 6 = Sáb
-      const isFriday = dayOfWeek === 5;
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      const dailyBaseSeconds = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+    // Determina a lista de usuários a avaliar (usuário selecionado ou todos os perfis da equipe)
+    const targetUserIds = selectedUserId
+      ? [selectedUserId]
+      : Array.from(new Set([
+          ...profiles.map((p) => p.id),
+          ...filteredSessions.map((s) => s.user_id),
+        ])).filter(Boolean);
 
-      autoExpectedSeconds += dailyBaseSeconds;
+    let totalElapsedWorkdaySeconds = 0;
+    let totalExpectedWorkSeconds = 0;
+    let totalInactiveSeconds = 0;
 
-      if (dateStr === todayStr) {
-        // Para o dia de hoje: considera o expediente transcorrido até o momento atual
-        elapsedWorkdaySeconds += todayProgress.elapsedWorkdaySeconds;
-        remainingShiftSeconds += todayProgress.remainingShiftSeconds;
-      } else {
-        // Para dias passados já encerrados: todo o expediente já transcorreu
-        elapsedWorkdaySeconds += dailyBaseSeconds;
-      }
+    // Para cada usuário, calcula o expediente e seu tempo inativo isolado
+    targetUserIds.forEach((uid) => {
+      let userElapsedSec = 0;
+      let userExpectedSec = 0;
+      let userActiveSec = 0;
+
+      // Soma o tempo ativo desse usuário específico no período
+      filteredSessions
+        .filter((s) => s.user_id === uid)
+        .forEach((s) => {
+          userActiveSec += s.duration_seconds || 0;
+        });
+
+      uniqueDays.forEach((dateStr) => {
+        const d = new Date(dateStr);
+        const dayOfWeek = d.getDay(); // 0 = Dom, 1 = Seg, ..., 5 = Sex, 6 = Sáb
+        const isFriday = dayOfWeek === 5;
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const dailyBaseSeconds = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+
+        userExpectedSec += dailyBaseSeconds;
+
+        if (dateStr === todayStr) {
+          userElapsedSec += todayProgress.elapsedWorkdaySeconds;
+        } else {
+          userElapsedSec += dailyBaseSeconds;
+        }
+      });
+
+      totalElapsedWorkdaySeconds += userElapsedSec;
+      totalExpectedWorkSeconds += userExpectedSec;
+
+      // O tempo inativo do usuário é o expediente decorrido dele menos o tempo que ele trabalhou
+      const userInactiveSec = Math.max(0, userElapsedSec - userActiveSec);
+      totalInactiveSeconds += userInactiveSec;
     });
 
-    const defaultShiftToday = new Date(currentTime).getDay() === 5 ? 8.0 : 9.0;
-    const isCustomShift = Math.abs(dailyShiftHours - defaultShiftToday) > 0.01;
-    const expectedWorkSeconds = isCustomShift && effectiveDays.size > 0
-      ? effectiveDays.size * dailyShiftHours * 3600
-      : (autoExpectedSeconds > 0 ? autoExpectedSeconds : effectiveDays.size * dailyShiftHours * 3600);
+    const daysWorked = uniqueDays.size;
+    const inactiveSeconds = totalInactiveSeconds;
+    const expectedWorkSeconds = totalExpectedWorkSeconds;
+    const remainingSeconds = Math.max(0, totalExpectedWorkSeconds - totalElapsedWorkdaySeconds);
 
-    const daysWorked = effectiveDays.size;
-    const activeHours = totalActiveSeconds / 3600;
-    const expectedHours = expectedWorkSeconds / 3600;
-    
-    // Tempo Inativo é o tempo de expediente JÁ TRANSCORRIDO até agora menos o tempo trabalhado
-    const inactiveSeconds = Math.max(0, elapsedWorkdaySeconds - totalActiveSeconds);
-    const inactiveHours = inactiveSeconds / 3600;
-
-    // Tempo Restante da jornada
-    const remainingSeconds = Math.max(0, expectedWorkSeconds - totalActiveSeconds - inactiveSeconds);
-    const remainingHours = remainingSeconds / 3600;
+    const activeHours = Math.round((totalActiveSeconds / 3600) * 10) / 10;
+    const inactiveHours = Math.round((inactiveSeconds / 3600) * 10) / 10;
+    const remainingHours = Math.round((remainingSeconds / 3600) * 10) / 10;
+    const expectedHours = Math.round((expectedWorkSeconds / 3600) * 10) / 10;
 
     // Taxa de aproveitamento sobre o tempo de expediente decorrido até agora
-    const efficiency = elapsedWorkdaySeconds > 0
-      ? Math.min(100, Math.round((totalActiveSeconds / elapsedWorkdaySeconds) * 100))
+    const efficiency = totalElapsedWorkdaySeconds > 0
+      ? Math.min(100, Math.round((totalActiveSeconds / totalElapsedWorkdaySeconds) * 100))
       : totalActiveSeconds > 0 ? 100 : 0;
+
+    // Numeração cronológica de execução (#1 para a primeira atividade trabalhada no período, #2 para a segunda, etc.)
+    const chronologicalOrder = Object.entries(activityMap).sort(
+      ([, a], [, b]) => new Date(a.firstStartedAt || 0).getTime() - new Date(b.firstStartedAt || 0).getTime()
+    );
+    const orderNumberMap: Record<string, number> = {};
+    chronologicalOrder.forEach(([id], idx) => {
+      orderNumberMap[id] = idx + 1;
+    });
 
     const activities = Object.entries(activityMap).map(([id, info]) => ({
       id,
       ...info,
+      workOrderNumber: orderNumberMap[id] || 1,
       hours: info.seconds / 3600
-    })).sort((a, b) => b.seconds - a.seconds);
+    })).sort((a, b) => {
+      // 1. Atividade em andamento (Ao Vivo) sempre ocupa o topo absoluto
+      if (a.hasActiveSession && !b.hasActiveSession) return -1;
+      if (!a.hasActiveSession && b.hasActiveSession) return 1;
+
+      // 2. Ordena pelas atividades mais recentes primeiro
+      const timeA = new Date(a.latestStartedAt || 0).getTime();
+      const timeB = new Date(b.latestStartedAt || 0).getTime();
+      if (timeA !== timeB) return timeB - timeA;
+
+      // 3. Critério de desempate por tempo trabalhado
+      return b.seconds - a.seconds;
+    });
 
     return {
       daysWorked,
@@ -399,13 +547,154 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
       remainingHours,
       activities
     };
-  }, [filteredSessions, dailyShiftHours, dateFilter, currentTime]);
+  }, [filteredSessions, profiles, selectedUserId, dailyShiftHours, dateFilter, currentTime]);
+
+  // Média de aproveitamento em relação a todo o período medido (histórico completo)
+  const allPeriodEfficiency = useMemo(() => {
+    const userSessions = allSessions.filter((session) => {
+      if (selectedUserId && session.user_id !== selectedUserId) {
+        return false;
+      }
+      return true;
+    });
+
+    if (userSessions.length === 0) return 0;
+
+    let totalActiveSeconds = 0;
+    const uniqueDays = new Set<string>();
+
+    userSessions.forEach((session) => {
+      totalActiveSeconds += session.duration_seconds || 0;
+      uniqueDays.add(new Date(session.started_at).toDateString());
+    });
+
+    const todayStr = new Date(currentTime).toDateString();
+    const todayProgress = getWorkdayProgress(new Date(currentTime));
+
+    const targetUserIds = selectedUserId
+      ? [selectedUserId]
+      : Array.from(new Set([
+          ...profiles.map((p) => p.id),
+          ...userSessions.map((s) => s.user_id),
+        ])).filter(Boolean);
+
+    let totalElapsedWorkdaySeconds = 0;
+
+    targetUserIds.forEach(() => {
+      uniqueDays.forEach((dateStr) => {
+        const d = new Date(dateStr);
+        const dayOfWeek = d.getDay(); // 0 = Dom, 1 = Seg, ..., 5 = Sex, 6 = Sáb
+        const isFriday = dayOfWeek === 5;
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const dailyBaseSeconds = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+
+        if (dateStr === todayStr) {
+          totalElapsedWorkdaySeconds += todayProgress.elapsedWorkdaySeconds;
+        } else {
+          totalElapsedWorkdaySeconds += dailyBaseSeconds;
+        }
+      });
+    });
+
+    if (totalElapsedWorkdaySeconds <= 0) {
+      return totalActiveSeconds > 0 ? 100 : 0;
+    }
+
+    return Math.min(100, Math.round((totalActiveSeconds / totalElapsedWorkdaySeconds) * 100));
+  }, [allSessions, profiles, selectedUserId, currentTime]);
+
+  // Métricas de Tempo Médio e Proporção (Internas vs Externas) para o Usuário e para a Empresa no período selecionado
+  const benchmarkMetrics = useMemo(() => {
+    // 1. Dados do Usuário no período ativo (filteredSessions)
+    const userInternalSessions = filteredSessions.filter((s) => s.isInternal);
+    const userExternalSessions = filteredSessions.filter((s) => !s.isInternal);
+
+    const userInternalDeals = new Set(userInternalSessions.map((s) => s.deal_id));
+    const userExternalDeals = new Set(userExternalSessions.map((s) => s.deal_id));
+
+    const userInternalSec = userInternalSessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
+    const userExternalSec = userExternalSessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
+    const userTotalSec = userInternalSec + userExternalSec;
+
+    const userAvgInternalSec = userInternalDeals.size > 0 ? Math.round(userInternalSec / userInternalDeals.size) : 0;
+    const userAvgExternalSec = userExternalDeals.size > 0 ? Math.round(userExternalSec / userExternalDeals.size) : 0;
+
+    const userPctInternal = userTotalSec > 0 ? Math.round((userInternalSec / userTotalSec) * 100) : 0;
+    const userPctExternal = userTotalSec > 0 ? Math.round((userExternalSec / userTotalSec) * 100) : 0;
+
+    // 2. Dados de Toda a Empresa no MESMO período ativo
+    const companyPeriodSessions = allSessions.filter((session) => {
+      const sessionDate = new Date(session.started_at);
+      const now = new Date(currentTime);
+
+      if (dateFilter === "today") {
+        return sessionDate.toDateString() === now.toDateString();
+      }
+      if (dateFilter === "yesterday") {
+        const yesterday = new Date(currentTime);
+        yesterday.setDate(now.getDate() - 1);
+        return sessionDate.toDateString() === yesterday.toDateString();
+      }
+      if (dateFilter === "week") {
+        const oneWeekAgo = new Date(currentTime);
+        oneWeekAgo.setDate(now.getDate() - 7);
+        return sessionDate >= oneWeekAgo;
+      }
+      if (dateFilter === "month") {
+        return (
+          sessionDate.getMonth() === now.getMonth() &&
+          sessionDate.getFullYear() === now.getFullYear()
+        );
+      }
+      return true; // "all"
+    });
+
+    const companyInternalSessions = companyPeriodSessions.filter((s) => s.isInternal);
+    const companyExternalSessions = companyPeriodSessions.filter((s) => !s.isInternal);
+
+    const companyInternalDeals = new Set(companyInternalSessions.map((s) => s.deal_id));
+    const companyExternalDeals = new Set(companyExternalSessions.map((s) => s.deal_id));
+
+    const companyInternalSec = companyInternalSessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
+    const companyExternalSec = companyExternalSessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
+    const companyTotalSec = companyInternalSec + companyExternalSec;
+
+    const companyAvgInternalSec = companyInternalDeals.size > 0 ? Math.round(companyInternalSec / companyInternalDeals.size) : 0;
+    const companyAvgExternalSec = companyExternalDeals.size > 0 ? Math.round(companyExternalSec / companyExternalDeals.size) : 0;
+
+    const companyPctInternal = companyTotalSec > 0 ? Math.round((companyInternalSec / companyTotalSec) * 100) : 0;
+    const companyPctExternal = companyTotalSec > 0 ? Math.round((companyExternalSec / companyTotalSec) * 100) : 0;
+
+    return {
+      userAvgInternalSec,
+      companyAvgInternalSec,
+      userAvgExternalSec,
+      companyAvgExternalSec,
+      userPctInternal,
+      userPctExternal,
+      companyPctInternal,
+      companyPctExternal,
+    };
+  }, [filteredSessions, allSessions, dateFilter, currentTime]);
 
   const formatSeconds = (totalSeconds: number) => {
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
     const s = Math.floor(totalSeconds % 60);
     return `${h}h ${m}m ${s}s`;
+  };
+
+  const formatApproxTime = (totalSeconds: number) => {
+    if (!totalSeconds || totalSeconds <= 0) return "0m";
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.round((totalSeconds % 3600) / 60);
+    if (h === 0) {
+      return `${Math.max(1, m)}m`;
+    }
+    if (m === 0) {
+      return `${h}h`;
+    }
+    return `${h}h ${m}m`;
   };
 
   const chartData = useMemo(() => {
@@ -461,16 +750,17 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
   const activeActivitiesChartData = useMemo(() => {
     if (!metrics.activities || metrics.activities.length === 0) return [];
-    return metrics.activities.map((act, index) => {
+    return metrics.activities.map((act) => {
       const valH = Math.round((act.seconds / 3600) * 100) / 100;
       const label = act.title;
+      const stageStyle = getStageStyle(act.stage, act.isInternal, act.title);
       return {
         id: act.id,
         name: label,
         shortLabel: act.title.slice(0, 15),
         value: valH,
         rawSeconds: act.seconds,
-        color: ACTIVITY_PALETTE[index % ACTIVITY_PALETTE.length],
+        color: stageStyle.hex,
         hasActiveSession: act.hasActiveSession,
         sessionsCount: act.sessionsCount,
         isRemaining: false,
@@ -501,93 +791,188 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 min-h-0 bg-slate-950/20 rounded-2xl border border-white/5 overflow-y-auto custom-scrollbar">
       
-      {/* Cards de Indicadores Rápidos */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 shrink-0">
+      {/* Topo: 6 Cards de Indicadores (3 de Jornada + 3 de Benchmark Operacional: Internas x Externas) */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5 shrink-0">
         
-        {/* Tempo Ativo */}
-        <div 
-          onClick={() => {
-            setHoveredSlice(null);
-            setIsExpandedActive((prev) => !prev);
-          }}
-          className={`p-4 rounded-xl border transition-all flex items-center justify-between cursor-pointer group ${
-            isExpandedActive
-              ? "bg-emerald-950/40 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400"
-              : "bg-black/40 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)] hover:border-emerald-500/50 hover:bg-emerald-950/20"
-          }`}
-          title="Clique para expandir/voltar o detalhamento de atividades no gráfico"
-        >
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
-                Tempo Ativo
-              </span>
-              <span className="text-[8px] font-mono uppercase font-bold text-emerald-400/80 bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-500/30 group-hover:bg-emerald-500 group-hover:text-black transition-colors">
-                {isExpandedActive ? "Expandido" : "Fatiar"}
+        {/* Bloco 1 (Metade Esquerda): Jornada de Trabalho */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          
+          {/* Card 1: Tempo Ativo */}
+          <div 
+            onClick={() => {
+              setHoveredSlice(null);
+              setIsExpandedActive((prev) => !prev);
+            }}
+            className={`p-3.5 rounded-xl border transition-all flex items-center justify-between cursor-pointer group ${
+              isExpandedActive
+                ? "bg-emerald-950/40 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400"
+                : "bg-black/40 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)] hover:border-emerald-500/50 hover:bg-emerald-950/20"
+            }`}
+            title="Clique para expandir/voltar o detalhamento de atividades no gráfico"
+          >
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block truncate">
+                  Tempo Ativo
+                </span>
+                <span className="text-[8px] font-mono uppercase font-bold text-emerald-400/80 bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-500/30 group-hover:bg-emerald-500 group-hover:text-black transition-colors">
+                  {isExpandedActive ? "Expandido" : "Fatiar"}
+                </span>
+              </div>
+              <span className="text-xl font-bold text-emerald-300 font-mono block truncate">
+                {formatSeconds(metrics.totalActiveSeconds)}
               </span>
             </div>
-            <span className="text-xl font-bold text-emerald-300 font-mono">
-              {formatSeconds(metrics.totalActiveSeconds)}
-            </span>
+            <div className="flex flex-col items-end gap-0.5 shrink-0">
+              <span className="px-2 py-0.5 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-xs font-black font-mono text-emerald-300 shadow-inner">
+                {metrics.expectedWorkSeconds > 0
+                  ? `${Math.round((metrics.totalActiveSeconds / metrics.expectedWorkSeconds) * 100)}%`
+                  : "0%"}
+              </span>
+              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">
+                {dateFilter === "today" ? "do dia" : "do período"}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-xs font-black font-mono text-emerald-300 shadow-inner">
-              {metrics.expectedWorkSeconds > 0
-                ? `${Math.round((metrics.totalActiveSeconds / metrics.expectedWorkSeconds) * 100)}%`
-                : "0%"}
-            </span>
-            <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">
-              do dia
-            </span>
+
+          {/* Card 2: Tempo Inativo */}
+          <div className="p-3.5 rounded-xl bg-black/40 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.05)] flex items-center justify-between">
+            <div className="space-y-1 min-w-0">
+              <span className="text-[10px] font-black uppercase tracking-widest text-rose-400 block truncate">
+                Tempo Inativo
+              </span>
+              <span className="text-xl font-bold text-rose-300 font-mono block truncate">
+                {formatSeconds(metrics.inactiveSeconds)}
+              </span>
+            </div>
+            <div className="flex flex-col items-end gap-0.5 shrink-0">
+              <span className="px-2 py-0.5 rounded-lg bg-rose-950/80 border border-rose-500/40 text-xs font-black font-mono text-rose-300 shadow-inner">
+                {metrics.expectedWorkSeconds > 0
+                  ? `${Math.round((metrics.inactiveSeconds / metrics.expectedWorkSeconds) * 100)}%`
+                  : "0%"}
+              </span>
+              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">
+                {dateFilter === "today" ? "do dia" : "do período"}
+              </span>
+            </div>
           </div>
+
+          {/* Card 3: Aproveitamento */}
+          <div
+            className={`p-3.5 rounded-xl bg-black/40 border transition-colors ${
+              metrics.efficiency > allPeriodEfficiency
+                ? "border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.08)]"
+                : metrics.efficiency < allPeriodEfficiency
+                ? "border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.08)]"
+                : "border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.08)]"
+            } flex items-center justify-between`}
+          >
+            <div className="space-y-1 min-w-0">
+              <span
+                className={`text-[10px] font-black uppercase tracking-widest block truncate ${
+                  metrics.efficiency > allPeriodEfficiency
+                    ? "text-emerald-400"
+                    : metrics.efficiency < allPeriodEfficiency
+                    ? "text-rose-400"
+                    : "text-amber-400"
+                }`}
+              >
+                Aproveitamento
+              </span>
+              <span
+                className={`text-xl font-bold font-mono block truncate ${
+                  metrics.efficiency > allPeriodEfficiency
+                    ? "text-emerald-400"
+                    : metrics.efficiency < allPeriodEfficiency
+                    ? "text-rose-400"
+                    : "text-amber-400"
+                }`}
+              >
+                {metrics.efficiency}%
+              </span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 shrink-0" title="Média histórica de aproveitamento calculada sobre todo o período medido">
+              <span className="px-2 py-0.5 rounded-lg bg-indigo-950/80 border border-indigo-500/40 text-xs font-black font-mono text-indigo-300 shadow-inner text-center">
+                {allPeriodEfficiency}%
+              </span>
+              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider text-center">
+                média
+              </span>
+            </div>
+          </div>
+
         </div>
 
-        {/* Tempo Inativo */}
-        <div className="p-4 rounded-xl bg-black/40 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.05)] flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-widest text-rose-400 block">
-              Tempo Inativo
-            </span>
-            <span className="text-xl font-bold text-rose-300 font-mono">
-              {formatSeconds(metrics.inactiveSeconds)}
-            </span>
+        {/* Bloco 2 (Metade Direita): Benchmark Operacional (Internas vs Externas) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          
+          {/* Card 4: TEMPO MÉDIO ATIVIDADES INTERNAS (Colaborador vs Empresa) */}
+          <div className="p-3.5 rounded-xl bg-black/40 border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.05)] flex items-center justify-between">
+            <div className="space-y-1 min-w-0">
+              <span className="text-[9px] font-black uppercase tracking-wider text-amber-400 block truncate" title="Tempo médio do colaborador por tarefa interna trabalhada">
+                TEMPO MÉDIO ATIVIDADES INTERNAS
+              </span>
+              <span className="text-xl font-bold text-amber-300 font-mono block truncate">
+                {formatApproxTime(benchmarkMetrics.userAvgInternalSec)}
+              </span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 shrink-0" title="Tempo médio geral da empresa por tarefa interna">
+              <span className="px-2 py-0.5 rounded-lg bg-amber-950/80 border border-amber-500/40 text-xs font-black font-mono text-amber-300 shadow-inner text-center">
+                {formatApproxTime(benchmarkMetrics.companyAvgInternalSec)}
+              </span>
+              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider text-center">
+                empresa
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="px-2.5 py-1 rounded-lg bg-rose-950/80 border border-rose-500/40 text-xs font-black font-mono text-rose-300 shadow-inner">
-              {metrics.expectedWorkSeconds > 0
-                ? `${Math.round((metrics.inactiveSeconds / metrics.expectedWorkSeconds) * 100)}%`
-                : "0%"}
-            </span>
-            <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">
-              do dia
-            </span>
-          </div>
-        </div>
 
-        {/* Tempo Restante (Sem preenchimento / Borda tracejada) */}
-        <div className="p-4 rounded-xl bg-slate-950/40 border border-dashed border-slate-700/60 shadow-[0_0_15px_rgba(100,116,139,0.05)] flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
-              Tempo Restante
-            </span>
-            <span className="text-xl font-bold text-slate-300 font-mono">
-              {formatSeconds(metrics.remainingSeconds)}
-            </span>
+          {/* Card 5: TEMPO MÉDIO ATIVIDADES EXTERNAS (Colaborador vs Empresa) */}
+          <div className="p-3.5 rounded-xl bg-black/40 border border-sky-500/20 shadow-[0_0_15px_rgba(56,189,248,0.05)] flex items-center justify-between">
+            <div className="space-y-1 min-w-0">
+              <span className="text-[9px] font-black uppercase tracking-wider text-sky-400 block truncate" title="Tempo médio do colaborador por atividade externa / cliente">
+                TEMPO MÉDIO ATIVIDADES EXTERNAS
+              </span>
+              <span className="text-xl font-bold text-sky-300 font-mono block truncate">
+                {formatApproxTime(benchmarkMetrics.userAvgExternalSec)}
+              </span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 shrink-0" title="Tempo médio geral da empresa por atividade externa / cliente">
+              <span className="px-2 py-0.5 rounded-lg bg-sky-950/80 border border-sky-500/40 text-xs font-black font-mono text-sky-300 shadow-inner text-center">
+                {formatApproxTime(benchmarkMetrics.companyAvgExternalSec)}
+              </span>
+              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider text-center">
+                empresa
+              </span>
+            </div>
           </div>
-          <Hourglass className="h-6 w-6 text-slate-500/50" />
-        </div>
 
-        {/* Aproveitamento */}
-        <div className="p-4 rounded-xl bg-black/40 border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.05)] flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 block">
-              Aproveitamento
-            </span>
-            <span className="text-xl font-bold text-indigo-300 font-mono">
-              {metrics.efficiency}%
-            </span>
+          {/* Card 6: ATIVIDADES INTERNAS x ATIVIDADES EXTERNAS */}
+          <div className="p-3.5 rounded-xl bg-black/40 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.05)] flex flex-col justify-between">
+            <div className="flex items-center justify-between gap-1 text-[9px] font-black uppercase tracking-wider">
+              <span className="text-amber-400 truncate">ATIVIDADES INTERNAS</span>
+              <span className="text-muted-foreground font-mono text-[10px]">x</span>
+              <span className="text-sky-400 truncate">ATIVIDADES EXTERNAS</span>
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xl font-bold font-mono text-amber-300">
+                {benchmarkMetrics.userPctInternal}%
+              </span>
+              <div className="h-1.5 flex-1 mx-3 rounded-full bg-slate-800/80 overflow-hidden flex">
+                <div 
+                  className="bg-amber-400 h-full transition-all duration-300" 
+                  style={{ width: `${benchmarkMetrics.userPctInternal}%` }} 
+                />
+                <div 
+                  className="bg-sky-400 h-full transition-all duration-300" 
+                  style={{ width: `${benchmarkMetrics.userPctExternal}%` }} 
+                />
+              </div>
+              <span className="text-xl font-bold font-mono text-sky-300">
+                {benchmarkMetrics.userPctExternal}%
+              </span>
+            </div>
           </div>
-          <Percent className="h-6 w-6 text-indigo-500/50" />
+
         </div>
 
       </div>
@@ -884,7 +1269,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
             ) : (
               metrics.activities.map((act, index) => {
                 const isSelected = highlightedActivityId === act.id;
-                const paletteColor = ACTIVITY_PALETTE[index % ACTIVITY_PALETTE.length];
+                const stageStyle = getStageStyle(act.stage, act.isInternal, act.title);
 
                 return (
                   <div
@@ -892,33 +1277,40 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                     onClick={() => handleOpenActivityCard(act.id)}
                     className={`group p-3 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
                       isSelected
-                        ? "bg-emerald-950/40 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-400"
+                        ? `${stageStyle.activeCardClass} ring-2 ring-emerald-400`
                         : act.hasActiveSession
-                        ? "bg-emerald-950/30 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-400/40 hover:border-emerald-400 hover:bg-emerald-950/50"
+                        ? stageStyle.activeCardClass
                         : "bg-white/[0.02] border-white/5 hover:bg-white/[0.06] hover:border-sky-500/30 hover:shadow-md"
                     }`}
                     title="Clique para abrir o card detalhado desta atividade no CRM"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span 
-                        className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm group-hover:scale-125 transition-transform"
-                        style={{ backgroundColor: paletteColor, boxShadow: `0 0 8px ${paletteColor}` }}
-                      />
-                      <Briefcase className={`h-4 w-4 shrink-0 ${act.hasActiveSession ? "text-emerald-400 animate-pulse" : "text-sky-400 group-hover:text-white"}`} />
+                      <span className={`font-mono text-[10px] font-black shrink-0 min-w-[18px] ${stageStyle.textClass}`}>
+                        #{act.workOrderNumber}
+                      </span>
+                      <Briefcase className={`h-4 w-4 shrink-0 transition-colors ${stageStyle.textClass} ${act.hasActiveSession ? "animate-pulse" : "group-hover:brightness-125"}`} />
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold text-white truncate group-hover:text-sky-300 transition-colors">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-xs font-bold truncate transition-colors ${stageStyle.textClass} group-hover:brightness-125`}>
                             {act.title}
                           </p>
                           {act.hasActiveSession && (
-                            <span className="font-mono text-[8px] font-black px-1.5 py-0.5 rounded bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 uppercase tracking-widest inline-flex items-center gap-1 animate-pulse shrink-0">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                            <span className={`font-mono text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest inline-flex items-center gap-1 animate-pulse shrink-0 ${stageStyle.activeBadgeClass}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full animate-ping ${stageStyle.activeDotClass}`} />
                               Ao Vivo
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-[9px] font-mono text-muted-foreground uppercase">
-                          <span>{act.reqNumber ? `Nº ${act.reqNumber} • ` : ""}{act.sessionsCount} {act.sessionsCount === 1 ? "sessão" : "sessões"}</span>
+                          <span>
+                            {act.reqNumber ? (
+                              <>
+                                <span className={`font-bold ${stageStyle.textClass}`}>Nº {act.reqNumber}</span>
+                                <span> • </span>
+                              </>
+                            ) : null}
+                            {act.sessionsCount} {act.sessionsCount === 1 ? "sessão" : "sessões"}
+                          </span>
                           <span className="opacity-0 group-hover:opacity-100 text-sky-400 font-bold lowercase tracking-normal flex items-center gap-0.5 transition-opacity">
                             abrir card <ExternalLink className="h-2.5 w-2.5" />
                           </span>

@@ -22,12 +22,14 @@ import {
   Clock,
   Sparkles,
   RefreshCw,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationManager } from "@/components/IntegrationManager";
 import { CrmAnalytics } from "@/components/CrmAnalytics";
 import { AdminAlertsManager } from "@/components/AdminAlertsManager";
 import { WorkHoursManager } from "@/components/WorkHoursManager";
+import { getAutoCutoffInfo, isBusinessWorkTime } from "@/lib/work-schedule";
 import { EditMemberDialog, type MemberProfile } from "@/components/EditMemberDialog";
 import { DailySnapshotModal } from "@/components/DailySnapshotModal";
 import { AdminPanel } from "@/components/AdminPanel";
@@ -143,6 +145,10 @@ function AdminPage() {
           try {
             const parsed = JSON.parse(match[1]);
             if (parsed.userId && parsed.startedAt) {
+              const cutoffInfo = getAutoCutoffInfo(parsed.startedAt, new Date());
+              // Se a atividade ultrapassou o horário de corte, foi interrompida automaticamente
+              if (cutoffInfo.shouldCutoff) return;
+
               const reqMatch = deal.notes.match(/(?:REQ|Nº|Requisito)\s*[:#]?\s*([0-9.]+)/i);
               const reqNum = parsed.reqNumber || (reqMatch ? reqMatch[1] : null);
               activeMap[parsed.userId] = {
@@ -427,77 +433,119 @@ function AdminPage() {
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
+              {(() => {
+                const isCompanyView = selectedUserForProductivity.id === "" || selectedUserForProductivity.role === "empresa";
+                const companyActiveCount = Object.keys(activeActivities).length;
 
-              <div className="flex flex-col select-none justify-center focus:outline-none shrink-0">
-                <svg
-                  className="w-[230px] sm:w-[260px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.3)]"
-                  viewBox="0 0 265 26"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <text
-                    x="0"
-                    y="21"
-                    className="font-saira-stencil"
-                    fontSize="22"
-                    fill="#22d3ee"
-                    textLength="265"
-                    lengthAdjust="spacing"
-                  >
-                    GESTÃO INDIVIDUAL
-                  </text>
-                </svg>
-              </div>
-
-              <div className="h-6 w-px bg-white/15 hidden md:block shrink-0" />
-
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className={`p-2 rounded-xl shrink-0 ${
-                  activeActivities[selectedUserForProductivity.id]
-                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.35)]"
-                    : "bg-slate-900 text-slate-500 border border-white/10"
-                }`}>
-                  <Clock className={`h-4 w-4 ${activeActivities[selectedUserForProductivity.id] ? "animate-pulse" : ""}`} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white truncate">
-                      {selectedUserForProductivity.name}
-                    </h3>
-                  </div>
-
-                  {/* Status ao vivo da Atividade no Cabeçalho */}
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    {activeActivities[selectedUserForProductivity.id] ? (
-                      <div 
-                        onClick={() => handleOpenDeal(activeActivities[selectedUserForProductivity.id].dealId)}
-                        className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 transition-colors"
-                        title="Clique para abrir detalhes da atividade em andamento no CRM"
+                return (
+                  <>
+                    <div className="flex flex-col select-none justify-center focus:outline-none shrink-0">
+                      <svg
+                        className="w-[230px] sm:w-[260px] h-[26px] overflow-visible select-none drop-shadow-[0_0_12px_rgba(244,63,94,0.3)]"
+                        viewBox="0 0 265 26"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
                       >
-                        <div className="flex items-center gap-2 pl-2.5 pr-2 py-0.5">
-                          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
-                          <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[220px] sm:max-w-[340px] md:max-w-[460px]">
-                            TRABALHANDO EM:{" "}
-                            <span className="text-white font-black">
-                              {activeActivities[selectedUserForProductivity.id].title}
+                        <text
+                          x="0"
+                          y="21"
+                          className="font-saira-stencil"
+                          fontSize="22"
+                          fill={isCompanyView ? "#f43f5e" : "#22d3ee"}
+                          textLength="265"
+                          lengthAdjust="spacing"
+                        >
+                          {isCompanyView ? "GESTÃO DA EMPRESA" : "GESTÃO INDIVIDUAL"}
+                        </text>
+                      </svg>
+                    </div>
+
+                    <div className="h-6 w-px bg-white/15 hidden md:block shrink-0" />
+
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`p-2 rounded-xl shrink-0 ${
+                        isCompanyView
+                          ? companyActiveCount > 0
+                            ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.35)]"
+                            : "bg-slate-900 text-rose-500 border border-rose-500/20"
+                          : activeActivities[selectedUserForProductivity.id]
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.35)]"
+                            : "bg-slate-900 text-slate-500 border border-white/10"
+                      }`}>
+                        {isCompanyView ? (
+                          <Building2 className={`h-4 w-4 text-rose-400 ${companyActiveCount > 0 ? "animate-pulse" : ""}`} />
+                        ) : (
+                          <Clock className={`h-4 w-4 ${activeActivities[selectedUserForProductivity.id] ? "animate-pulse" : ""}`} />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white truncate">
+                            {selectedUserForProductivity.name}
+                          </h3>
+                          {isCompanyView && (
+                            <span className="text-[9px] font-mono font-black px-2 py-0.5 rounded-lg border uppercase tracking-wider bg-rose-500/25 text-rose-300 border-rose-400/50 shadow-sm">
+                              MÉTRICAS CONSOLIDADAS
                             </span>
-                          </span>
+                          )}
                         </div>
-                        <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2.5 py-0.5 text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
-                          {formatElapsedLive(activeActivities[selectedUserForProductivity.id].startedAt, nowMs)}
+
+                        {/* Status ao vivo da Atividade no Cabeçalho */}
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {isCompanyView ? (
+                            companyActiveCount > 0 ? (
+                              <div className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold">
+                                <div className="flex items-center gap-2 px-3 py-0.5">
+                                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse shrink-0" />
+                                  <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider">
+                                    EM ATIVIDADE AGORA:{" "}
+                                    <span className="text-white font-black">
+                                      {companyActiveCount} {companyActiveCount === 1 ? "COLABORADOR" : "COLABORADORES"}
+                                    </span>
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
+                                <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
+                                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
+                                  EQUIPE INATIVA NO MOMENTO
+                                </span>
+                              </div>
+                            )
+                          ) : activeActivities[selectedUserForProductivity.id] ? (
+                            <div 
+                              onClick={() => handleOpenDeal(activeActivities[selectedUserForProductivity.id].dealId)}
+                              className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 transition-colors"
+                              title="Clique para abrir detalhes da atividade em andamento no CRM"
+                            >
+                              <div className="flex items-center gap-2 pl-2.5 pr-2 py-0.5">
+                                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
+                                <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[220px] sm:max-w-[340px] md:max-w-[460px]">
+                                  TRABALHANDO EM:{" "}
+                                  <span className="text-white font-black">
+                                    {activeActivities[selectedUserForProductivity.id].title}
+                                  </span>
+                                </span>
+                              </div>
+                              <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2.5 py-0.5 text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
+                                {formatElapsedLive(activeActivities[selectedUserForProductivity.id].startedAt, nowMs)}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
+                              <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
+                              <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
+                                INATIVO NO MOMENTO
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    ) : (
-                      <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
-                        <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
-                        <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
-                          INATIVO NO MOMENTO
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -588,18 +636,18 @@ function UserList({
     );
 
   return (
-    <div className="glass rounded-2xl p-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 border-b border-white/5 pb-4">
-        <h3 className="text-lg font-black tracking-widest text-gradient flex items-center gap-2 uppercase">
-          <Users className="h-5 w-5 text-accent" /> Gestão de Equipe & Permissões
+    <div className="glass rounded-2xl p-3 sm:p-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-2.5 border-b border-white/5 pb-2">
+        <h3 className="text-sm sm:text-base font-black tracking-widest text-gradient flex items-center gap-2 uppercase">
+          <Users className="h-4 w-4 text-accent" /> Gestão de Equipe & Permissões
         </h3>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <span className="text-[10px] uppercase tracking-widest opacity-50 font-black">
             {profiles.length} Membros
           </span>
           <button
             onClick={() => setShowAdminPanel(!showAdminPanel)}
-            className="btn-futuristic py-2 px-4 text-[10px] rounded-lg cursor-pointer"
+            className="btn-futuristic py-1.5 px-3 text-[10px] rounded-lg cursor-pointer"
           >
             {showAdminPanel ? "FECHAR" : "CRIAR ACESSO"}
           </button>
@@ -607,12 +655,94 @@ function UserList({
       </div>
 
       {showAdminPanel && (
-        <div className="mb-6 p-4 rounded-2xl bg-black/40 border border-white/5 animate-in fade-in">
+        <div className="mb-3 p-4 rounded-2xl bg-black/40 border border-white/5 animate-in fade-in">
           <AdminPanel onSuccess={onRefresh} />
         </div>
       )}
 
-      <div className="grid gap-3">
+      <div className="grid gap-1.5 sm:gap-2">
+        {/* CARD DA EMPRESA (VISÃO GERAL CONSOLIDADA) NO TOPO DA LISTA - TEMA TOTALMENTE VERMELHO */}
+        {(() => {
+          const companyActiveCount = Object.keys(activeActivities).length;
+          const companyProfile: MemberProfile = {
+            id: "",
+            name: "EMPRESA (VISÃO GERAL)",
+            email: "empresa@mykaflow.com",
+            role: "admin" as any,
+          };
+
+          return (
+            <div
+              className="flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 sm:px-4 rounded-xl transition-all gap-3 group bg-gradient-to-r from-rose-500/20 via-rose-950/30 to-black/60 border border-rose-500/50 hover:border-rose-400 hover:shadow-[0_0_25px_rgba(244,63,94,0.25)] border-l-4 border-l-rose-500 shadow-md"
+            >
+              <div 
+                onClick={() => setSelectedUserForProductivity(companyProfile)}
+                className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                title="Clique para visualizar os parâmetros e métricas de produtividade consolidadas de toda a empresa"
+              >
+                <div
+                  className="p-2 rounded-xl transition-all shrink-0 bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.3)] group-hover:scale-105"
+                >
+                  <Building2 className="h-4 w-4 text-rose-300" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-black text-xs sm:text-sm uppercase tracking-widest text-white transition-colors truncate group-hover:text-rose-300">
+                      EMPRESA (VISÃO GERAL)
+                    </p>
+                    <span
+                      className="text-[8px] sm:text-[9px] font-mono font-black px-1.5 py-0.5 rounded-md border uppercase tracking-wider bg-rose-500/25 text-rose-300 border-rose-400/50 shadow-sm"
+                    >
+                      MÉTRICAS GERAIS
+                    </span>
+                    <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md border uppercase tracking-wider bg-white/5 text-slate-300 border-white/10">
+                      {profiles.length} {profiles.length === 1 ? "Colaborador" : "Colaboradores"}
+                    </span>
+                  </div>
+
+                  {/* Status Global em Tempo Real da Empresa */}
+                  <div className="mt-0.5 flex items-center">
+                    {companyActiveCount > 0 ? (
+                      <div 
+                        className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold transition-all max-w-full"
+                        title={`${companyActiveCount} colaborador(es) em atividade no momento`}
+                      >
+                        <div className="flex items-center gap-1.5 px-2.5 py-0.5 min-w-0">
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse shrink-0" />
+                          <span className="font-mono text-[9px] sm:text-[10px] uppercase tracking-wider truncate">
+                            EM ATIVIDADE AGORA:{" "}
+                            <span className="text-white font-black">
+                              {companyActiveCount} {companyActiveCount === 1 ? "COLABORADOR" : "COLABORADORES"}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/60 px-2 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-500 shrink-0" />
+                        <span className="text-[9px] sm:text-[10px] uppercase tracking-wider">
+                          EQUIPE INATIVA NO MOMENTO
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <button
+                  onClick={() => setSelectedUserForProductivity(companyProfile)}
+                  className="btn-ghost-neon px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider text-rose-400 border-rose-500/40 flex items-center gap-1.5 hover:bg-rose-500/15 hover:border-rose-400 hover:text-rose-200 cursor-pointer shadow-sm hover:scale-105 transition-all"
+                  title="Ver métricas de produtividade e horas consolidadas da empresa"
+                >
+                  <Clock className="h-3.5 w-3.5 text-rose-400" />
+                  <span>Produtividade Geral</span>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {profiles.map((p) => {
           const isCurrentUser = currentUser?.id === p.id;
           const isAdmin = p.role === "admin";
@@ -648,21 +778,21 @@ function UserList({
           return (
             <div
               key={p.id}
-              className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl transition-all gap-4 group ${roleTheme.card}`}
+              className={`flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 sm:px-4 rounded-xl transition-all gap-3 group ${roleTheme.card}`}
             >
               <div 
                 onClick={() => setSelectedUserForProductivity(p)}
-                className="flex items-center gap-4 min-w-0 flex-1 cursor-pointer"
+                className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
                 title={`Clique para visualizar os parâmetros e métricas de produtividade de ${p.name}`}
               >
                 <div
-                  className={`p-3 rounded-2xl transition-all shrink-0 ${roleTheme.iconBox}`}
+                  className={`p-2 rounded-xl transition-all shrink-0 ${roleTheme.iconBox}`}
                 >
-                  <roleTheme.Icon className="h-5 w-5" />
+                  <roleTheme.Icon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className={`font-bold text-sm uppercase tracking-widest text-white transition-colors truncate ${roleTheme.nameHover}`}>
+                    <p className={`font-bold text-xs sm:text-sm uppercase tracking-widest text-white transition-colors truncate ${roleTheme.nameHover}`}>
                       {p.name}
                     </p>
                     {isCurrentUser && (
@@ -672,37 +802,37 @@ function UserList({
                     )}
                     {/* Role Badge */}
                     <span
-                      className={`text-[9px] font-mono font-black px-2 py-0.5 rounded-lg border uppercase tracking-wider ${roleTheme.badge}`}
+                      className={`text-[8px] sm:text-[9px] font-mono font-black px-1.5 py-0.5 rounded-md border uppercase tracking-wider ${roleTheme.badge}`}
                     >
                       {roleTheme.label}
                     </span>
                   </div>
 
                   {/* Status da Atividade Atual / Inativo */}
-                  <div className="mt-1.5 flex items-center">
+                  <div className="mt-0.5 flex items-center">
                     {activeActivities[p.id] ? (
                       <div 
                         onClick={() => handleOpenDeal(activeActivities[p.id].dealId)}
                         className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 hover:border-emerald-400 transition-all max-w-full"
                         title="Clique para abrir detalhes da atividade em andamento no CRM"
                       >
-                        <div className="flex items-center gap-2 pl-2.5 pr-2 py-0.5 min-w-0">
+                        <div className="flex items-center gap-2 pl-2 pr-1.5 py-0.5 min-w-0">
                           <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
-                          <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[200px] sm:max-w-[320px] md:max-w-[420px]">
+                          <span className="font-mono text-[9px] sm:text-[10px] uppercase tracking-wider truncate max-w-[180px] sm:max-w-[300px] md:max-w-[400px]">
                             TRABALHANDO EM:{" "}
                             <span className="text-white font-black">
                               {activeActivities[p.id].title}
                             </span>
                           </span>
                         </div>
-                        <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2.5 py-0.5 text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
+                        <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2 py-0.5 text-[9px] sm:text-[10px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
                           {formatElapsedLive(activeActivities[p.id].startedAt, nowMs)}
                         </div>
                       </div>
                     ) : (
-                      <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
-                        <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
-                        <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
+                      <div className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/60 px-2 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-500 shrink-0" />
+                        <span className="text-[9px] sm:text-[10px] uppercase tracking-wider">
                           INATIVO NO MOMENTO
                         </span>
                       </div>
@@ -711,32 +841,32 @@ function UserList({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
                 <button
                   onClick={() => setSelectedUserForProductivity(p)}
-                  className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 border-emerald-500/30 flex items-center gap-1.5 hover:bg-emerald-500/10 cursor-pointer"
+                  className="btn-ghost-neon px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider text-emerald-400 border-emerald-500/30 flex items-center gap-1.5 hover:bg-emerald-500/10 cursor-pointer"
                   title={`Ver métricas de produtividade e horas de ${p.name}`}
                 >
-                  <Clock className="h-3.5 w-3.5" />
+                  <Clock className="h-3 w-3" />
                   <span>Produtividade</span>
                 </button>
 
                 <button
                   onClick={() => setSelectedUserToEdit(p)}
-                  className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-cyan-300 border-cyan-500/30 flex items-center gap-1.5 hover:bg-cyan-500/10 cursor-pointer"
+                  className="btn-ghost-neon px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider text-cyan-300 border-cyan-500/30 flex items-center gap-1.5 hover:bg-cyan-500/10 cursor-pointer"
                   title="Editar dados e perfil do usuário"
                 >
-                  <Edit2 className="h-3.5 w-3.5" />
+                  <Edit2 className="h-3 w-3" />
                   <span>Edição</span>
                 </button>
 
                 {!isCurrentUser && (
                   <button
                     onClick={() => handleDeleteUser(p.id, p.name)}
-                    className="p-2 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-500/30"
+                    className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-500/30"
                     title="Excluir Usuário"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>

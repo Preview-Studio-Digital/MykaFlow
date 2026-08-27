@@ -4,7 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { Clock, Briefcase, Calendar, Users, Percent, Hourglass, ArrowLeft, ArrowRight, Sparkles, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { getWorkdayProgress } from "@/lib/work-schedule";
+import {
+  getWorkdayProgress,
+  getWorkdaySessionOverlapSeconds,
+  getAutoCutoffInfo,
+  isBusinessWorkTime,
+} from "@/lib/work-schedule";
 
 interface DealTimeSession {
   id: string;
@@ -160,6 +165,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
   const navigate = useNavigate();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
+  const [adminUserIds, setAdminUserIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   
   const [selectedUserId, setSelectedUserId] = useState<string>(initialUserId || "");
@@ -229,6 +235,19 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         const { data: profilesData } = await supabase
           .from("profiles")
           .select("id, email, display_name");
+
+        // Fetch user roles para identificar administradores
+        const { data: rolesData } = await supabase
+          .from("user_roles")
+          .select("user_id, role");
+        
+        const adminSet = new Set<string>();
+        (rolesData || []).forEach(r => {
+          if (r.role === "admin") {
+            adminSet.add(r.user_id);
+          }
+        });
+        setAdminUserIds(adminSet);
         
         const profileMap = new Map<string, UserProfile>();
         (profilesData || []).forEach(p => {
@@ -326,21 +345,62 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
             const parsed = JSON.parse(activeMatch[1]);
             if (parsed.startedAt && parsed.userId) {
               const startMs = new Date(parsed.startedAt).getTime();
-              const elapsedSec = Math.max(0, Math.floor((currentTime - startMs) / 1000));
-              sessions.push({
-                id: `active-${deal.id}`,
-                deal_id: deal.id,
-                user_id: parsed.userId,
-                user_name: parsed.userName || "Usuário",
-                started_at: parsed.startedAt,
-                ended_at: null,
-                duration_seconds: elapsedSec,
-                dealTitle: deal.title,
-                reqNumber: dealReqNum,
-                isActive: true,
-                isInternal,
-                stage: deal.stage,
-              });
+              const cutoffInfo = getAutoCutoffInfo(parsed.startedAt, new Date(currentTime));
+              const schedule = isBusinessWorkTime(new Date(currentTime));
+              const isUserAdmin = adminUserIds.has(parsed.userId);
+
+              if (cutoffInfo.shouldCutoff && cutoffInfo.cutoffTimeIso) {
+                // Sessão atingiu o horário de corte: interrompe no horário exato de corte
+                const cutoffMs = new Date(cutoffInfo.cutoffTimeIso).getTime();
+                const sessionDurationSec = Math.max(0, Math.floor((cutoffMs - startMs) / 1000));
+                sessions.push({
+                  id: `active-cutoff-${deal.id}`,
+                  deal_id: deal.id,
+                  user_id: parsed.userId,
+                  user_name: parsed.userName || "Usuário",
+                  started_at: parsed.startedAt,
+                  ended_at: cutoffInfo.cutoffTimeIso,
+                  duration_seconds: sessionDurationSec,
+                  dealTitle: deal.title,
+                  reqNumber: dealReqNum,
+                  isActive: false, // Interrompido pelo corte!
+                  isInternal,
+                  stage: deal.stage,
+                });
+              } else if (!schedule.allowed && !isUserAdmin) {
+                // Fora do expediente: usuário não-admin não acumula horas fora do expediente
+                sessions.push({
+                  id: `active-blocked-${deal.id}`,
+                  deal_id: deal.id,
+                  user_id: parsed.userId,
+                  user_name: parsed.userName || "Usuário",
+                  started_at: parsed.startedAt,
+                  ended_at: parsed.startedAt,
+                  duration_seconds: 0,
+                  dealTitle: deal.title,
+                  reqNumber: dealReqNum,
+                  isActive: false,
+                  isInternal,
+                  stage: deal.stage,
+                });
+              } else {
+                // Sessão ativa válida (Admin fora do expediente que iniciou após o corte, ou qualquer usuário dentro do expediente)
+                const elapsedSec = Math.max(0, Math.floor((currentTime - startMs) / 1000));
+                sessions.push({
+                  id: `active-${deal.id}`,
+                  deal_id: deal.id,
+                  user_id: parsed.userId,
+                  user_name: parsed.userName || "Usuário",
+                  started_at: parsed.startedAt,
+                  ended_at: null,
+                  duration_seconds: elapsedSec,
+                  dealTitle: deal.title,
+                  reqNumber: dealReqNum,
+                  isActive: true,
+                  isInternal,
+                  stage: deal.stage,
+                });
+              }
             }
           }
         }
@@ -458,14 +518,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     targetUserIds.forEach((uid) => {
       let userElapsedSec = 0;
       let userExpectedSec = 0;
-      let userActiveSec = 0;
-
-      // Soma o tempo ativo desse usuário específico no período
-      filteredSessions
-        .filter((s) => s.user_id === uid)
-        .forEach((s) => {
-          userActiveSec += s.duration_seconds || 0;
-        });
+      let userInactiveSec = 0;
 
       uniqueDays.forEach((dateStr) => {
         const d = new Date(dateStr);
@@ -473,21 +526,35 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         const isFriday = dayOfWeek === 5;
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const dailyBaseSeconds = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+        const isToday = dateStr === todayStr;
 
         userExpectedSec += dailyBaseSeconds;
 
-        if (dateStr === todayStr) {
-          userElapsedSec += todayProgress.elapsedWorkdaySeconds;
-        } else {
-          userElapsedSec += dailyBaseSeconds;
-        }
+        const dayElapsedSec = isToday ? todayProgress.elapsedWorkdaySeconds : dailyBaseSeconds;
+        userElapsedSec += dayElapsedSec;
+
+        // Calcula o tempo ativo deste usuário especificamente dentro da grade de expediente deste dia
+        let dayWorkdayActiveSec = 0;
+        filteredSessions
+          .filter((s) => s.user_id === uid && new Date(s.started_at).toDateString() === dateStr)
+          .forEach((s) => {
+            const sessionEnd = s.ended_at || (s.isActive ? new Date(currentTime).toISOString() : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000).toISOString());
+            const overlap = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sessionEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined
+            );
+            dayWorkdayActiveSec += overlap;
+          });
+
+        const cappedDayActiveSec = Math.min(dayElapsedSec, dayWorkdayActiveSec);
+        const dayInactiveSec = Math.max(0, dayElapsedSec - cappedDayActiveSec);
+        userInactiveSec += dayInactiveSec;
       });
 
       totalElapsedWorkdaySeconds += userElapsedSec;
       totalExpectedWorkSeconds += userExpectedSec;
-
-      // O tempo inativo do usuário é o expediente decorrido dele menos o tempo que ele trabalhou
-      const userInactiveSec = Math.max(0, userElapsedSec - userActiveSec);
       totalInactiveSeconds += userInactiveSec;
     });
 

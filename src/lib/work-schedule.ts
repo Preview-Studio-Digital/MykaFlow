@@ -282,3 +282,54 @@ export function getWorkdayProgress(date: Date = new Date()): WorkdayProgressInfo
     remainingShiftSeconds,
   };
 }
+
+/**
+ * Calcula os segundos de uma sessão de trabalho que ocorreram estritamente dentro dos períodos
+ * oficiais de expediente (07:30-12:00 e 13:00-17:30/16:30) para um determinado dia.
+ * Isso garante que o tempo inativo nunca decaia (nunca diminua) ao trabalhar fora do expediente ou após as 17:30.
+ */
+export function getWorkdaySessionOverlapSeconds(
+  sessionStartInput: Date | string,
+  sessionEndInput: Date | string,
+  dayDate: Date,
+  maxUpToTime?: Date
+): number {
+  const day = dayDate.getDay();
+  // Finais de semana e feriados não possuem expediente oficial
+  if (day === 0 || day === 6 || isNationalHoliday(dayDate).isHoliday) {
+    return 0;
+  }
+
+  const limits = getWorkDayCutoffMinutes(dayDate);
+  const startOfDay = new Date(dayDate);
+  startOfDay.setHours(0, 0, 0, 0);
+
+  // Janela 1: Manhã (07:30 até 12:00)
+  const morningStart = new Date(startOfDay.getTime() + limits.startMinutes * 60 * 1000);
+  const morningEnd = new Date(startOfDay.getTime() + limits.lunchStartMinutes * 60 * 1000);
+
+  // Janela 2: Tarde (13:00 até 17:30 / 16:30)
+  const afternoonStart = new Date(startOfDay.getTime() + limits.lunchEndMinutes * 60 * 1000);
+  const afternoonEnd = new Date(startOfDay.getTime() + limits.endMinutes * 60 * 1000);
+
+  const sessionStart = new Date(sessionStartInput);
+  let sessionEnd = new Date(sessionEndInput);
+
+  if (maxUpToTime && sessionEnd.getTime() > maxUpToTime.getTime()) {
+    sessionEnd = maxUpToTime;
+  }
+
+  if (sessionEnd <= sessionStart) return 0;
+
+  // Overlap com a manhã
+  const mOverlapStart = Math.max(sessionStart.getTime(), morningStart.getTime());
+  const mOverlapEnd = Math.min(sessionEnd.getTime(), morningEnd.getTime());
+  const morningOverlapSec = Math.max(0, Math.floor((mOverlapEnd - mOverlapStart) / 1000));
+
+  // Overlap com a tarde
+  const aOverlapStart = Math.max(sessionStart.getTime(), afternoonStart.getTime());
+  const aOverlapEnd = Math.min(sessionEnd.getTime(), afternoonEnd.getTime());
+  const afternoonOverlapSec = Math.max(0, Math.floor((aOverlapEnd - aOverlapStart) / 1000));
+
+  return morningOverlapSec + afternoonOverlapSec;
+}

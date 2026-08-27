@@ -324,6 +324,10 @@ function getDealActiveWorker(deal: Deal | null): { userId: string; userName: str
       if (match && match[1]) {
         const parsed = JSON.parse(match[1]);
         if (parsed.userId && parsed.startedAt) {
+          const cutoff = getAutoCutoffInfo(parsed.startedAt, new Date());
+          if (cutoff.shouldCutoff) {
+            return null; // Sessão atingiu o horário de corte e foi encerrada
+          }
           return {
             userId: parsed.userId,
             userName: getFirstName(parsed.userName) || "RESPONSÁVEL",
@@ -359,7 +363,11 @@ function getDealTotalWorkSeconds(deal: Deal | null): number {
   let total = sessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
   const active = getDealActiveWorker(deal);
   if (active) {
-    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(active.startedAt).getTime()) / 1000));
+    const cutoff = getAutoCutoffInfo(active.startedAt, new Date());
+    const endMs = cutoff.shouldCutoff && cutoff.cutoffTimeIso
+      ? new Date(cutoff.cutoffTimeIso).getTime()
+      : Date.now();
+    const elapsed = Math.max(0, Math.floor((endMs - new Date(active.startedAt).getTime()) / 1000));
     total += elapsed;
   }
   return total;
@@ -387,6 +395,13 @@ function formatElapsedLive(startedAt: string, currentMs: number = Date.now()): s
   const sFormatted = String(s).padStart(2, "0");
   if (h > 0) return `${h}h ${mFormatted}m ${sFormatted}s`;
   return `${mFormatted}m ${sFormatted}s`;
+}
+
+// Helper para extrair duração estimada definida na criação da atividade
+function getDealEstimatedDuration(deal: Deal | null | undefined): string | null {
+  if (!deal?.notes || !deal.notes.includes("[ESTIMATED_DURATION:")) return null;
+  const match = deal.notes.match(/\[ESTIMATED_DURATION:(.*?)\]/);
+  return match ? match[1].trim() : null;
 }
 
 export interface Customer {
@@ -1138,6 +1153,72 @@ function FastNewDealNotesInput({ placeholder, onTextChange, resetTrigger }: Fast
   );
 }
 
+function LiveElapsedTimer({ startedAt }: { startedAt: string }) {
+  const [elapsed, setElapsed] = useState(() => formatElapsedLive(startedAt));
+
+  useEffect(() => {
+    setElapsed(formatElapsedLive(startedAt));
+    const timer = setInterval(() => {
+      setElapsed(formatElapsedLive(startedAt));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+
+  return <>{elapsed}</>;
+}
+
+interface FastMovingDealNotesInputProps {
+  initialValue?: string;
+  onTextChange: (text: string) => void;
+}
+
+function FastMovingDealNotesInput({ initialValue = "", onTextChange }: FastMovingDealNotesInputProps) {
+  const [localText, setLocalText] = useState(initialValue);
+
+  return (
+    <textarea
+      rows={3}
+      required
+      autoFocus
+      value={localText}
+      onChange={(e) => {
+        const val = e.target.value;
+        setLocalText(val);
+        onTextChange(val);
+      }}
+      placeholder="Descreva o que foi realizado/definido nesta etapa (esta mensagem será a nova Atividade Atual)..."
+      className="input-futuristic w-full rounded-xl p-3 text-xs outline-none resize-none leading-relaxed font-medium"
+    />
+  );
+}
+
+interface FastSubtaskNotesInputProps {
+  onTextChange: (text: string) => void;
+  resetTrigger?: any;
+}
+
+function FastSubtaskNotesInput({ onTextChange, resetTrigger }: FastSubtaskNotesInputProps) {
+  const [localText, setLocalText] = useState("");
+
+  useEffect(() => {
+    setLocalText("");
+    onTextChange("");
+  }, [resetTrigger]);
+
+  return (
+    <textarea
+      placeholder="Descreva detalhadamente todas as orientações, detalhes técnicos, prioridades ou recomendações para o responsável executar esta atividade vinculada..."
+      value={localText}
+      onChange={(e) => {
+        const val = e.target.value;
+        setLocalText(val);
+        onTextChange(val);
+      }}
+      className="input-futuristic w-full h-[200px] sm:h-[240px] rounded-xl p-4 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+    />
+  );
+}
+
 interface FastMentionReplyInputProps {
   targetId: string;
   deal: Deal;
@@ -1278,8 +1359,11 @@ function CrmDashboard() {
   const [newDealDeadline, setNewDealDeadline] = useState(
     new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0]
   );
+  const [newDealDuration, setNewDealDuration] = useState("");
   const [newDealNotes, setNewDealNotes] = useState("");
   const newDealNotesRef = useRef("");
+  const [newDealAttachedFile, setNewDealAttachedFile] = useState<File | null>(null);
+  const [isUploadingNewDealFile, setIsUploadingNewDealFile] = useState(false);
   const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState(false);
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
   const [inlineCompanyName, setInlineCompanyName] = useState("");
@@ -1296,13 +1380,6 @@ function CrmDashboard() {
   const [userSearchTerms, setUserSearchTerms] = useState<Record<string, string>>({});
   const [openSearchUserId, setOpenSearchUserId] = useState<string | null>(null);
   const [hoveredSubcolUser, setHoveredSubcolUser] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState<number>(Date.now());
-
-  // Atualização contínua a cada segundo para contagem de tempo ao vivo
-  useEffect(() => {
-    const timer = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Fechar barra de pesquisa e menu de visão do quadro ao clicar fora
   useEffect(() => {
@@ -1411,6 +1488,7 @@ function CrmDashboard() {
   const [subtaskAssignedTo, setSubtaskAssignedTo] = useState("");
   const [subtaskDeadline, setSubtaskDeadline] = useState("");
   const [subtaskNotes, setSubtaskNotes] = useState("");
+  const subtaskNotesRef = useRef("");
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
   const [isUploadingQuoteFile, setIsUploadingQuoteFile] = useState(false);
@@ -1507,51 +1585,43 @@ function CrmDashboard() {
     return getUnseenRepliesCount(deal) > 0;
   };
 
-  // State para Pulso do Card "TRABALHANDO" (Pulsando constantemente de forma suave e contínua)
-  const [inProgressAlternation, setInProgressAlternation] = useState(false);
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    
-    const scheduleNext = (shouldShow: boolean) => {
-      setInProgressAlternation(shouldShow);
-      timeoutId = setTimeout(() => {
-        scheduleNext(!shouldShow);
-      }, 1500);
-    };
-
-    scheduleNext(true);
-    return () => clearTimeout(timeoutId);
-  }, []);
-
-  // Monitoramento Automático de Horário (Auto-parada forçada às 12:00 e às 17:30 para TODOS, inclusive ADM)
+  // Monitoramento Automático de Horário (Auto-parada forçada às 12:00 e às 17:30 para TODOS)
   useEffect(() => {
     const checkScheduleAutoStop = async () => {
       if (!user) return;
       const now = new Date();
 
       for (const deal of deals) {
-        const activeWorker = getDealActiveWorker(deal);
-        if (activeWorker && activeWorker.userId === user.id) {
-          const cutoffInfo = getAutoCutoffInfo(activeWorker.startedAt, now);
+        if (!deal.notes || !deal.notes.includes("[WORK_ACTIVE:")) continue;
+        const match = deal.notes.match(/\[WORK_ACTIVE:(.*?)\]/);
+        if (!match || !match[1]) continue;
+
+        try {
+          const parsed = JSON.parse(match[1]);
+          if (!parsed.userId || !parsed.startedAt) continue;
+
+          const cutoffInfo = getAutoCutoffInfo(parsed.startedAt, now);
           const schedule = isBusinessWorkTime(now);
-          const shouldStop = cutoffInfo.shouldCutoff || (!isAdmin && !schedule.allowed);
+          const isTargetUserSelf = parsed.userId === user.id;
+          const isTargetAdmin = isTargetUserSelf ? isAdmin : false;
+          const shouldStop = cutoffInfo.shouldCutoff || (!isTargetAdmin && !schedule.allowed);
 
           if (shouldStop) {
             const nowIso = new Date().toISOString();
             const cutoffTimeIso = cutoffInfo.cutoffTimeIso || nowIso;
-            const startTime = new Date(activeWorker.startedAt).getTime();
+            const startTime = new Date(parsed.startedAt).getTime();
             const endTime = new Date(cutoffTimeIso).getTime();
             const durationSeconds = Math.max(1, Math.floor((endTime - startTime) / 1000));
             const formatted = formatDurationHoursMinutes(durationSeconds);
             const stopReason = cutoffInfo.reason || "auto_off_hours";
-            const userName = user.user_metadata?.display_name || user.user_metadata?.full_name || user.email || "Usuário";
+            const userName = parsed.userName || (isTargetUserSelf ? (user.user_metadata?.display_name || user.email || "Usuário") : "Usuário");
 
             const session: DealTimeSession = {
               id: crypto.randomUUID(),
               deal_id: deal.id,
-              user_id: user.id,
+              user_id: parsed.userId,
               user_name: userName,
-              started_at: activeWorker.startedAt,
+              started_at: parsed.startedAt,
               ended_at: cutoffTimeIso,
               duration_seconds: durationSeconds,
               stop_reason: stopReason,
@@ -1561,9 +1631,9 @@ function CrmDashboard() {
             recordActivitySessionAudit({
               dealId: deal.id,
               dealTitle: deal.title,
-              userId: user.id,
+              userId: parsed.userId,
               userName,
-              startedAtIso: activeWorker.startedAt,
+              startedAtIso: parsed.startedAt,
               endedAtIso: cutoffTimeIso,
               durationSeconds,
               durationFormatted: formatted,
@@ -1578,19 +1648,23 @@ function CrmDashboard() {
             try {
               await supabase.from("crm_deals").update({ notes: updatedNotes, updated_at: nowIso }).eq("id", deal.id);
               setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes, updated_at: nowIso } : d)));
-              setInterruptedActivityTitle(deal.title);
-              setOffHoursInfo(schedule);
-              setShowOffHoursPrompt(true);
-              toast.warning(`Atividade interrompida pelo horário de corte (${cutoffInfo.reasonLabel || schedule.reason || "Fora do expediente"}).`, { duration: 6000 });
+              
+              if (isTargetUserSelf) {
+                setInterruptedActivityTitle(deal.title);
+                setOffHoursInfo(schedule);
+                setShowOffHoursPrompt(true);
+                toast.warning(`Atividade interrompida pelo horário de corte (${cutoffInfo.reasonLabel || schedule.reason || "Fora do expediente"}).`, { duration: 6000 });
+              }
             } catch (e) {
               console.warn("Erro ao registrar parada automática:", e);
             }
           }
-        }
+        } catch (e) {}
       }
     };
 
-    const interval = setInterval(checkScheduleAutoStop, 10000); // Checa a cada 10 segundos
+    checkScheduleAutoStop();
+    const interval = setInterval(checkScheduleAutoStop, 5000); // Checa a cada 5 segundos
     return () => clearInterval(interval);
   }, [user, deals, isAdmin]);
 
@@ -1802,12 +1876,15 @@ function CrmDashboard() {
     updatedNotes: string;
     reassignTo: string;
   } | null>(null);
+  const movingDealUpdateTextRef = useRef("");
+  const [movingDealNewDeadline, setMovingDealNewDeadline] = useState("");
   const [isSavingMove, setIsSavingMove] = useState(false);
 
   // Modal Fechar Contrato / Integração Fluxo de Caixa
   const [contractModalDeal, setContractModalDeal] = useState<Deal | null>(null);
   const [contractInstallments, setContractInstallments] = useState(1);
   const [contractStartDate, setContractStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [contractDeliveryDeadline, setContractDeliveryDeadline] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Modal / Gaveta de Requisições Internas Arquivadas
@@ -2144,6 +2221,9 @@ function CrmDashboard() {
     setNewDealCustomerId("");
     setNewDealAssignedTo("");
     setNewDealNotes("");
+    setNewDealDuration("");
+    setNewDealAttachedFile(null);
+    setIsUploadingNewDealFile(false);
     setIsNewCustomerModalOpen(false);
     setInlineCompanyName("");
     setInlineCustomerDoc("");
@@ -2277,6 +2357,7 @@ function CrmDashboard() {
       .replace(/\[MENTION:.*?\]\s*/g, "")
       .replace(/\[MENTION_REPLY:.*?\]\s*/g, "")
       .replace(/\[RESPONSIBLE_LAST_SEEN:.*?\]\s*/g, "")
+      .replace(/\[ESTIMATED_DURATION:.*?\]\s*/g, "")
       .trim();
 
     if (!clean && completionText) {
@@ -2436,6 +2517,7 @@ function CrmDashboard() {
       .replace(/\[MENTION:.*?\]\s*/g, "")
       .replace(/\[MENTION_REPLY:.*?\]\s*/g, "")
       .replace(/\[RESPONSIBLE_LAST_SEEN:.*?\]\s*/g, "")
+      .replace(/\[ESTIMATED_DURATION:.*?\]\s*/g, "")
       .trim();
 
     if (!sanitized) return null;
@@ -3160,7 +3242,8 @@ function CrmDashboard() {
         selectedDealForHistory.stage === "proposal" ? "negotiation" : selectedDealForHistory.stage
       ) as Deal["stage"];
 
-      const subtaskNotesFormatted = subtaskNotes.trim() ? `[${creatorName}]: ${subtaskNotes.trim()}${subtaskNotes.trim().endsWith(".") ? "" : "."}` : "";
+      const rawSubNotes = (subtaskNotesRef.current || subtaskNotes).trim();
+      const subtaskNotesFormatted = rawSubNotes ? `[${creatorName}]: ${rawSubNotes}${rawSubNotes.endsWith(".") ? "" : "."}` : "";
 
       const subtaskPayload = {
         title: `[TAREFA] ${subtaskTitle.trim().toUpperCase()}`,
@@ -3387,16 +3470,23 @@ function CrmDashboard() {
     }
 
     const activeWorker = getDealActiveWorker(deal);
-    const isCurrentlyWorkingThisDeal = Boolean(activeWorker && (activeWorker.userId === user.id || isAdmin));
 
-    // Se já está trabalhando nesta atividade (ou o Administrador está parando), executa a PARADA
+    // Se outro usuário já estiver trabalhando nesta atividade, ninguém (nem o Administrador) pode interrompê-lo
+    if (activeWorker && activeWorker.userId !== user.id) {
+      toast.error(`${activeWorker.userName || "Outro colaborador"} já está trabalhando nesta atividade no momento.`);
+      return;
+    }
+
+    const isCurrentlyWorkingThisDeal = Boolean(activeWorker && activeWorker.userId === user.id);
+
+    // Se o próprio usuário logado está trabalhando nesta atividade, executa a PARADA
     if (isCurrentlyWorkingThisDeal && activeWorker) {
       const nowIso = new Date().toISOString();
       const startTime = new Date(activeWorker.startedAt).getTime();
       const durationSeconds = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
       const formattedDuration = formatDurationHoursMinutes(durationSeconds);
-      const workerUserId = activeWorker.userId || user.id;
-      const workerUserName = activeWorker.userName || getFirstName(user.user_metadata?.display_name || user.email || "Usuário");
+      const workerUserId = user.id;
+      const workerUserName = getFirstName(user.user_metadata?.display_name || user.email || "Usuário");
 
       const session: DealTimeSession = {
         id: crypto.randomUUID(),
@@ -3420,7 +3510,6 @@ function CrmDashboard() {
         durationSeconds,
         durationFormatted: formattedDuration,
         closeType: "manual",
-        notes: user.id !== workerUserId ? `Encerrado pelo Administrador (${user.email})` : undefined,
       });
 
       const sessionTag = `[WORK_LOG:${JSON.stringify(session)}]`;
@@ -3444,6 +3533,7 @@ function CrmDashboard() {
 
         setSelectedDealForHistory(updatedDeal);
         setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
+        toast.info(`Atividade pausada (${formattedDuration} trabalhados).`);
       } catch (err: any) {
         toast.error("Erro ao pausar atividade: " + (err.message || "Tente novamente"));
       }
@@ -4235,8 +4325,14 @@ function CrmDashboard() {
     if (dealTitleWords.length > 6) {
       return toast.error(`O título deve conter no máximo 6 palavras (atualmente com ${dealTitleWords.length} palavras). Detalhe as informações no campo de instruções abaixo.`);
     }
-    const notesToSave = (newDealNotesRef.current || newDealNotes).trim();
-    if (!notesToSave) return toast.error("As instruções da atividade são obrigatórias");
+    const rawNotes = (newDealNotesRef.current || newDealNotes).trim();
+    if (!rawNotes) return toast.error("As instruções da atividade são obrigatórias");
+
+    const durationTag = newDealDuration.trim()
+      ? `[ESTIMATED_DURATION:${newDealDuration.trim().toUpperCase()}]`
+      : "";
+
+    const notesToSave = [durationTag, rawNotes].filter(Boolean).join("\n").trim();
 
     const typePrefix =
       activeReqModal === "interna"
@@ -4270,13 +4366,103 @@ function CrmDashboard() {
 
       if (error) throw error;
 
+      // Upload do Documento Anexado na criação (se houver)
+      let uploadedFileUrl = "";
+      let uploadedFileName = "";
+      let finalNotes = notesToSave;
+
+      if (newDealAttachedFile) {
+        setIsUploadingNewDealFile(true);
+        try {
+          const { file: optimizedBlob, fileName } = await compressImageForUpload(newDealAttachedFile);
+          const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const path = `quotes/${createdData.id}/${Date.now()}_${sanitizedName}`;
+
+          try {
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from("crm-attachments")
+              .upload(path, optimizedBlob, {
+                upsert: true,
+                contentType: optimizedBlob.type || (fileName.endsWith(".pdf") ? "application/pdf" : "image/webp"),
+              });
+
+            if (!uploadError && uploadData) {
+              const { data: urlData } = supabase.storage.from("crm-attachments").getPublicUrl(path);
+              uploadedFileUrl = urlData.publicUrl;
+            } else if (uploadError?.message?.toLowerCase().includes("not found")) {
+              await supabase.storage.createBucket("crm-attachments", { public: true });
+              const { data: retryData, error: retryErr } = await supabase.storage
+                .from("crm-attachments")
+                .upload(path, optimizedBlob, { upsert: true, contentType: optimizedBlob.type });
+              if (!retryErr && retryData) {
+                const { data: urlData } = supabase.storage.from("crm-attachments").getPublicUrl(path);
+                uploadedFileUrl = urlData.publicUrl;
+              }
+            }
+          } catch (storageErr) {
+            console.warn("Storage upload warning:", storageErr);
+          }
+
+          if (!uploadedFileUrl) {
+            uploadedFileUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = (err) => reject(err);
+              reader.readAsDataURL(optimizedBlob);
+            });
+          }
+
+          uploadedFileName = fileName;
+          const nowIso = new Date().toISOString();
+
+          // Extração inteligente de dados se for proposta / orçamento
+          let extractedQuoteData: ExtractedQuoteData | null = null;
+          try {
+            extractedQuoteData = await extractQuoteDataFromDocument(optimizedBlob, newDealAttachedFile.type || "application/pdf");
+          } catch (extErr) {}
+
+          const quoteTag = `[QUOTE_FILE:${JSON.stringify({ url: uploadedFileUrl, name: fileName, uploadedAt: nowIso, quoteData: extractedQuoteData })}]`;
+          const quoteDataTag = extractedQuoteData ? `[QUOTE_DATA:${JSON.stringify(extractedQuoteData)}]` : "";
+
+          finalNotes = [quoteTag, quoteDataTag, notesToSave].filter(Boolean).join("\n").trim();
+
+          const updatePayload: any = {
+            quote_file_url: uploadedFileUrl,
+            quote_file_name: fileName,
+            quote_file_uploaded_at: nowIso,
+            notes: finalNotes,
+          };
+
+          if (extractedQuoteData?.totalAmount && extractedQuoteData.totalAmount > 0) {
+            updatePayload.value = extractedQuoteData.totalAmount;
+          }
+
+          await supabase
+            .from("crm_deals")
+            .update(updatePayload)
+            .eq("id", createdData.id);
+
+          createdData.quote_file_url = uploadedFileUrl;
+          createdData.quote_file_name = fileName;
+          createdData.notes = finalNotes;
+          if (extractedQuoteData?.totalAmount) {
+            createdData.value = extractedQuoteData.totalAmount;
+          }
+        } catch (uploadErr) {
+          console.warn("Erro ao fazer upload do anexo na criação:", uploadErr);
+        } finally {
+          setIsUploadingNewDealFile(false);
+        }
+      }
+
       // Cria o primeiro registro no Histórico / Linha do Tempo
       try {
+        const docMsg = uploadedFileName ? ` | Documento Anexado: ${uploadedFileName}` : "";
         await supabase.from("crm_deal_history").insert({
           deal_id: createdData.id,
           user_id: user?.id,
           user_name: user?.user_metadata?.display_name || user?.email || "Usuário",
-          description: `Atividade criada e direcionada para ${assignedName}. Instruções: ${notesToSave}`,
+          description: `Atividade criada e direcionada para ${assignedName}.${docMsg} Instruções: ${notesToSave}`,
         });
       } catch (hErr) {
         console.warn("Aviso ao registrar histórico inicial:", hErr);
@@ -4326,9 +4512,13 @@ function CrmDashboard() {
         },
       ]);
 
+      setNewDealAttachedFile(null);
+      setNewDealDuration("");
       setActiveReqModal(null);
     } catch (err: any) {
       toast.error("Erro ao criar requisição: " + (err.message || "Tente novamente"));
+    } finally {
+      setIsUploadingNewDealFile(false);
     }
   }
 
@@ -4386,8 +4576,20 @@ function CrmDashboard() {
       }
     }
 
+    // Se for avançar para etapa 'won' (Contratos), abre diretamente o modal de fechamento de contrato
+    if (newStage === "won") {
+      setSelectedDealForHistory(null);
+      setContractDeliveryDeadline("");
+      setContractStartDate(new Date().toISOString().split("T")[0]);
+      setContractInstallments(1);
+      setContractModalDeal(deal);
+      return;
+    }
+
     // Fecha qualquer modal de histórico aberto antes de abrir o modal de movimentação
     setSelectedDealForHistory(null);
+    movingDealUpdateTextRef.current = "";
+    setMovingDealNewDeadline("");
 
     setMovingDealState({
       deal,
@@ -4469,9 +4671,10 @@ function CrmDashboard() {
     e.preventDefault();
     if (!movingDealState) return;
 
-    const { deal, targetStage, updateText, updatedNotes, reassignTo } = movingDealState;
+    const { deal, targetStage, updatedNotes, reassignTo } = movingDealState;
+    const updateText = (movingDealUpdateTextRef.current || movingDealState.updateText || "").trim();
 
-    if (!updateText.trim()) {
+    if (!updateText) {
       return toast.error("É obrigatório descrever a atualização das informações para mover a requisição.");
     }
 
@@ -4512,12 +4715,16 @@ function CrmDashboard() {
       const metaTags = [existingQuoteTag, existingParentTag].filter(Boolean).join("\n");
       const latestActivityNotes = metaTags ? `${metaTags}\n${cleanUpdate}`.trim() : cleanUpdate;
 
+      // Prazo é zerado ao mudar de coluna, a menos que um novo prazo tenha sido estipulado na atualização
+      const targetDeadline = movingDealNewDeadline ? movingDealNewDeadline : null;
+
       const { error } = await supabase
         .from("crm_deals")
         .update({
           stage: targetStage,
           notes: latestActivityNotes,
           assigned_user_id: targetAssignedUserId,
+          expected_close_date: targetDeadline,
           updated_at: nowIso,
         })
         .eq("id", deal.id);
@@ -4529,6 +4736,11 @@ function CrmDashboard() {
         desc += ` (Devolvido ao criador ${newAssignedName})`;
       } else if (isReassigned) {
         desc += ` (Encaminhado para ${newAssignedName})`;
+      }
+      if (deal.expected_close_date && !targetDeadline) {
+        desc += ` (Prazo anterior encerrado)`;
+      } else if (targetDeadline && targetDeadline !== deal.expected_close_date) {
+        desc += ` (Novo prazo estipulado: ${targetDeadline.split("-").reverse().join("/")})`;
       }
 
       await registerHistoryEntry(
@@ -4574,6 +4786,7 @@ function CrmDashboard() {
               notes: latestActivityNotes || d.notes,
               assigned_user_id: targetAssignedUserId,
               assigned_user_name: isReassigned ? newAssignedName : d.assigned_user_name,
+              expected_close_date: targetDeadline,
               updated_at: nowIso,
             };
           }
@@ -4605,6 +4818,7 @@ function CrmDashboard() {
         return nextOrders;
       });
 
+      setMovingDealNewDeadline("");
       setMovingDealState(null);
       toast.success(`Requisição atualizada e movida para "${newStageTitle}"!`);
     } catch (err: any) {
@@ -4778,7 +4992,16 @@ function CrmDashboard() {
       const installmentVal = totalVal / installmentsCount;
       const nowIso = new Date().toISOString();
 
-      await supabase.from("crm_deals").update({ stage: "won", updated_at: nowIso }).eq("id", deal.id);
+      const targetContractDeadline = contractDeliveryDeadline ? contractDeliveryDeadline : null;
+
+      await supabase
+        .from("crm_deals")
+        .update({
+          stage: "won",
+          expected_close_date: targetContractDeadline,
+          updated_at: nowIso,
+        })
+        .eq("id", deal.id);
 
       await registerHistoryEntry(
         deal.id,
@@ -4793,6 +5016,7 @@ function CrmDashboard() {
           customer_id: deal.customer_id,
           total_value: totalVal,
           start_date: contractStartDate,
+          end_date: targetContractDeadline || null,
           installments_count: installmentsCount,
           billing_type: installmentsCount > 1 ? "installments" : "single",
           status: "active",
@@ -4839,10 +5063,14 @@ function CrmDashboard() {
       }
 
       const oldStageTitle = STAGES.find((s) => s.id === deal.stage)?.title || deal.stage;
+      const contractDeadlineDesc = targetContractDeadline
+        ? ` Prazo do Contrato: ${targetContractDeadline.split("-").reverse().join("/")}.`
+        : ` (Prazo de negociação encerrado).`;
+
       await registerHistoryEntry(
         deal.id,
         "status_changed",
-        `🎉 Contrato Fechado! Movido de "${oldStageTitle}" para "CONTRATOS" por ${user?.user_metadata?.display_name || user?.email}.`,
+        `🎉 Contrato Fechado! Movido de "${oldStageTitle}" para "CONTRATOS" por ${user?.user_metadata?.display_name || user?.email}.${contractDeadlineDesc}`,
         oldStageTitle,
         "CONTRATOS"
       );
@@ -4850,7 +5078,19 @@ function CrmDashboard() {
       toast.success(
         `🎉 Contrato Fechado! Lançado ${installmentsCount}x de ${fmtCurrency(installmentVal)} no Fluxo de Caixa.`
       );
-      setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, stage: "won", updated_at: nowIso } : d)));
+      setDeals((prev) =>
+        prev.map((d) =>
+          d.id === deal.id
+            ? {
+                ...d,
+                stage: "won",
+                expected_close_date: targetContractDeadline,
+                updated_at: nowIso,
+              }
+            : d
+        )
+      );
+      setContractDeliveryDeadline("");
       setContractModalDeal(null);
     } catch (err: any) {
       toast.error("Erro na integração: " + err.message);
@@ -5273,7 +5513,7 @@ function CrmDashboard() {
                           </span>
                         </div>
                         <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2.5 py-0.5 text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
-                          {formatElapsedLive(activeWorker.startedAt, nowMs)}
+                          <LiveElapsedTimer startedAt={activeWorker.startedAt} />
                         </div>
                       </div>
                     ) : isAll ? (
@@ -5764,20 +6004,11 @@ function CrmDashboard() {
                   
                   if (!activeWorker && !isExpiredTask) return null;
 
-                  // Se está em andamento -> Modo exclusivo "working" (NUNCA mostra "VENCIDA")
-                  // Se está vencida e não está em andamento -> Modo exclusivo "expired" (NUNCA mostra "TRABALHANDO")
-                  const mode: "working" | "expired" = activeWorker ? "working" : "expired";
-
-                  // Ciclo A (inProgressAlternation === true) -> pulsa apenas os cards em ANDAMENTO ("TRABALHANDO")
-                  // Ciclo B (inProgressAlternation === false) -> pulsa apenas os cards VENCIDOS ("VENCIDA")
-                  const isVisible = mode === "working" ? inProgressAlternation : !inProgressAlternation;
-                  const isWorking = mode === "working";
+                  const isWorking = Boolean(activeWorker);
 
                   return (
                     <div
-                      className={`absolute inset-0 rounded-xl bg-slate-950/60 backdrop-blur-[2px] p-3 flex flex-col items-center justify-center text-center z-20 pointer-events-none transition-all duration-[1500ms] ease-in-out group-hover:opacity-0 ${
-                        isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
-                      }`}
+                      className="absolute inset-0 rounded-xl bg-slate-950/70 backdrop-blur-[2px] p-3 flex flex-col items-center justify-center text-center z-20 pointer-events-none transition-opacity duration-300 animate-pulse group-hover:opacity-0"
                     >
                       {/* Linha 1: TRABALHANDO (azul/ciano) ou VENCIDA (vermelho vivo) */}
                       <span
@@ -6916,11 +7147,31 @@ function CrmDashboard() {
                   if (isPending || isArchived || isCompleted) return <div className="w-[105px] shrink-0" />;
 
                   const activeWorker = getDealActiveWorker(selectedDealForHistory);
-                  const isWorking = Boolean(activeWorker && (activeWorker.userId === user?.id || isAdmin));
-                  const isAssigned = isAdmin || selectedDealForHistory.assigned_user_id === user?.id || isWorking;
-                  if (!isAssigned) return <div className="w-[105px] shrink-0" />;
 
-                  const isOtherUserWorking = Boolean(activeWorker && activeWorker.userId !== user?.id);
+                  // Se outro colaborador está executando a atividade: exibe badge informativo (ninguém pode interromper a atividade de outro usuário)
+                  if (activeWorker && activeWorker.userId !== user?.id) {
+                    return (
+                      <div
+                        className="w-[105px] shrink-0 rounded-2xl flex flex-col items-center justify-center p-2.5 border border-amber-500/40 bg-amber-500/10 text-amber-300 text-center select-none shadow-[0_0_15px_rgba(245,158,11,0.15)]"
+                        title={`Em andamento por ${activeWorker.userName || "outro colaborador"}`}
+                      >
+                        <div className="relative flex items-center justify-center mb-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-ping absolute" />
+                          <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
+                        </div>
+                        <span className="font-mono text-[9px] font-black uppercase tracking-wider leading-tight text-amber-200 truncate max-w-full">
+                          {activeWorker.userName || "Colaborador"}
+                        </span>
+                        <span className="font-mono text-[8px] font-extrabold uppercase tracking-widest text-amber-400/90 mt-0.5">
+                          EM EXECUÇÃO
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  const isWorking = Boolean(activeWorker && activeWorker.userId === user?.id);
+                  const isAssigned = isAdmin || selectedDealForHistory.assigned_user_id === user?.id;
+                  if (!isWorking && !isAssigned) return <div className="w-[105px] shrink-0" />;
 
                   return (
                     <button
@@ -6933,9 +7184,7 @@ function CrmDashboard() {
                       }`}
                       title={
                         isWorking
-                          ? isOtherUserWorking
-                            ? `Pausar trabalho de ${activeWorker?.userName || "colaborador"}`
-                            : "Clique para pausar o trabalho nesta atividade"
+                          ? "Clique para pausar o seu trabalho nesta atividade"
                           : "Clique para iniciar o trabalho nesta atividade"
                       }
                     >
@@ -7155,35 +7404,63 @@ function CrmDashboard() {
                     </p>
                   </div>
 
-                  {/* LINHA 4 - PRAZO */}
-                  {hasModalDeadline && (
-                    <div className="flex items-center justify-center gap-2 mt-1">
-                      {modalStyle.indicatorBadge && (
-                        <span
-                          title={modalStyle.hoverText}
-                          className={`font-mono text-[9px] font-black px-2 py-0.5 rounded border flex items-center justify-center shadow-sm tracking-tight shrink-0 ${modalStyle.indicatorBadgeClass}`}
-                        >
-                          {modalStyle.indicatorBadge}
-                        </span>
-                      )}
-                      <p className={`font-mono text-xs font-bold ${modalStyle.colorClass}`}>
-                        {formatDeadlineWithWeekday(selectedDealForHistory.expected_close_date)}
-                      </p>
-                    </div>
-                  )}
+                  {/* LINHA 4 - PRAZO E DURAÇÃO */}
+                  <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
+                    {hasModalDeadline && (
+                      <div className="flex items-center gap-2">
+                        {modalStyle.indicatorBadge && (
+                          <span
+                            title={modalStyle.hoverText}
+                            className={`font-mono text-[9px] font-black px-2 py-0.5 rounded border flex items-center justify-center shadow-sm tracking-tight shrink-0 ${modalStyle.indicatorBadgeClass}`}
+                          >
+                            {modalStyle.indicatorBadge}
+                          </span>
+                        )}
+                        <p className={`font-mono text-xs font-bold ${modalStyle.colorClass}`}>
+                          {formatDeadlineWithWeekday(selectedDealForHistory.expected_close_date)}
+                        </p>
+                      </div>
+                    )}
+                    {(() => {
+                      const estDuration = getDealEstimatedDuration(selectedDealForHistory);
+                      if (!estDuration) return null;
+                      return (
+                        <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-300 font-mono text-[10px] font-bold" title="Duração estimada para a atividade">
+                          <Clock className="h-3 w-3 text-sky-400" />
+                          <span>DURAÇÃO: {estDuration}</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
 
-                {/* Botão Fechar no Canto Superior Direito */}
-                <div className="w-[105px] shrink-0 flex items-start justify-end">
+                {/* Ações no Canto Superior Direito: Fechar e Excluir (Apenas Administrador) */}
+                <div className="w-[105px] shrink-0 flex flex-col items-end gap-2.5">
+                  {/* Botão Fechar (mesma fonte e tamanho do botão Atualizar) */}
                   <button
                     type="button"
                     onClick={handleCloseSelectedDealModal}
-                    className="btn-ghost-neon px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm border border-white/10"
+                    className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm border border-white/20 w-full"
                     title="Fechar detalhes da atividade"
                   >
-                    <X className="h-4 w-4" />
-                    <span className="text-[10px] font-black uppercase tracking-wider font-mono">Fechar</span>
+                    <X className="h-4 w-4 text-slate-300" />
+                    <span>Fechar</span>
                   </button>
+
+                  {/* Botão Excluir (Apenas Administrador) - Abaixo de Fechar, totalmente na cor vermelha */}
+                  {role === "admin" && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDeal(selectedDealForHistory)}
+                      disabled={isDeletingDeal}
+                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-500 hover:text-white border-2 border-rose-500 hover:border-rose-400 bg-rose-500/15 hover:bg-rose-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(244,63,94,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.45)] w-full"
+                      style={{ color: "#f43f5e", borderColor: "#f43f5e" }}
+                      title="Excluir permanentemente esta atividade (Administrador)"
+                    >
+                      <Trash2 className="h-4 w-4 text-rose-500" style={{ color: "#f43f5e" }} />
+                      <span className="font-black" style={{ color: "#f43f5e" }}>Excluir</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -7966,121 +8243,88 @@ function CrmDashboard() {
                             />
 
                             {/* Botões de Ação */}
-                            <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
-                              {/* Botão Excluir à Esquerda (Apenas Administrador) */}
-                              <div>
-                                {role === "admin" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteDeal(selectedDealForHistory)}
-                                    disabled={isDeletingDeal}
-                                    className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer transition-all hover:scale-105"
-                                    title="Excluir permanentemente esta atividade (Administrador)"
-                                  >
-                                    <Trash2 className="h-4 w-4 text-rose-400" />
-                                    <span>Excluir</span>
-                                  </button>
-                                )}
-                              </div>
+                            <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
+                              {/* Ações Especiais: Concluir (se vinculada), Desarquivar ou Arquivar (em vermelho) e Atualizar */}
+                              {(() => {
+                                const parentInfo = getParentDealInfo(selectedDealForHistory);
+                                const isLinkedSubtask = Boolean(parentInfo);
 
-                              {/* Ações da Direita: Concluir, Desarquivar ou Arquivar e Atualizar */}
-                              <div className="flex flex-wrap items-center justify-end gap-2">
-                                {/* Ações Especiais: Concluir (se vinculada), Desarquivar ou Arquivar (em vermelho) e Atualizar */}
-                                {(() => {
-                                  const parentInfo = getParentDealInfo(selectedDealForHistory);
-                                  const isLinkedSubtask = Boolean(parentInfo);
+                                if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCompleteSubtask(selectedDealForHistory)}
+                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                      title="Concluir e fechar esta vinculada"
+                                    >
+                                      <CheckCircle2 className="h-4 w-4 text-rose-400" />
+                                      <span>Concluir</span>
+                                    </button>
+                                  );
+                                }
 
-                                  if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
-                                    return (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCompleteSubtask(selectedDealForHistory)}
-                                        className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                        title="Concluir e fechar esta vinculada"
-                                      >
-                                        <CheckCircle2 className="h-4 w-4 text-rose-400" />
-                                        <span>Concluir</span>
-                                      </button>
-                                    );
-                                  }
+                                const originStage =
+                                  selectedDealForHistory.stage === "archived"
+                                    ? getArchivedOriginStage(selectedDealForHistory)
+                                    : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
 
-                                  const originStage =
-                                    selectedDealForHistory.stage === "archived"
-                                      ? getArchivedOriginStage(selectedDealForHistory)
-                                      : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
+                                const isArchivableStage =
+                                  originStage === "lead" ||
+                                  ((originStage === "completed" || originStage === "lost") && isAdmin);
 
-                                  const isArchivableStage =
-                                    originStage === "lead" ||
-                                    ((originStage === "completed" || originStage === "lost") && isAdmin);
+                                if (!isLinkedSubtask && isArchivableStage) {
+                                  return selectedDealForHistory.stage === "archived" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
+                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                      title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
+                                    >
+                                      <ArchiveRestore className="h-4 w-4 text-emerald-400" />
+                                      <span>Desarquivar</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleArchiveDeal(selectedDealForHistory)}
+                                      className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-300 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105"
+                                      style={{ borderColor: "#ef4444", color: "#ef4444" }}
+                                      title="Arquivar esta atividade totalmente finalizada"
+                                    >
+                                      <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
+                                      <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
+                                    </button>
+                                  );
+                                }
 
-                                  if (!isLinkedSubtask && isArchivableStage) {
-                                    return selectedDealForHistory.stage === "archived" ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
-                                        className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                        title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
-                                      >
-                                        <ArchiveRestore className="h-4 w-4 text-emerald-400" />
-                                        <span>Desarquivar</span>
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleArchiveDeal(selectedDealForHistory)}
-                                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-300 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105"
-                                        style={{ borderColor: "#ef4444", color: "#ef4444" }}
-                                        title="Arquivar esta atividade totalmente finalizada"
-                                      >
-                                        <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
-                                        <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
-                                      </button>
-                                    );
-                                  }
+                                return null;
+                              })()}
 
-                                  return null;
-                                })()}
-
-                                <button
-                                  type="submit"
-                                  disabled={isSavingUpdate}
-                                  className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 border border-sky-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                >
-                                  <Save className="h-4 w-4 text-sky-400" />
-                                  <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
-                                </button>
-                              </div>
+                              <button
+                                type="submit"
+                                disabled={isSavingUpdate}
+                                className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 border border-sky-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                              >
+                                <Save className="h-4 w-4 text-sky-400" />
+                                <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
+                              </button>
                             </div>
                           </form>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3 shrink-0">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
-                            <Lock className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <p className="font-bold uppercase tracking-wider text-[11px] text-amber-300">
-                              Modo de Apenas Leitura
-                            </p>
-                            <p className="text-white/80 mt-0.5 leading-relaxed">
-                              Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações.
-                            </p>
-                          </div>
+                      <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center gap-3 shrink-0">
+                        <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+                          <Lock className="h-4 w-4" />
                         </div>
-                        {role === "admin" && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteDeal(selectedDealForHistory)}
-                            disabled={isDeletingDeal}
-                            className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer transition-all shrink-0 hover:scale-105"
-                            title="Excluir permanentemente esta atividade (Administrador)"
-                          >
-                            <Trash2 className="h-4 w-4 text-rose-400" />
-                            <span>Excluir</span>
-                          </button>
-                        )}
+                        <div>
+                          <p className="font-bold uppercase tracking-wider text-[11px] text-amber-300">
+                            Modo de Apenas Leitura
+                          </p>
+                          <p className="text-white/80 mt-0.5 leading-relaxed">
+                            Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações.
+                          </p>
+                        </div>
                       </div>
                     )
                   )}
@@ -8136,23 +8380,23 @@ function CrmDashboard() {
             </div>
 
             <form onSubmit={handleCreateDeal} className="flex flex-col space-y-4 pt-3">
-              {/* Campos do Topo - Mesma Linha para Título, Cliente, Prazo e Direcionamento */}
+              {/* Campos do Topo - Mesma Linha para Título, Cliente, Responsável, Prazo e Duração */}
               {activeReqModal === "interna" ? (
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
                   {/* Título da Tarefa */}
-                  <div className="md:col-span-4">
+                  <div className="md:col-span-3">
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                         Título da Tarefa <span className="text-rose-400">*</span>
                       </label>
                       <span className={`text-[10px] font-mono font-bold ${newDealTitle.trim().split(/\s+/).filter(Boolean).length > 6 ? "text-rose-400" : "text-sky-400"}`}>
-                        {newDealTitle.trim().split(/\s+/).filter(Boolean).length}/6 palavras
+                        {newDealTitle.trim().split(/\s+/).filter(Boolean).length}/6 pal.
                       </span>
                     </div>
                     <input
                       type="text"
                       required
-                      placeholder="Ex: Verificar vazamento no compressor..."
+                      placeholder="Ex: Verificar compressor..."
                       value={newDealTitle}
                       onChange={(e) => setNewDealTitle(e.target.value.toUpperCase())}
                       className="input-futuristic w-full rounded-xl px-3 py-2 text-xs uppercase font-bold outline-none"
@@ -8189,6 +8433,26 @@ function CrmDashboard() {
                     </select>
                   </div>
 
+                  {/* Direcionamento / Responsável */}
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                      Direcionamento <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={newDealAssignedTo}
+                      onChange={(e) => setNewDealAssignedTo(e.target.value)}
+                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60 font-bold"
+                    >
+                      <option value="">Selecione</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.id} className="bg-slate-900 font-bold">
+                          {m.display_name || m.email}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Prazo para Execução */}
                   <div className="md:col-span-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
@@ -8199,46 +8463,44 @@ function CrmDashboard() {
                       required
                       value={newDealDeadline}
                       onChange={(e) => setNewDealDeadline(e.target.value)}
-                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                      className="input-futuristic w-full rounded-xl px-2.5 py-2 text-xs font-mono outline-none"
                     />
                   </div>
 
-                  {/* Direcionamento / Responsável */}
-                  <div className="md:col-span-3">
+                  {/* Duração Estimada */}
+                  <div className="md:col-span-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                      Direcionamento <span className="text-rose-400">*</span>
+                      Duração
                     </label>
                     <select
-                      required
-                      value={newDealAssignedTo}
-                      onChange={(e) => setNewDealAssignedTo(e.target.value)}
-                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60 font-bold"
+                      value={newDealDuration}
+                      onChange={(e) => setNewDealDuration(e.target.value)}
+                      className="input-futuristic w-full rounded-xl px-2.5 py-2 text-xs outline-none bg-black/60 font-bold"
                     >
-                      <option value="">Selecione o responsável</option>
-                      {teamMembers.map((m) => (
-                        <option key={m.id} value={m.id} className="bg-slate-900 font-bold">
-                          {m.display_name || m.email}
-                        </option>
-                      ))}
+                      <option value="">Selecione</option>
+                      <option value="1 hora" className="bg-slate-900 font-bold">1 hora</option>
+                      <option value="2 horas" className="bg-slate-900 font-bold">2 horas</option>
+                      <option value="3 horas" className="bg-slate-900 font-bold">3 horas</option>
+                      <option value="4 horas" className="bg-slate-900 font-bold">4 horas</option>
                     </select>
                   </div>
                 </div>
               ) : (
-                /* Se for Orçamento -> Título, Cliente, Responsável e Prazo na Mesma Linha */
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                  <div className="md:col-span-4">
+                /* Se for Orçamento -> Título, Cliente, Responsável, Prazo e Duração na Mesma Linha */
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+                  <div className="md:col-span-3">
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                         Título do Orçamento <span className="text-rose-400">*</span>
                       </label>
                       <span className={`text-[10px] font-mono font-bold ${newDealTitle.trim().split(/\s+/).filter(Boolean).length > 6 ? "text-rose-400" : "text-sky-400"}`}>
-                        {newDealTitle.trim().split(/\s+/).filter(Boolean).length}/6 palavras
+                        {newDealTitle.trim().split(/\s+/).filter(Boolean).length}/6 pal.
                       </span>
                     </div>
                     <input
                       type="text"
                       required
-                      placeholder="Ex: Manutenção preventiva em secador..."
+                      placeholder="Ex: Manutenção preventiva..."
                       value={newDealTitle}
                       onChange={(e) => setNewDealTitle(e.target.value.toUpperCase())}
                       className="input-futuristic w-full rounded-xl px-3 py-2 text-xs uppercase font-bold outline-none"
@@ -8275,7 +8537,7 @@ function CrmDashboard() {
                     </select>
                   </div>
 
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
                       Responsável <span className="text-rose-400">*</span>
                     </label>
@@ -8285,7 +8547,7 @@ function CrmDashboard() {
                       onChange={(e) => setNewDealAssignedTo(e.target.value)}
                       className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black/60 font-bold"
                     >
-                      <option value="">Selecione o responsável</option>
+                      <option value="">Selecione</option>
                       {teamMembers.map((m) => (
                         <option key={m.id} value={m.id} className="bg-slate-900 font-bold">
                           {m.display_name || m.email}
@@ -8302,8 +8564,25 @@ function CrmDashboard() {
                       type="date"
                       value={newDealDeadline}
                       onChange={(e) => setNewDealDeadline(e.target.value)}
-                      className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                      className="input-futuristic w-full rounded-xl px-2.5 py-2 text-xs font-mono outline-none"
                     />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                      Duração
+                    </label>
+                    <select
+                      value={newDealDuration}
+                      onChange={(e) => setNewDealDuration(e.target.value)}
+                      className="input-futuristic w-full rounded-xl px-2.5 py-2 text-xs outline-none bg-black/60 font-bold"
+                    >
+                      <option value="">Selecione</option>
+                      <option value="1 hora" className="bg-slate-900 font-bold">1 hora</option>
+                      <option value="2 horas" className="bg-slate-900 font-bold">2 horas</option>
+                      <option value="3 horas" className="bg-slate-900 font-bold">3 horas</option>
+                      <option value="4 horas" className="bg-slate-900 font-bold">4 horas</option>
+                    </select>
                   </div>
                 </div>
               )}
@@ -8331,20 +8610,83 @@ function CrmDashboard() {
                 />
               </div>
 
+              {/* ANEXAR DOCUMENTO NA ABERTURA DA ATIVIDADE */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-sky-300 flex items-center gap-1.5">
+                    <Paperclip className="h-3.5 w-3.5 text-sky-400" /> Anexar Documento / Arquivo (Opcional)
+                  </label>
+                  <span className="text-[10px] text-muted-foreground font-medium">
+                    PDF, imagens, propostas, relatórios ou planilhas
+                  </span>
+                </div>
+
+                {!newDealAttachedFile ? (
+                  <label className="flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-sky-500/30 hover:border-sky-400/60 bg-sky-500/5 hover:bg-sky-500/10 transition-all cursor-pointer text-xs text-sky-300 font-bold group">
+                    <Paperclip className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform" />
+                    <span>Clique para anexar um documento à atividade</span>
+                    <input
+                      type="file"
+                      accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.zip"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setNewDealAttachedFile(file);
+                        }
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <div className="flex items-center justify-between p-2.5 rounded-xl border border-sky-500/40 bg-sky-500/15 text-sky-200">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Paperclip className="h-4 w-4 text-sky-400 shrink-0" />
+                      <span className="text-xs font-bold truncate">
+                        {newDealAttachedFile.name}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-black/40 text-sky-300 border border-sky-500/30 shrink-0">
+                        {newDealAttachedFile.size < 1024 * 1024
+                          ? `${Math.round(newDealAttachedFile.size / 1024)} KB`
+                          : `${(newDealAttachedFile.size / (1024 * 1024)).toFixed(1)} MB`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewDealAttachedFile(null)}
+                      className="btn-ghost-neon p-1.5 rounded-lg text-rose-400 hover:text-white bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/30 cursor-pointer transition-all ml-2"
+                      title="Remover anexo"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Rodapé com Botões de Ação */}
               <div className="shrink-0 flex justify-end gap-2.5 pt-3 border-t border-white/10 mt-1">
                 <button
                   type="button"
-                  onClick={() => setActiveReqModal(null)}
-                  className="btn-ghost-neon rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider"
+                  onClick={() => {
+                    setNewDealAttachedFile(null);
+                    setActiveReqModal(null);
+                  }}
+                  className="btn-ghost-neon rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-white"
                 >
                   Cancelar
                 </button>
                 <button
+                  disabled={isUploadingNewDealFile}
                   type="submit"
-                  className="btn-futuristic rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-wider shadow-lg"
+                  className="btn-ghost-neon px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-cyan-300 hover:text-white border border-cyan-500/40 bg-cyan-500/15 hover:bg-cyan-500/30 cursor-pointer shadow-sm transition-all flex items-center gap-2"
                 >
-                  Criar {activeReqModal === "interna" ? "Tarefa" : "Orçamento"}
+                  {isUploadingNewDealFile ? (
+                    <>
+                      <Save className="h-4 w-4 animate-spin" />
+                      <span>Enviando Anexo...</span>
+                    </>
+                  ) : (
+                    <span>Criar {activeReqModal === "interna" ? "Tarefa" : "Orçamento"}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -8411,25 +8753,42 @@ function CrmDashboard() {
                 </select>
               </div>
 
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                  Primeiro Vencimento
-                </label>
-                <input
-                  type="date"
-                  value={contractStartDate}
-                  onChange={(e) => setContractStartDate(e.target.value)}
-                  className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                    Primeiro Vencimento (Financeiro)
+                  </label>
+                  <input
+                    type="date"
+                    value={contractStartDate}
+                    onChange={(e) => setContractStartDate(e.target.value)}
+                    className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                    Prazo do Contrato (Opcional)
+                  </label>
+                  <input
+                    type="date"
+                    value={contractDeliveryDeadline}
+                    onChange={(e) => setContractDeliveryDeadline(e.target.value)}
+                    className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3">
+            <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
               <button
                 type="button"
                 disabled={isSyncing}
-                onClick={() => setContractModalDeal(null)}
-                className="btn-ghost-neon rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider"
+                onClick={() => {
+                  setContractDeliveryDeadline("");
+                  setContractModalDeal(null);
+                }}
+                className="btn-ghost-neon rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-white"
               >
                 Cancelar
               </button>
@@ -8437,7 +8796,7 @@ function CrmDashboard() {
                 type="button"
                 disabled={isSyncing}
                 onClick={handleConfirmWonContract}
-                className="btn-futuristic rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5"
+                className="btn-ghost-neon rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/30"
               >
                 {isSyncing ? "Integrando..." : "Lançar no Financeiro"}
               </button>
@@ -8791,12 +9150,9 @@ function CrmDashboard() {
                                 </div>
                               </div>
 
-                              <div className="text-left sm:text-right shrink-0 flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-white/10">
+                              <div className="text-left sm:text-right shrink-0 flex items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-white/10">
                                 <span className={`text-xs font-mono font-black ${deadline.colorClass || "text-slate-300"}`}>
                                   {deadline.hoverText || formatDeadlineWithWeekday(deal.expected_close_date)}
-                                </span>
-                                <span className="text-xs text-sky-400 font-bold uppercase group-hover:underline mt-1">
-                                  Abrir Atividade →
                                 </span>
                               </div>
                             </div>
@@ -9003,41 +9359,54 @@ function CrmDashboard() {
                 <label className="text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-1 mb-1">
                   <FileText className="h-3 w-3 text-accent" /> Descrever Nova Atualização / Atividade Atual <span className="text-red-400">*</span>
                 </label>
-                <textarea
-                  rows={3}
-                  required
-                  autoFocus
-                  value={movingDealState.updateText}
-                  onChange={(e) =>
-                    setMovingDealState((prev) =>
-                      prev ? { ...prev, updateText: e.target.value } : null
-                    )
-                  }
-                  placeholder="Descreva o que foi realizado/definido nesta etapa (esta mensagem será a nova Atividade Atual)..."
-                  className="input-futuristic w-full rounded-xl p-3 text-xs outline-none resize-none leading-relaxed"
+                <FastMovingDealNotesInput
+                  initialValue=""
+                  onTextChange={(text) => {
+                    movingDealUpdateTextRef.current = text;
+                  }}
                 />
               </div>
 
-              {/* Encaminhar para outro membro (opcional) */}
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                  Encaminhar Responsável (Opcional)
-                </label>
-                <select
-                  value={movingDealState.reassignTo}
-                  onChange={(e) =>
-                    setMovingDealState((prev) =>
-                      prev ? { ...prev, reassignTo: e.target.value } : null
-                    )
-                  }
-                  className="input-futuristic w-full rounded-xl p-2.5 text-xs outline-none"
-                >
-                  {teamMembers.map((member) => (
-                    <option key={member.id} value={member.id} className="bg-slate-900 text-white">
-                      {member.display_name || member.email} {member.id === movingDealState.deal.assigned_user_id ? "(Atual)" : ""}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Encaminhar para outro membro (opcional) */}
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                    Encaminhar Responsável (Opcional)
+                  </label>
+                  <select
+                    value={movingDealState.reassignTo}
+                    onChange={(e) =>
+                      setMovingDealState((prev) =>
+                        prev ? { ...prev, reassignTo: e.target.value } : null
+                      )
+                    }
+                    className="input-futuristic w-full rounded-xl p-2.5 text-xs outline-none"
+                  >
+                    {teamMembers.map((member) => (
+                      <option key={member.id} value={member.id} className="bg-slate-900 text-white">
+                        {member.display_name || member.email} {member.id === movingDealState.deal.assigned_user_id ? "(Atual)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Novo Prazo (Opcional - Vazio zera o prazo anterior) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Novo Prazo (Opcional)
+                    </label>
+                    <span className="text-[9px] text-muted-foreground font-medium">
+                      Vazio = Zera Prazo
+                    </span>
+                  </div>
+                  <input
+                    type="date"
+                    value={movingDealNewDeadline}
+                    onChange={(e) => setMovingDealNewDeadline(e.target.value)}
+                    className="input-futuristic w-full rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-white/5">
@@ -9051,7 +9420,7 @@ function CrmDashboard() {
                 <button
                   type="submit"
                   disabled={isSavingMove}
-                  className="btn-futuristic px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-950 flex items-center gap-1.5 shadow-lg shadow-accent/20"
+                  className="btn-ghost-neon px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-accent hover:text-white border border-accent/40 bg-accent/15 hover:bg-accent/30 flex items-center gap-1.5 shadow-sm"
                 >
                   <Save className="h-3.5 w-3.5" />
                   <span>{isSavingMove ? "Salvando..." : "Salvar e Mover"}</span>
@@ -10104,11 +10473,11 @@ function CrmDashboard() {
                     Descreva todas as orientações e critérios para o responsável
                   </span>
                 </div>
-                <textarea
-                  placeholder="Descreva detalhadamente todas as orientações, detalhes técnicos, prioridades ou recomendações para o responsável executar esta atividade vinculada..."
-                  value={subtaskNotes}
-                  onChange={(e) => setSubtaskNotes(e.target.value)}
-                  className="input-futuristic w-full h-[200px] sm:h-[240px] rounded-xl p-4 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+                <FastSubtaskNotesInput
+                  resetTrigger={isSubtaskModalOpen}
+                  onTextChange={(text) => {
+                    subtaskNotesRef.current = text;
+                  }}
                 />
               </div>
 
@@ -10128,10 +10497,10 @@ function CrmDashboard() {
                 <button
                   type="submit"
                   disabled={isCreatingSubtask}
-                  className="btn-futuristic rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-wider shadow-lg flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="btn-ghost-neon rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50 text-emerald-300 hover:text-white border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/30"
                 >
                   <PlusCircle className="h-4 w-4" />
-                  {isCreatingSubtask ? "Criando..." : "Criar Vinculada"}
+                  <span>{isCreatingSubtask ? "Criando..." : "Criar Vinculada"}</span>
                 </button>
               </div>
             </form>

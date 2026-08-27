@@ -102,28 +102,34 @@ export function EditMemberDialog({
 
       if (roleError) throw roleError;
 
-      // 3. Atualizar senha se for a própria conta ou se uma nova senha foi definida
-      if (password.trim()) {
-        if (isSelf) {
-          const { error: authError } = await supabase.auth.updateUser({
+      // 3. Sincronizar com Supabase Auth via RPC (se a função estiver disponível no banco)
+      try {
+        await supabase.rpc("admin_update_user_credentials", {
+          target_user_id: targetUser!.id,
+          new_name: name.trim().toUpperCase(),
+          new_email: email.trim().toLowerCase(),
+          new_password: password.trim() ? password.trim() : null,
+        });
+      } catch (rpcCatch) {
+        console.warn("Aviso ao sincronizar Supabase Auth:", rpcCatch);
+      }
+
+      // 4. Se for a própria conta logada e alterou senha, atualiza também a sessão local
+      if (password.trim() && isSelf) {
+        try {
+          await supabase.auth.updateUser({
             password: password.trim(),
           });
-          if (authError) {
-            console.warn("Aviso ao atualizar senha auth:", authError);
-            toast.warning("Dados atualizados. Para alterar a senha da sua conta, use também a tela de perfil.");
-          }
+        } catch (authErr) {
+          console.warn("Aviso ao atualizar sessão local:", authErr);
         }
       }
 
-      toast.success(
-        password.trim()
-          ? `Dados, direitos e senha de ${name.trim().toUpperCase()} atualizados com sucesso!`
-          : `Direitos e dados de ${name.trim().toUpperCase()} atualizados com sucesso!`
-      );
+      toast.success(`Usuário ${name.trim().toUpperCase()} atualizado com sucesso!`);
       onSuccess();
       onClose();
     } catch (err: any) {
-      console.error("Erro ao atualizar direitos do usuário:", err);
+      console.error("Erro ao atualizar dados do usuário:", err);
       toast.error(err.message || "Erro ao atualizar dados do usuário");
     } finally {
       setBusy(false);
@@ -390,11 +396,11 @@ export function EditMemberDialog({
             </div>
           </div>
 
-          {/* Botão de Salvar Alterações */}
+          {/* Botão de Salvar Alterações (Sem preenchimento sólido) */}
           <button
             disabled={busy}
             type="submit"
-            className="btn-futuristic w-full rounded-2xl py-3 text-xs font-black uppercase tracking-[0.2em] shadow-glow flex items-center justify-center gap-2 mt-6 cursor-pointer"
+            className="btn-ghost-neon w-full rounded-2xl py-3.5 text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 mt-6 cursor-pointer text-cyan-400 hover:text-white border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/25 transition-all shadow-sm"
           >
             {busy ? <Save className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             <span>{busy ? "Salvando Alterações..." : "Salvar Alterações"}</span>

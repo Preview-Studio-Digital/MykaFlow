@@ -51,7 +51,7 @@ export function ConfirmModal({
   if (!isOpen) return null;
 
   const isKeywordValid = requireKeyword
-    ? typedKeyword.trim() === requireKeyword.trim()
+    ? typedKeyword.trim().toLowerCase() === requireKeyword.trim().toLowerCase()
     : isInputPrompt
     ? inputValue.trim().length > 0
     : true;

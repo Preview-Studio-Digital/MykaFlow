@@ -183,10 +183,10 @@ export function ProfileDialog({ isOpen, onClose, currentUser }: ProfileDialogPro
           <button
             disabled={busy}
             type="submit"
-            className="btn-futuristic w-full rounded-2xl py-3.5 text-xs font-black uppercase tracking-[0.2em] shadow-glow flex items-center justify-center gap-2 mt-4"
+            className="btn-ghost-neon w-full rounded-2xl py-3.5 text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 mt-4 cursor-pointer text-cyan-400 hover:text-white border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/25 transition-all shadow-sm"
           >
             {busy ? <Save className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {busy ? "Salvando..." : "Salvar Alterações"}
+            <span>{busy ? "Salvando..." : "Salvar Alterações"}</span>
           </button>
         </form>
       </div>

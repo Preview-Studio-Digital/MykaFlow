@@ -1288,7 +1288,7 @@ function CrmDashboard() {
   const [inlineCustomerEmail, setInlineCustomerEmail] = useState("");
   const [inlineCustomerPhone, setInlineCustomerPhone] = useState("");
 
-  // Filtros e busca por coluna / usuário
+  // Filtros e busca por coluna / usuário (Padrão: Meu Quadro para o próprio usuário)
   const [internalFilterUser, setInternalFilterUser] = useState<string>("ME");
   const [isBoardSelectorOpen, setIsBoardSelectorOpen] = useState(false);
   const [stageSearchTerms, setStageSearchTerms] = useState<Record<string, string>>({});
@@ -3038,8 +3038,9 @@ function CrmDashboard() {
       isOpen: true,
       title: `Excluir Atividade Nº ${reqNum}`,
       description: `Tem certeza que deseja excluir permanentemente a Atividade Nº ${reqNum} ("${cleanTitle}")?\n\nEsta ação removerá a atividade, seus anexos e todo o seu histórico do sistema. Esta ação não poderá ser desfeita.`,
-      confirmText: "Excluir Definitivamente",
+      confirmText: "Excluir",
       variant: "danger",
+      requireKeyword: reqNum,
       onConfirm: async () => {
         setCrmConfirmConfig(null);
         setIsDeletingDeal(true);
@@ -4858,27 +4859,10 @@ function CrmDashboard() {
     }
   }
 
-  // Filtro de Visibilidade por Permissão:
-  // - Administrador: visualiza todas as atividades de todos os usuários
-  // - Usuário comum: visualiza as atividades sob sua responsabilidade (ativas ou aguardando aceite) e as atividades que criou que estão aguardando seu aceite
+  // Visibilidade do CRM: todos os usuários visualizam o quadro geral completo de atividades
   const visibleDeals = useMemo(() => {
-    if (role === "admin") {
-      return deals;
-    }
-    return deals.filter((d) => {
-      const isAssigned = d.assigned_user_id === user?.id;
-      const isAuthor = (d as any).user_id === user?.id;
-      const isPending = isDealPendingAuthorAcceptance(d);
-
-      // Se o usuário é o responsável: vê enquanto ativa e quando estiver aguardando aceite
-      if (isAssigned) return true;
-
-      // Se o usuário é o autor: vê quando ela foi finalizada/armazenada pelo responsável aguardando seu aceite
-      if (isAuthor && isPending) return true;
-
-      return false;
-    });
-  }, [deals, role, user?.id]);
+    return deals;
+  }, [deals]);
 
   // Alertas automáticos para Administradores (apenas requisições internas ativas possuem prazo)
   const overdueAlerts = useMemo(() => {
@@ -5528,19 +5512,16 @@ function CrmDashboard() {
           <button
             type="button"
             onClick={() => {
-              setCalendarUserFilter(role === "admin" ? "ALL" : (user?.id || "ALL"));
+              setCalendarUserFilter(user?.id || "ALL");
               setIsCalendarModalOpen(true);
             }}
             className="btn-ghost-neon h-9 px-3 rounded-xl flex items-center justify-center gap-1.5 text-sky-400 hover:text-white border border-sky-500/30 hover:border-sky-400/60 bg-sky-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer text-xs font-black uppercase tracking-wider"
-            title={role === "admin" ? "Calendário de Prazos (Geral de Todos os Responsáveis)" : "Meu Calendário de Prazos"}
+            title="Meus Prazos (Calendário de Vencimentos)"
           >
             <Calendar className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Prazos</span>
             <span className="px-1.5 py-0.2 rounded-md bg-sky-500/20 text-sky-300 font-mono text-[10px] font-bold border border-sky-400/40">
-              {role === "admin"
-                ? deals.filter((d) => Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost" && !isDealPendingAuthorAcceptance(d)).length
-                : deals.filter((d) => d.assigned_user_id === user?.id && Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost" && !isDealPendingAuthorAcceptance(d)).length
-              }
+              {deals.filter((d) => (role === "admin" ? true : d.assigned_user_id === user?.id) && Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost" && !isDealPendingAuthorAcceptance(d)).length}
             </span>
           </button>
 
@@ -7192,19 +7173,8 @@ function CrmDashboard() {
                   )}
                 </div>
 
-                {/* Botão Fechar e Excluir no Canto Superior Direito */}
-                <div className="w-[105px] shrink-0 flex items-start justify-end gap-1.5">
-                  {role === "admin" && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteDeal(selectedDealForHistory)}
-                      disabled={isDeletingDeal}
-                      className="btn-ghost-neon p-2 rounded-xl text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer shadow-sm"
-                      title="Excluir permanentemente esta atividade (Administrador)"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
+                {/* Botão Fechar no Canto Superior Direito */}
+                <div className="w-[105px] shrink-0 flex items-start justify-end">
                   <button
                     type="button"
                     onClick={handleCloseSelectedDealModal}
@@ -7996,88 +7966,121 @@ function CrmDashboard() {
                             />
 
                             {/* Botões de Ação */}
-                            <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
-                              {/* Ações Especiais: Concluir (se vinculada), Desarquivar ou Arquivar (em vermelho) e Atualizar */}
-                              {(() => {
-                                const parentInfo = getParentDealInfo(selectedDealForHistory);
-                                const isLinkedSubtask = Boolean(parentInfo);
+                            <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
+                              {/* Botão Excluir à Esquerda (Apenas Administrador) */}
+                              <div>
+                                {role === "admin" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteDeal(selectedDealForHistory)}
+                                    disabled={isDeletingDeal}
+                                    className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer transition-all hover:scale-105"
+                                    title="Excluir permanentemente esta atividade (Administrador)"
+                                  >
+                                    <Trash2 className="h-4 w-4 text-rose-400" />
+                                    <span>Excluir</span>
+                                  </button>
+                                )}
+                              </div>
 
-                                if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
-                                  return (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCompleteSubtask(selectedDealForHistory)}
-                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                      title="Concluir e fechar esta vinculada"
-                                    >
-                                      <CheckCircle2 className="h-4 w-4 text-rose-400" />
-                                      <span>Concluir</span>
-                                    </button>
-                                  );
-                                }
+                              {/* Ações da Direita: Concluir, Desarquivar ou Arquivar e Atualizar */}
+                              <div className="flex flex-wrap items-center justify-end gap-2">
+                                {/* Ações Especiais: Concluir (se vinculada), Desarquivar ou Arquivar (em vermelho) e Atualizar */}
+                                {(() => {
+                                  const parentInfo = getParentDealInfo(selectedDealForHistory);
+                                  const isLinkedSubtask = Boolean(parentInfo);
 
-                                const originStage =
-                                  selectedDealForHistory.stage === "archived"
-                                    ? getArchivedOriginStage(selectedDealForHistory)
-                                    : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
+                                  if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCompleteSubtask(selectedDealForHistory)}
+                                        className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                        title="Concluir e fechar esta vinculada"
+                                      >
+                                        <CheckCircle2 className="h-4 w-4 text-rose-400" />
+                                        <span>Concluir</span>
+                                      </button>
+                                    );
+                                  }
 
-                                const isArchivableStage =
-                                  originStage === "lead" ||
-                                  ((originStage === "completed" || originStage === "lost") && isAdmin);
+                                  const originStage =
+                                    selectedDealForHistory.stage === "archived"
+                                      ? getArchivedOriginStage(selectedDealForHistory)
+                                      : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
 
-                                if (!isLinkedSubtask && isArchivableStage) {
-                                  return selectedDealForHistory.stage === "archived" ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
-                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                      title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
-                                    >
-                                      <ArchiveRestore className="h-4 w-4 text-emerald-400" />
-                                      <span>Desarquivar</span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleArchiveDeal(selectedDealForHistory)}
-                                      className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-300 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105"
-                                      style={{ borderColor: "#ef4444", color: "#ef4444" }}
-                                      title="Arquivar esta atividade totalmente finalizada"
-                                    >
-                                      <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
-                                      <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
-                                    </button>
-                                  );
-                                }
+                                  const isArchivableStage =
+                                    originStage === "lead" ||
+                                    ((originStage === "completed" || originStage === "lost") && isAdmin);
 
-                                return null;
-                              })()}
+                                  if (!isLinkedSubtask && isArchivableStage) {
+                                    return selectedDealForHistory.stage === "archived" ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
+                                        className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                        title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
+                                      >
+                                        <ArchiveRestore className="h-4 w-4 text-emerald-400" />
+                                        <span>Desarquivar</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleArchiveDeal(selectedDealForHistory)}
+                                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-300 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105"
+                                        style={{ borderColor: "#ef4444", color: "#ef4444" }}
+                                        title="Arquivar esta atividade totalmente finalizada"
+                                      >
+                                        <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
+                                        <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
+                                      </button>
+                                    );
+                                  }
 
-                              <button
-                                type="submit"
-                                disabled={isSavingUpdate}
-                                className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 border border-sky-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                              >
-                                <Save className="h-4 w-4 text-sky-400" />
-                                <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
-                              </button>
+                                  return null;
+                                })()}
+
+                                <button
+                                  type="submit"
+                                  disabled={isSavingUpdate}
+                                  className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 border border-sky-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                >
+                                  <Save className="h-4 w-4 text-sky-400" />
+                                  <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
+                                </button>
+                              </div>
                             </div>
                           </form>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center gap-3 shrink-0">
-                        <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
-                          <Lock className="h-4 w-4" />
+                      <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3 shrink-0">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+                            <Lock className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="font-bold uppercase tracking-wider text-[11px] text-amber-300">
+                              Modo de Apenas Leitura
+                            </p>
+                            <p className="text-white/80 mt-0.5 leading-relaxed">
+                              Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações.
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-bold uppercase tracking-wider text-[11px] text-amber-300">
-                            Modo de Apenas Leitura
-                          </p>
-                          <p className="text-white/80 mt-0.5 leading-relaxed">
-                            Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações.
-                          </p>
-                        </div>
+                        {role === "admin" && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDeal(selectedDealForHistory)}
+                            disabled={isDeletingDeal}
+                            className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer transition-all shrink-0 hover:scale-105"
+                            title="Excluir permanentemente esta atividade (Administrador)"
+                          >
+                            <Trash2 className="h-4 w-4 text-rose-400" />
+                            <span>Excluir</span>
+                          </button>
+                        )}
                       </div>
                     )
                   )}
@@ -8603,56 +8606,40 @@ function CrmDashboard() {
             className="glass w-full max-w-3xl rounded-2xl border border-sky-500/30 p-6 shadow-2xl space-y-5 animate-in zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden"
           >
             {/* Cabeçalho do Calendário */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/10 pb-4 gap-3 shrink-0">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4 gap-3 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.2)] shrink-0">
                   <Calendar className="h-6 w-6" />
                 </div>
-                <div>
-                  <h3 className="text-lg font-black uppercase tracking-wider text-white flex items-center gap-2">
+                <div className="flex flex-col gap-1.5">
+                  <h3 className="text-lg font-black uppercase tracking-wider text-white leading-none">
                     Calendário de Prazos
                   </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {role === "admin"
-                      ? "Acompanhamento geral de vencimentos (Todos os Usuários ou por Responsável)"
-                      : "Acompanhamento visual dos vencimentos das suas atividades atribuídas"
-                    }
-                  </p>
+                  <div>
+                    <select
+                      value={calendarUserFilter}
+                      onChange={(e) => setCalendarUserFilter(e.target.value)}
+                      className="input-futuristic rounded-lg px-2.5 py-1 text-xs outline-none bg-black text-white font-bold border border-white/20 cursor-pointer min-w-[180px]"
+                      title="Filtrar por Responsável"
+                    >
+                      <option value="ALL">Todos os Responsáveis</option>
+                      {teamMembers.map((p) => (
+                        <option key={p.id} value={p.id} className="bg-slate-900">
+                          {p.display_name || p.email}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* Ações no Canto Superior Direito: Filtro ADM, VOLTAR e FECHAR */}
-              <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
-                {role === "admin" && (
-                  <select
-                    value={calendarUserFilter}
-                    onChange={(e) => setCalendarUserFilter(e.target.value)}
-                    className="input-futuristic rounded-xl px-2.5 py-1.5 text-xs outline-none bg-black text-white font-bold border border-white/20 cursor-pointer max-w-[200px]"
-                    title="Filtrar por Responsável"
-                  >
-                    <option value="ALL">Todos os Responsáveis</option>
-                    {teamMembers.map((p) => (
-                      <option key={p.id} value={p.id} className="bg-slate-900">
-                        {p.display_name || p.email}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {calendarSelectedDate && (
-                  <button
-                    type="button"
-                    onClick={() => setCalendarSelectedDate(null)}
-                    className="btn-ghost-neon px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-sky-400 hover:text-white bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 cursor-pointer shadow-sm transition-all"
-                  >
-                    <ArrowLeft className="h-4 w-4" /> VOLTAR
-                  </button>
-                )}
+              {/* Ação no Canto Superior Direito: Apenas FECHAR */}
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsCalendarModalOpen(false)}
-                  className="btn-ghost-neon px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-rose-400 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 cursor-pointer shadow-sm transition-all"
-                  title="Fechar modal"
+                  className="btn-ghost-neon px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-rose-400 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 cursor-pointer shadow-sm transition-all hover:scale-105"
+                  title="Fechar calendário"
                 >
                   <X className="h-4 w-4" /> FECHAR
                 </button>
@@ -8661,14 +8648,10 @@ function CrmDashboard() {
 
             {/* Conteúdo do Calendário em Grade Mensal ou Lista do Dia Selecionado */}
             {(() => {
-              // Atividades ativas com prazo definido respeitando o usuário / ADM
+              // Atividades ativas com prazo definido
               const activeDealsWithDeadline = deals.filter((d) => {
                 const hasDeadline = Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost" && !isDealPendingAuthorAcceptance(d);
                 if (!hasDeadline) return false;
-
-                if (role !== "admin") {
-                  return d.assigned_user_id === user?.id;
-                }
 
                 if (calendarUserFilter === "ALL") return true;
                 if (calendarUserFilter === "unassigned") return !d.assigned_user_id;
@@ -8728,7 +8711,15 @@ function CrmDashboard() {
                   <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden animate-in fade-in">
                     {/* Barra Superior da Visão do Dia */}
                     <div className="shrink-0 flex items-center justify-between bg-white/[0.03] border border-white/10 rounded-xl p-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setCalendarSelectedDate(null)}
+                          className="btn-ghost-neon px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-sky-400 hover:text-white bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 cursor-pointer shadow-sm transition-all"
+                          title="Voltar ao calendário mensal"
+                        >
+                          <ArrowLeft className="h-3.5 w-3.5" /> Voltar ao Mês
+                        </button>
                         <h4 className="text-sm font-black uppercase tracking-wider text-white capitalize pl-1">
                           {formattedSelectedDate}
                         </h4>
@@ -9467,10 +9458,11 @@ function CrmDashboard() {
                               type="button"
                               onClick={() => handleDeleteDeal(d)}
                               disabled={isDeletingDeal}
-                              className="btn-ghost-neon p-2 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
+                              className="btn-ghost-neon px-3 py-1.5 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 border border-rose-500/30 text-xs font-bold uppercase flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                               title="Excluir permanentemente"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
+                              <span>Excluir</span>
                             </button>
                           )}
                         </div>

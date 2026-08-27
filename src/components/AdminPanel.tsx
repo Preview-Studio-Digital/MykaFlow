@@ -302,7 +302,7 @@ export function AdminPanel({ onSuccess, onCancel }: { onSuccess?: () => void; on
             <button
               disabled={busy}
               type="submit"
-              className="btn-futuristic px-6 py-2.5 rounded-xl text-xs uppercase font-black text-slate-950 flex items-center gap-1.5 shadow-lg shadow-sky-400/20 cursor-pointer"
+              className="btn-ghost-neon px-6 py-2.5 rounded-xl text-xs uppercase font-black text-cyan-300 hover:text-white flex items-center gap-1.5 border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/25 transition-all cursor-pointer"
             >
               <UserPlus className="h-4 w-4" />
               <span>{busy ? "Criando Usuário..." : "Criar Acesso"}</span>

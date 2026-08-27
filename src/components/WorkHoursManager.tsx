@@ -568,10 +568,16 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     const remainingHours = Math.round((remainingSeconds / 3600) * 10) / 10;
     const expectedHours = Math.round((expectedWorkSeconds / 3600) * 10) / 10;
 
-    // Taxa de aproveitamento sobre o tempo de expediente decorrido até agora
-    const efficiency = totalElapsedWorkdaySeconds > 0
+    // Taxa de aproveitamento e porcentagens sobre o tempo de expediente decorrido até agora
+    const activePct = totalElapsedWorkdaySeconds > 0
       ? Math.min(100, Math.round((totalActiveSeconds / totalElapsedWorkdaySeconds) * 100))
       : totalActiveSeconds > 0 ? 100 : 0;
+
+    const inactivePct = totalElapsedWorkdaySeconds > 0
+      ? Math.min(100, Math.max(0, 100 - activePct))
+      : 0;
+
+    const efficiency = activePct;
 
     // Numeração cronológica de execução (#1 para a primeira atividade trabalhada no período, #2 para a segunda, etc.)
     const chronologicalOrder = Object.entries(activityMap).sort(
@@ -608,7 +614,10 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
       remainingSeconds,
       expectedWorkSeconds,
       expectedHours,
+      totalElapsedWorkdaySeconds,
       efficiency,
+      activePct,
+      inactivePct,
       activeHours,
       inactiveHours,
       remainingHours,
@@ -616,59 +625,107 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     };
   }, [filteredSessions, profiles, selectedUserId, dailyShiftHours, dateFilter, currentTime]);
 
-  // Média de aproveitamento em relação a todo o período medido (histórico completo)
-  const allPeriodEfficiency = useMemo(() => {
-    const userSessions = allSessions.filter((session) => {
-      if (selectedUserId && session.user_id !== selectedUserId) {
-        return false;
-      }
-      return true;
-    });
-
-    if (userSessions.length === 0) return 0;
-
-    let totalActiveSeconds = 0;
-    const uniqueDays = new Set<string>();
-
-    userSessions.forEach((session) => {
-      totalActiveSeconds += session.duration_seconds || 0;
-      uniqueDays.add(new Date(session.started_at).toDateString());
-    });
-
+  // Médias Históricas do Usuário e da Empresa
+  const averages = useMemo(() => {
     const todayStr = new Date(currentTime).toDateString();
     const todayProgress = getWorkdayProgress(new Date(currentTime));
 
-    const targetUserIds = selectedUserId
-      ? [selectedUserId]
-      : Array.from(new Set([
-          ...profiles.map((p) => p.id),
-          ...userSessions.map((s) => s.user_id),
-        ])).filter(Boolean);
+    // 1. Média do Usuário Selecionado (ou do período atual no caso de visão geral)
+    let userAvgActivePct = 0;
+    let userAvgInactivePct = 0;
+    const userSessions = selectedUserId
+      ? allSessions.filter((s) => s.user_id === selectedUserId)
+      : allSessions;
 
-    let totalElapsedWorkdaySeconds = 0;
+    if (userSessions.length > 0) {
+      let userTotalActiveSec = 0;
+      const userUniqueDays = new Set<string>();
+      userSessions.forEach((s) => {
+        userTotalActiveSec += s.duration_seconds || 0;
+        userUniqueDays.add(new Date(s.started_at).toDateString());
+      });
 
-    targetUserIds.forEach(() => {
-      uniqueDays.forEach((dateStr) => {
+      let userTotalElapsedSec = 0;
+      userUniqueDays.forEach((dateStr) => {
         const d = new Date(dateStr);
-        const dayOfWeek = d.getDay(); // 0 = Dom, 1 = Seg, ..., 5 = Sex, 6 = Sáb
+        const dayOfWeek = d.getDay();
         const isFriday = dayOfWeek === 5;
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const dailyBaseSeconds = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
-
         if (dateStr === todayStr) {
-          totalElapsedWorkdaySeconds += todayProgress.elapsedWorkdaySeconds;
+          userTotalElapsedSec += todayProgress.elapsedWorkdaySeconds;
         } else {
-          totalElapsedWorkdaySeconds += dailyBaseSeconds;
+          userTotalElapsedSec += dailyBaseSeconds;
         }
       });
-    });
 
-    if (totalElapsedWorkdaySeconds <= 0) {
-      return totalActiveSeconds > 0 ? 100 : 0;
+      if (userTotalElapsedSec > 0) {
+        userAvgActivePct = Math.min(100, Math.round((userTotalActiveSec / userTotalElapsedSec) * 100));
+        userAvgInactivePct = Math.max(0, 100 - userAvgActivePct);
+      } else if (userTotalActiveSec > 0) {
+        userAvgActivePct = 100;
+        userAvgInactivePct = 0;
+      }
     }
 
-    return Math.min(100, Math.round((totalActiveSeconds / totalElapsedWorkdaySeconds) * 100));
-  }, [allSessions, profiles, selectedUserId, currentTime]);
+    // 2. Média Geral de Toda a Empresa (Histórico Consolidado)
+    let companyAvgActivePct = 0;
+    let companyAvgInactivePct = 0;
+    if (allSessions.length > 0) {
+      let compTotalActiveSec = 0;
+      const compUniqueDays = new Set<string>();
+      allSessions.forEach((s) => {
+        compTotalActiveSec += s.duration_seconds || 0;
+        compUniqueDays.add(new Date(s.started_at).toDateString());
+      });
+
+      const allTargetUserIds = Array.from(
+        new Set([...profiles.map((p) => p.id), ...allSessions.map((s) => s.user_id)])
+      ).filter(Boolean);
+
+      let compTotalElapsedSec = 0;
+      allTargetUserIds.forEach(() => {
+        compUniqueDays.forEach((dateStr) => {
+          const d = new Date(dateStr);
+          const dayOfWeek = d.getDay();
+          const isFriday = dayOfWeek === 5;
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+          const dailyBaseSeconds = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+          if (dateStr === todayStr) {
+            compTotalElapsedSec += todayProgress.elapsedWorkdaySeconds;
+          } else {
+            compTotalElapsedSec += dailyBaseSeconds;
+          }
+        });
+      });
+
+      if (compTotalElapsedSec > 0) {
+        companyAvgActivePct = Math.min(100, Math.round((compTotalActiveSec / compTotalElapsedSec) * 100));
+        companyAvgInactivePct = Math.max(0, 100 - companyAvgActivePct);
+      } else if (compTotalActiveSec > 0) {
+        companyAvgActivePct = 100;
+        companyAvgInactivePct = 0;
+      }
+    }
+
+    const elapsedForPacing = metrics.totalElapsedWorkdaySeconds > 0
+      ? metrics.totalElapsedWorkdaySeconds
+      : metrics.totalActiveSeconds;
+
+    const userPacedActiveSec = Math.round(elapsedForPacing * (userAvgActivePct / 100));
+    const companyPacedActiveSec = Math.round(elapsedForPacing * (companyAvgActivePct / 100));
+
+    return {
+      userAvgActivePct,
+      userAvgInactivePct,
+      companyAvgActivePct,
+      companyAvgInactivePct,
+      userPacedActiveSec,
+      companyPacedActiveSec,
+    };
+  }, [allSessions, profiles, selectedUserId, currentTime, metrics.totalElapsedWorkdaySeconds, metrics.totalActiveSeconds]);
+
+  const allPeriodEfficiency = averages.userAvgActivePct;
 
   // Métricas de Tempo Médio e Proporção (Internas vs Externas) para o Usuário e para a Empresa no período selecionado
   const benchmarkMetrics = useMemo(() => {
@@ -870,15 +927,15 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
               setHoveredSlice(null);
               setIsExpandedActive((prev) => !prev);
             }}
-            className={`p-3.5 rounded-xl border transition-all flex items-center justify-between cursor-pointer group ${
+            className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between cursor-pointer group ${
               isExpandedActive
                 ? "bg-emerald-950/40 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400"
                 : "bg-black/40 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)] hover:border-emerald-500/50 hover:bg-emerald-950/20"
             }`}
             title="Clique para expandir/voltar o detalhamento de atividades no gráfico"
           >
-            <div className="space-y-1 min-w-0">
-              <div className="flex items-center gap-1.5">
+            <div>
+              <div className="flex items-center justify-between gap-1.5 mb-1">
                 <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block truncate">
                   Tempo Ativo
                 </span>
@@ -886,85 +943,75 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                   {isExpandedActive ? "Expandido" : "Fatiar"}
                 </span>
               </div>
-              <span className="text-xl font-bold text-emerald-300 font-mono block truncate">
-                {formatSeconds(metrics.totalActiveSeconds)}
+              <span className="text-3xl font-bold text-emerald-300 font-mono block">
+                {metrics.activePct}%
               </span>
             </div>
-            <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="px-2 py-0.5 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-xs font-black font-mono text-emerald-300 shadow-inner">
-                {metrics.expectedWorkSeconds > 0
-                  ? `${Math.round((metrics.totalActiveSeconds / metrics.expectedWorkSeconds) * 100)}%`
-                  : "0%"}
-              </span>
-              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">
-                {dateFilter === "today" ? "do dia" : "do período"}
-              </span>
+
+            <div className="pt-2 mt-2 border-t border-white/5 flex flex-col gap-1 text-[10px] font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">{selectedUserId ? "Média Usuário:" : "Média Período:"}</span>
+                <span className="text-emerald-400 font-bold">{averages.userAvgActivePct}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">Média Empresa:</span>
+                <span className="text-slate-300 font-bold">{averages.companyAvgActivePct}%</span>
+              </div>
             </div>
           </div>
 
           {/* Card 2: Tempo Inativo */}
-          <div className="p-3.5 rounded-xl bg-black/40 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.05)] flex items-center justify-between">
-            <div className="space-y-1 min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-widest text-rose-400 block truncate">
-                Tempo Inativo
-              </span>
-              <span className="text-xl font-bold text-rose-300 font-mono block truncate">
-                {formatSeconds(metrics.inactiveSeconds)}
+          <div className="p-3.5 rounded-xl bg-black/40 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.05)] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-rose-400 block truncate">
+                  Tempo Inativo
+                </span>
+              </div>
+              <span className="text-3xl font-bold text-rose-300 font-mono block">
+                {metrics.inactivePct}%
               </span>
             </div>
-            <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="px-2 py-0.5 rounded-lg bg-rose-950/80 border border-rose-500/40 text-xs font-black font-mono text-rose-300 shadow-inner">
-                {metrics.expectedWorkSeconds > 0
-                  ? `${Math.round((metrics.inactiveSeconds / metrics.expectedWorkSeconds) * 100)}%`
-                  : "0%"}
-              </span>
-              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">
-                {dateFilter === "today" ? "do dia" : "do período"}
-              </span>
+
+            <div className="pt-2 mt-2 border-t border-white/5 flex flex-col gap-1 text-[10px] font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">{selectedUserId ? "Média Usuário:" : "Média Período:"}</span>
+                <span className="text-rose-400 font-bold">{averages.userAvgInactivePct}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">Média Empresa:</span>
+                <span className="text-slate-300 font-bold">{averages.companyAvgInactivePct}%</span>
+              </div>
             </div>
           </div>
 
-          {/* Card 3: Aproveitamento */}
+          {/* Card 3: Total de Horas Trabalhadas (Volume Bruto com Média Proporcional ao Tempo Decorrido) */}
           <div
-            className={`p-3.5 rounded-xl bg-black/40 border transition-colors ${
-              metrics.efficiency > allPeriodEfficiency
-                ? "border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.08)]"
-                : metrics.efficiency < allPeriodEfficiency
-                ? "border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.08)]"
-                : "border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.08)]"
-            } flex items-center justify-between`}
+            className="p-3.5 rounded-xl bg-black/40 border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.05)] flex flex-col justify-between"
           >
-            <div className="space-y-1 min-w-0">
-              <span
-                className={`text-[10px] font-black uppercase tracking-widest block truncate ${
-                  metrics.efficiency > allPeriodEfficiency
-                    ? "text-emerald-400"
-                    : metrics.efficiency < allPeriodEfficiency
-                    ? "text-rose-400"
-                    : "text-amber-400"
-                }`}
-              >
-                Aproveitamento
-              </span>
-              <span
-                className={`text-xl font-bold font-mono block truncate ${
-                  metrics.efficiency > allPeriodEfficiency
-                    ? "text-emerald-400"
-                    : metrics.efficiency < allPeriodEfficiency
-                    ? "text-rose-400"
-                    : "text-amber-400"
-                }`}
-              >
-                {metrics.efficiency}%
+            <div>
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <span
+                  className="text-[10px] font-black uppercase tracking-widest text-indigo-400 block truncate"
+                  title="Total de tempo trabalhado em atividades no período"
+                >
+                  TOTAL DE HORAS
+                </span>
+              </div>
+              <span className="text-3xl font-bold text-indigo-300 font-mono block">
+                {formatApproxTime(metrics.totalActiveSeconds)}
               </span>
             </div>
-            <div className="flex flex-col items-center gap-0.5 shrink-0" title="Média histórica de aproveitamento calculada sobre todo o período medido">
-              <span className="px-2 py-0.5 rounded-lg bg-indigo-950/80 border border-indigo-500/40 text-xs font-black font-mono text-indigo-300 shadow-inner text-center">
-                {allPeriodEfficiency}%
-              </span>
-              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider text-center">
-                média
-              </span>
+
+            <div className="pt-2 mt-2 border-t border-white/5 flex flex-col gap-1 text-[10px] font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">{selectedUserId ? "Média Usuário:" : "Média Período:"}</span>
+                <span className="text-indigo-300 font-bold">{formatApproxTime(averages.userPacedActiveSec)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">Média Empresa:</span>
+                <span className="text-slate-300 font-bold">{formatApproxTime(averages.companyPacedActiveSec)}</span>
+              </div>
             </div>
           </div>
 
@@ -973,70 +1020,93 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         {/* Bloco 2 (Metade Direita): Benchmark Operacional (Internas vs Externas) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           
-          {/* Card 4: TEMPO MÉDIO ATIVIDADES INTERNAS (Colaborador vs Empresa) */}
-          <div className="p-3.5 rounded-xl bg-black/40 border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.05)] flex items-center justify-between">
-            <div className="space-y-1 min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-amber-400 block truncate" title="Tempo médio do colaborador por tarefa interna trabalhada">
-                TEMPO MÉDIO ATIVIDADES INTERNAS
-              </span>
-              <span className="text-xl font-bold text-amber-300 font-mono block truncate">
+          {/* Card 4: TEMPO MÉDIO ATIVIDADES INTERNAS */}
+          <div className="p-3.5 rounded-xl bg-black/40 border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.05)] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-400 block truncate" title="Tempo médio do colaborador por tarefa interna trabalhada">
+                  TEMPO MÉDIO ATIVIDADES INTERNAS
+                </span>
+              </div>
+              <span className="text-3xl font-bold text-amber-300 font-mono block">
                 {formatApproxTime(benchmarkMetrics.userAvgInternalSec)}
               </span>
             </div>
-            <div className="flex flex-col items-center gap-0.5 shrink-0" title="Tempo médio geral da empresa por tarefa interna">
-              <span className="px-2 py-0.5 rounded-lg bg-amber-950/80 border border-amber-500/40 text-xs font-black font-mono text-amber-300 shadow-inner text-center">
-                {formatApproxTime(benchmarkMetrics.companyAvgInternalSec)}
-              </span>
-              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider text-center">
-                empresa
-              </span>
+
+            <div className="pt-2 mt-2 border-t border-white/5 flex flex-col gap-1 text-[10px] font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">{selectedUserId ? "Média Usuário:" : "Média Período:"}</span>
+                <span className="text-amber-400 font-bold">{formatApproxTime(benchmarkMetrics.userAvgInternalSec)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">Média Empresa:</span>
+                <span className="text-slate-300 font-bold">{formatApproxTime(benchmarkMetrics.companyAvgInternalSec)}</span>
+              </div>
             </div>
           </div>
 
-          {/* Card 5: TEMPO MÉDIO ATIVIDADES EXTERNAS (Colaborador vs Empresa) */}
-          <div className="p-3.5 rounded-xl bg-black/40 border border-sky-500/20 shadow-[0_0_15px_rgba(56,189,248,0.05)] flex items-center justify-between">
-            <div className="space-y-1 min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-sky-400 block truncate" title="Tempo médio do colaborador por atividade externa / cliente">
-                TEMPO MÉDIO ATIVIDADES EXTERNAS
-              </span>
-              <span className="text-xl font-bold text-sky-300 font-mono block truncate">
+          {/* Card 5: TEMPO MÉDIO ATIVIDADES EXTERNAS */}
+          <div className="p-3.5 rounded-xl bg-black/40 border border-sky-500/20 shadow-[0_0_15px_rgba(56,189,248,0.05)] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-sky-400 block truncate" title="Tempo médio do colaborador por atividade externa / cliente">
+                  TEMPO MÉDIO ATIVIDADES EXTERNAS
+                </span>
+              </div>
+              <span className="text-3xl font-bold text-sky-300 font-mono block">
                 {formatApproxTime(benchmarkMetrics.userAvgExternalSec)}
               </span>
             </div>
-            <div className="flex flex-col items-center gap-0.5 shrink-0" title="Tempo médio geral da empresa por atividade externa / cliente">
-              <span className="px-2 py-0.5 rounded-lg bg-sky-950/80 border border-sky-500/40 text-xs font-black font-mono text-sky-300 shadow-inner text-center">
-                {formatApproxTime(benchmarkMetrics.companyAvgExternalSec)}
-              </span>
-              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider text-center">
-                empresa
-              </span>
+
+            <div className="pt-2 mt-2 border-t border-white/5 flex flex-col gap-1 text-[10px] font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">{selectedUserId ? "Média Usuário:" : "Média Período:"}</span>
+                <span className="text-sky-400 font-bold">{formatApproxTime(benchmarkMetrics.userAvgExternalSec)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">Média Empresa:</span>
+                <span className="text-slate-300 font-bold">{formatApproxTime(benchmarkMetrics.companyAvgExternalSec)}</span>
+              </div>
             </div>
           </div>
 
           {/* Card 6: ATIVIDADES INTERNAS x ATIVIDADES EXTERNAS */}
           <div className="p-3.5 rounded-xl bg-black/40 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.05)] flex flex-col justify-between">
-            <div className="flex items-center justify-between gap-1 text-[9px] font-black uppercase tracking-wider">
-              <span className="text-amber-400 truncate">ATIVIDADES INTERNAS</span>
-              <span className="text-muted-foreground font-mono text-[10px]">x</span>
-              <span className="text-sky-400 truncate">ATIVIDADES EXTERNAS</span>
-            </div>
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-xl font-bold font-mono text-amber-300">
-                {benchmarkMetrics.userPctInternal}%
-              </span>
-              <div className="h-1.5 flex-1 mx-3 rounded-full bg-slate-800/80 overflow-hidden flex">
-                <div 
-                  className="bg-amber-400 h-full transition-all duration-300" 
-                  style={{ width: `${benchmarkMetrics.userPctInternal}%` }} 
-                />
-                <div 
-                  className="bg-sky-400 h-full transition-all duration-300" 
-                  style={{ width: `${benchmarkMetrics.userPctExternal}%` }} 
-                />
+            <div>
+              <div className="flex items-center justify-between gap-1 text-[10px] font-black uppercase tracking-widest mb-1">
+                <span className="text-amber-400 truncate">INTERNAS</span>
+                <span className="text-muted-foreground font-mono text-[10px]">x</span>
+                <span className="text-sky-400 truncate">EXTERNAS</span>
               </div>
-              <span className="text-xl font-bold font-mono text-sky-300">
-                {benchmarkMetrics.userPctExternal}%
-              </span>
+              <div className="flex items-center justify-between py-0.5">
+                <span className="text-3xl font-bold font-mono text-amber-300">
+                  {benchmarkMetrics.userPctInternal}%
+                </span>
+                <div className="h-1.5 flex-1 mx-2.5 rounded-full bg-slate-800/80 overflow-hidden flex">
+                  <div 
+                    className="bg-amber-400 h-full transition-all duration-300" 
+                    style={{ width: `${benchmarkMetrics.userPctInternal}%` }} 
+                  />
+                  <div 
+                    className="bg-sky-400 h-full transition-all duration-300" 
+                    style={{ width: `${benchmarkMetrics.userPctExternal}%` }} 
+                  />
+                </div>
+                <span className="text-3xl font-bold font-mono text-sky-300">
+                  {benchmarkMetrics.userPctExternal}%
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2 mt-2 border-t border-white/5 flex flex-col gap-1 text-[10px] font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">{selectedUserId ? "Média Usuário:" : "Média Período:"}</span>
+                <span className="text-amber-400 font-bold">{benchmarkMetrics.userPctInternal}% <span className="text-slate-500 font-normal">/</span> <span className="text-sky-400">{benchmarkMetrics.userPctExternal}%</span></span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground uppercase">Média Empresa:</span>
+                <span className="text-slate-300 font-bold">{benchmarkMetrics.companyPctInternal}% <span className="text-slate-500 font-normal">/</span> <span className="text-slate-300">{benchmarkMetrics.companyPctExternal}%</span></span>
+              </div>
             </div>
           </div>
 

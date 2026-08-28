@@ -3,6 +3,7 @@ import {
   extractDealCostAnalysis,
   formatSecondsDetailed,
   DealCostAnalysis,
+  syncSalaryConfigsFromSupabase,
 } from "@/lib/salary-cost-tracker";
 import {
   DollarSign,
@@ -34,6 +35,13 @@ export function DealCostModal({
 }: DealCostModalProps) {
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const [activeView, setActiveView] = useState<"collaborators" | "sessions">("collaborators");
+
+  // Sincronizar salários salvos na nuvem quando o modal abre
+  useEffect(() => {
+    if (isOpen) {
+      syncSalaryConfigsFromSupabase();
+    }
+  }, [isOpen]);
 
   // Ticker de 1 segundo para atualizar sessões ativas e custos em tempo real
   useEffect(() => {

@@ -35,7 +35,7 @@ import { DailySnapshotModal } from "@/components/DailySnapshotModal";
 import { AdminPanel } from "@/components/AdminPanel";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Wallet, DollarSign } from "lucide-react";
-import { getUserSalaryConfig, computeHourlyRate } from "@/lib/salary-cost-tracker";
+import { getUserSalaryConfig, computeHourlyRate, syncSalaryConfigsFromSupabase } from "@/lib/salary-cost-tracker";
 
 export const Route = createFileRoute("/admin")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -172,6 +172,7 @@ function AdminPage() {
   async function fetchUsers() {
     setUsersLoading(true);
     try {
+      await syncSalaryConfigsFromSupabase();
       const { data: profs, error: pErr } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
       if (pErr) throw pErr;
 

@@ -107,29 +107,37 @@ export function EditMemberDialog({
 
     setBusy(true);
     try {
-      // 1. Atualizar nome e e-mail na tabela profiles
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
-          display_name: name.trim().toUpperCase(),
-          email: email.trim().toLowerCase(),
-        })
-        .eq("id", targetUser!.id);
+      // 1. Salvar configurações de remuneração e multiplicador de encargos PRIMEIRO
+      const finalSalary = Number(baseSalary) || 0;
+      const finalMultiplier = Math.max(1.0, Number(chargesMultiplier) || 1.0);
+      await saveUserSalaryConfig(targetUser!.id, finalSalary, finalMultiplier);
 
-      if (profileError) throw profileError;
+      // 2. Atualizar nome e e-mail na tabela profiles
+      try {
+        await supabase
+          .from("profiles")
+          .update({
+            display_name: name.trim().toUpperCase(),
+            email: email.trim().toLowerCase(),
+          })
+          .eq("id", targetUser!.id);
+      } catch (profErr) {
+        console.warn("Aviso ao atualizar profiles:", profErr);
+      }
 
-      // 2. Atualizar cargo / direitos na tabela user_roles
-      const dbRole = role === "admin" ? "admin" : role === "financeiro" ? "financeiro" : "user";
-      
-      await supabase.from("user_roles").delete().eq("user_id", targetUser!.id);
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: targetUser!.id,
-        role: dbRole,
-      });
+      // 3. Atualizar cargo / direitos na tabela user_roles
+      try {
+        const dbRole = role === "admin" ? "admin" : role === "financeiro" ? "financeiro" : "user";
+        await supabase.from("user_roles").delete().eq("user_id", targetUser!.id);
+        await supabase.from("user_roles").insert({
+          user_id: targetUser!.id,
+          role: dbRole,
+        });
+      } catch (roleErr) {
+        console.warn("Aviso ao atualizar user_roles:", roleErr);
+      }
 
-      if (roleError) throw roleError;
-
-      // 3. Sincronizar com Supabase Auth via RPC (se a função estiver disponível no banco)
+      // 4. Sincronizar com Supabase Auth via RPC (se a função estiver disponível no banco)
       try {
         await supabase.rpc("admin_update_user_credentials", {
           target_user_id: targetUser!.id,
@@ -141,7 +149,7 @@ export function EditMemberDialog({
         console.warn("Aviso ao sincronizar Supabase Auth:", rpcCatch);
       }
 
-      // 4. Se for a própria conta logada e alterou senha, atualiza também a sessão local
+      // 5. Se for a própria conta logada e alterou senha, atualiza também a sessão local
       if (password.trim() && isSelf) {
         try {
           await supabase.auth.updateUser({
@@ -151,9 +159,6 @@ export function EditMemberDialog({
           console.warn("Aviso ao atualizar sessão local:", authErr);
         }
       }
-
-      // 5. Salvar configurações de remuneração e multiplicador de encargos
-      await saveUserSalaryConfig(targetUser!.id, baseSalary, chargesMultiplier);
 
       toast.success(`Usuário ${name.trim().toUpperCase()} atualizado com sucesso!`);
       onSuccess();
@@ -430,8 +435,8 @@ export function EditMemberDialog({
           {/* Linha 4: Remuneração & Encargos (Última seção do modal) */}
           <div className="space-y-2 pt-2 border-t border-white/10">
             <div className="flex items-center justify-between ml-1">
-              <label className="text-[10px] uppercase tracking-widest text-amber-300 font-black flex items-center gap-1.5">
-                <DollarSign className="h-3.5 w-3.5 text-amber-400" />
+              <label className="text-[10px] uppercase tracking-widest text-cyan-300 font-black flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5 text-cyan-400" />
                 Remuneração & Encargos (Custo de Atividades)
               </label>
               <span className="text-[9px] font-mono text-muted-foreground uppercase font-bold">
@@ -446,7 +451,7 @@ export function EditMemberDialog({
                   Salário Base (R$)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400">R$</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-cyan-400">R$</span>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -457,7 +462,7 @@ export function EditMemberDialog({
                       setSalaryDisplay(numeric > 0 ? formatBRL(numeric) : "");
                     }}
                     placeholder="0,00"
-                    className="input-futuristic w-full rounded-xl pl-10 pr-3.5 py-2.5 outline-none text-sm font-mono font-bold bg-black/70 border-amber-500/30 text-amber-200 focus:border-amber-400"
+                    className="input-futuristic w-full rounded-xl pl-10 pr-3.5 py-2.5 outline-none text-sm font-mono font-bold bg-black/70 border-white/15 text-white focus:border-cyan-400"
                   />
                 </div>
               </div>
@@ -475,9 +480,9 @@ export function EditMemberDialog({
                     value={chargesMultiplier || ""}
                     onChange={(e) => setChargesMultiplier(Math.max(1.0, Number(e.target.value) || 1.0))}
                     placeholder="1.0"
-                    className="input-futuristic w-full rounded-xl px-3.5 py-2.5 outline-none text-sm font-mono font-bold bg-black/70 border-amber-500/30 text-amber-200 focus:border-amber-400"
+                    className="input-futuristic w-full rounded-xl px-3.5 py-2.5 outline-none text-sm font-mono font-bold bg-black/70 border-white/15 text-white focus:border-cyan-400"
                   />
-                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400">x</span>
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-cyan-400">x</span>
                 </div>
               </div>
             </div>

@@ -95,6 +95,50 @@ export function saveLocalSalaryConfig(config: UserSalaryConfig): void {
 }
 
 /**
+ * Sincroniza todas as configurações de salário salvas na nuvem (Supabase)
+ */
+export async function syncSalaryConfigsFromSupabase(): Promise<Record<string, UserSalaryConfig>> {
+  try {
+    const { data, error } = await supabase
+      .from("crm_deal_history")
+      .select("*")
+      .eq("action_type", "team_salary_config_updated")
+      .order("created_at", { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      const merged = { ...getLocalSalaryConfigs() };
+      data.forEach((row) => {
+        try {
+          if (row.description) {
+            const parsed = JSON.parse(row.description) as UserSalaryConfig;
+            if (parsed.userId) {
+              merged[parsed.userId] = {
+                userId: parsed.userId,
+                baseSalary: Number(parsed.baseSalary) || 0,
+                chargesMultiplier: Number(parsed.chargesMultiplier) || 1.0,
+                monthlyHours: Number(parsed.monthlyHours) || 160,
+                updatedAt: parsed.updatedAt || row.created_at,
+              };
+            }
+          }
+        } catch (e) {}
+      });
+      memorySalaryCache = merged;
+      try {
+        localStorage.setItem(SALARY_STORAGE_KEY, JSON.stringify(merged));
+      } catch (e) {}
+      return merged;
+    }
+  } catch (err) {
+    console.warn("Aviso ao sincronizar configurações de salário do Supabase:", err);
+  }
+  return getLocalSalaryConfigs();
+}
+
+// Sincronização inicial automática em background
+syncSalaryConfigsFromSupabase();
+
+/**
  * Obtém a configuração de salário de um usuário (com valores padrão se não configurado)
  */
 export function getUserSalaryConfig(userId: string): UserSalaryConfig {
@@ -117,7 +161,7 @@ export function getUserSalaryConfig(userId: string): UserSalaryConfig {
 }
 
 /**
- * Salva a configuração de salário do usuário (no storage local e tenta persistir no Supabase)
+ * Salva a configuração de salário do usuário (no storage local e persiste no Supabase em tempo real)
  */
 export async function saveUserSalaryConfig(
   userId: string,
@@ -133,9 +177,28 @@ export async function saveUserSalaryConfig(
     updatedAt: new Date().toISOString(),
   };
 
+  // 1. Salvar no cache local e localStorage para resposta instantânea
   saveLocalSalaryConfig(config);
 
-  // Tentativa de salvar na tabela profiles (caso as colunas existam)
+  // 2. Persistir no banco de dados Supabase na nuvem (compartilhado entre todos os usuários)
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    const currentUserId = authData?.user?.id || null;
+    const currentUserEmail = authData?.user?.email || "Admin";
+
+    await supabase.from("crm_deal_history").insert({
+      deal_id: null as any,
+      action_type: "team_salary_config_updated",
+      user_id: currentUserId,
+      user_name: currentUserEmail,
+      description: JSON.stringify(config),
+      created_at: new Date().toISOString(),
+    });
+  } catch (supabaseErr) {
+    console.warn("Aviso ao salvar salário no Supabase crm_deal_history:", supabaseErr);
+  }
+
+  // 3. Tentativa adicional na tabela profiles caso colunas existam
   try {
     await supabase
       .from("profiles")
@@ -144,9 +207,7 @@ export async function saveUserSalaryConfig(
         charges_multiplier: config.chargesMultiplier,
       } as any)
       .eq("id", userId);
-  } catch (err) {
-    // Silencioso se as colunas não existirem no schema do Postgres
-  }
+  } catch (err) {}
 }
 
 /**

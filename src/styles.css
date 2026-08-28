@@ -360,3 +360,48 @@ html[data-scroll-dir="down"] ::-webkit-scrollbar-thumb {
   font-weight: 400;
   font-style: normal;
 }
+
+/* Animação com corte seco INTERCALADA entre Trabalhando e Vencida (ciclo de 4s) */
+/* Fase A: TRABALHANDO visível nos primeiros 2s, card visível nos últimos 2s */
+@keyframes crm-status-working-blink {
+  0%, 50% {
+    opacity: 1;
+    visibility: visible;
+  }
+  50.01%, 100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* Fase B: VENCIDA visível nos últimos 2s, card visível nos primeiros 2s */
+@keyframes crm-status-expired-blink {
+  0%, 50% {
+    opacity: 0;
+    visibility: hidden;
+  }
+  50.01%, 100% {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+.crm-status-working-overlay {
+  animation: crm-status-working-blink 4s infinite;
+  will-change: opacity, visibility;
+}
+
+.crm-status-expired-overlay {
+  animation: crm-status-expired-blink 4s infinite;
+  will-change: opacity, visibility;
+}
+
+.crm-card:hover .crm-status-working-overlay,
+.group:hover .crm-status-working-overlay,
+.crm-card:hover .crm-status-expired-overlay,
+.group:hover .crm-status-expired-overlay {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  animation: none !important;
+}
+

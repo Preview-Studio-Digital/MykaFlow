@@ -12,9 +12,38 @@ import {
   CheckCircle2,
   CheckCheck,
   Clock,
-  Send
+  Send,
+  User,
+  UserCheck
 } from "lucide-react";
 import { toast } from "sonner";
+
+function formatElapsedLive(startedAt: string, currentMs: number = Date.now()): string {
+  const startMs = new Date(startedAt).getTime();
+  if (isNaN(startMs)) return "00m 00s";
+  const sec = Math.max(0, Math.floor((currentMs - startMs) / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const mFormatted = String(m).padStart(2, "0");
+  const sFormatted = String(s).padStart(2, "0");
+  if (h > 0) return `${h}h ${mFormatted}m ${sFormatted}s`;
+  return `${mFormatted}m ${sFormatted}s`;
+}
+
+function LiveElapsedTimer({ startedAt }: { startedAt: string }) {
+  const [elapsed, setElapsed] = useState(() => formatElapsedLive(startedAt));
+
+  useEffect(() => {
+    setElapsed(formatElapsedLive(startedAt));
+    const timer = setInterval(() => {
+      setElapsed(formatElapsedLive(startedAt));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+
+  return <>{elapsed}</>;
+}
 
 export interface TaskCompletionNotification {
   id: string;
@@ -237,6 +266,32 @@ export function InboxModal({
       fetchDeals();
     }
   }, [isOpen, propDeals]);
+
+  // Atividade em andamento do usuário logado (Trabalhando Ao Vivo)
+  const activeDeal = useMemo(() => {
+    return (deals || []).find((d) => {
+      if (!d || !d.notes || !d.notes.includes("[WORK_ACTIVE:")) return false;
+      try {
+        const match = d.notes.match(/\[WORK_ACTIVE:(.*?)\]/);
+        if (match && match[1]) {
+          const parsed = JSON.parse(match[1]);
+          return parsed.userId === currentUser?.id;
+        }
+      } catch (e) {}
+      return false;
+    }) || null;
+  }, [deals, currentUser]);
+
+  const activeWorkerInfo = useMemo(() => {
+    if (!activeDeal?.notes) return null;
+    try {
+      const match = activeDeal.notes.match(/\[WORK_ACTIVE:(.*?)\]/);
+      if (match && match[1]) {
+        return JSON.parse(match[1]) as { userId: string; userName: string; startedAt: string };
+      }
+    } catch (e) {}
+    return null;
+  }, [activeDeal]);
 
   // 1. Notificações destinadas ao usuário logado (onde ele é o autor)
   const userNotificationsData = useMemo(() => {
@@ -516,14 +571,35 @@ export function InboxModal({
 
           <div className="h-6 w-px bg-white/15 hidden md:block shrink-0" />
 
-          {/* Usuário e Contadores Globais */}
+          {/* Usuário e Status de Atividade em Tempo Real */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-400/30 shadow-[0_0_15px_rgba(34,211,238,0.25)] shrink-0">
-              <Inbox className="h-4 w-4" />
+            {/* Ícone de Usuário com status online/ativo */}
+            <div
+              className={`relative h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-all shadow-md ${
+                activeWorkerInfo
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+                  : "bg-slate-900 border-white/10 text-slate-400"
+              }`}
+            >
+              {activeWorkerInfo ? (
+                <UserCheck className="h-4.5 w-4.5 text-emerald-400" />
+              ) : (
+                <User className="h-4.5 w-4.5 text-slate-400" />
+              )}
+
+              {/* Ponto indicador de atividade em tempo real */}
+              {activeWorkerInfo && (
+                <>
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-950 animate-ping" />
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-950 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+                </>
+              )}
             </div>
-            <div className="min-w-0">
+
+            {/* Nome do Usuário e Pill de Atividade / Inatividade */}
+            <div className="min-w-0 flex flex-col justify-center">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-black font-mono uppercase text-cyan-300 truncate max-w-[150px] sm:max-w-none">
+                <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-white truncate leading-none">
                   {currentUser?.user_metadata?.display_name || currentUser?.email?.split("@")[0] || "Usuário"}
                 </span>
                 {totalUnreadCount > 0 && (
@@ -532,9 +608,40 @@ export function InboxModal({
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground hidden xl:block truncate">
-                Central unificada de Notificações de Conclusão e Menções de Equipe.
-              </p>
+
+              <div className="flex items-center gap-1.5 mt-1">
+                {activeWorkerInfo && activeDeal ? (
+                  <div
+                    onClick={() => {
+                      if (onOpenDeal) {
+                        onOpenDeal(activeDeal);
+                      }
+                    }}
+                    className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 transition-colors"
+                    title="Clique para abrir detalhes da atividade em andamento"
+                  >
+                    <div className="flex items-center gap-2 pl-2.5 pr-2 py-0.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
+                      <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[180px] sm:max-w-[280px] md:max-w-[400px]">
+                        ATIVO EM:{" "}
+                        <span className="text-white font-black">
+                          {getCleanDealTitle(activeDeal.title)}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2.5 py-0.5 text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
+                      <LiveElapsedTimer startedAt={activeWorkerInfo.startedAt} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
+                    <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
+                    <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
+                      INATIVO NO MOMENTO
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

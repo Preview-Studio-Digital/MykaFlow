@@ -133,6 +133,9 @@ export interface Deal {
   quote_file_url?: string | null;
   quote_file_name?: string | null;
   quote_file_uploaded_at?: string | null;
+  contract_file_url?: string | null;
+  contract_file_name?: string | null;
+  contract_file_uploaded_at?: string | null;
   is_working?: boolean;
   working_user_id?: string | null;
   working_user_name?: string | null;
@@ -599,7 +602,7 @@ export interface DealQuoteFileInfo {
   quoteData?: ExtractedQuoteData | null;
 }
 
-// Helper para extrair informações do arquivo de orçamento oficial e dados parseados
+// Helper para extrair informações do arquivo de orçamento oficial e dados parseados (obtém sempre o mais recente)
 function getDealQuoteFile(deal: Deal | null, _historyList?: DealHistoryItem[]): DealQuoteFileInfo | null {
   if (!deal) return null;
 
@@ -637,6 +640,86 @@ function getDealQuoteFile(deal: Deal | null, _historyList?: DealHistoryItem[]): 
       uploadedAt: deal.quote_file_uploaded_at || deal.updated_at || deal.created_at,
       quoteData: extractedFromNotes,
     };
+  }
+
+  // Fallback: busca a entrada mais recente de orçamento no histórico
+  if (_historyList && _historyList.length > 0) {
+    for (const h of _historyList) {
+      if (h.description && h.description.includes("[QUOTE_DOC:")) {
+        try {
+          const match = h.description.match(/\[QUOTE_DOC:(.*?)\]/);
+          if (match && match[1]) {
+            const parsed = JSON.parse(match[1]);
+            if (parsed.url) {
+              return {
+                url: parsed.url,
+                name: parsed.name || "orcamento_oficial",
+                uploadedAt: parsed.uploadedAt || h.created_at,
+                quoteData: parsed.quoteData || extractedFromNotes,
+              };
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  return null;
+}
+
+export interface DealContractFileInfo {
+  url: string;
+  name: string;
+  uploadedAt: string;
+}
+
+// Helper para extrair informações do arquivo de contrato anexado (obtém sempre o mais recente)
+function getDealContractFile(deal: Deal | null, _historyList?: DealHistoryItem[]): DealContractFileInfo | null {
+  if (!deal) return null;
+
+  if (deal.notes && deal.notes.includes("[CONTRACT_FILE:")) {
+    try {
+      const match = deal.notes.match(/\[CONTRACT_FILE:(.*?)\]/);
+      if (match && match[1]) {
+        const parsed = JSON.parse(match[1]);
+        if (parsed.url) {
+          return {
+            url: parsed.url,
+            name: parsed.name || "contrato_oficial",
+            uploadedAt: parsed.uploadedAt || deal.updated_at || deal.created_at,
+          };
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (deal.contract_file_url) {
+    return {
+      url: deal.contract_file_url,
+      name: deal.contract_file_name || "contrato_oficial",
+      uploadedAt: deal.contract_file_uploaded_at || deal.updated_at || deal.created_at,
+    };
+  }
+
+  // Fallback: busca a entrada mais recente de contrato no histórico
+  if (_historyList && _historyList.length > 0) {
+    for (const h of _historyList) {
+      if (h.description && h.description.includes("[CONTRACT_DOC:")) {
+        try {
+          const match = h.description.match(/\[CONTRACT_DOC:(.*?)\]/);
+          if (match && match[1]) {
+            const parsed = JSON.parse(match[1]);
+            if (parsed.url) {
+              return {
+                url: parsed.url,
+                name: parsed.name || "contrato_oficial",
+                uploadedAt: parsed.uploadedAt || h.created_at,
+              };
+            }
+          }
+        } catch (e) {}
+      }
+    }
   }
 
   return null;
@@ -1067,7 +1150,7 @@ function FastDealCommentInput({
   };
 
   return (
-    <div className="relative flex-1 min-h-[140px] flex flex-col">
+    <div className="relative flex-1 min-h-[85px] sm:min-h-[95px] flex flex-col">
       <textarea
         ref={textareaRef}
         placeholder="Descreva a nova atualização desta atividade... Use @ para mencionar um colega (ex: @João)"
@@ -1096,7 +1179,7 @@ function FastDealCommentInput({
             setMentionCursorIndex(null);
           }
         }}
-        className="input-futuristic flex-1 min-h-[140px] w-full rounded-xl p-3.5 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+        className="input-futuristic flex-1 min-h-[140px] w-full rounded-xl p-4 text-sm sm:text-base outline-none resize-none leading-relaxed custom-scrollbar font-medium"
         autoFocus
       />
 
@@ -1148,7 +1231,7 @@ function FastNewDealNotesInput({ placeholder, onTextChange, resetTrigger }: Fast
         setLocalText(val);
         onTextChange(val);
       }}
-      className="input-futuristic w-full h-[220px] sm:h-[260px] rounded-xl p-4 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+      className="input-futuristic w-full h-[220px] sm:h-[260px] rounded-xl p-4 text-sm sm:text-base outline-none resize-none leading-relaxed custom-scrollbar font-medium"
     />
   );
 }
@@ -1187,7 +1270,7 @@ function FastMovingDealNotesInput({ initialValue = "", onTextChange }: FastMovin
         onTextChange(val);
       }}
       placeholder="Descreva o que foi realizado/definido nesta etapa (esta mensagem será a nova Atividade Atual)..."
-      className="input-futuristic w-full rounded-xl p-3 text-xs outline-none resize-none leading-relaxed font-medium"
+      className="input-futuristic w-full rounded-xl p-3.5 text-sm sm:text-base outline-none resize-none leading-relaxed font-medium"
     />
   );
 }
@@ -1214,7 +1297,7 @@ function FastSubtaskNotesInput({ onTextChange, resetTrigger }: FastSubtaskNotesI
         setLocalText(val);
         onTextChange(val);
       }}
-      className="input-futuristic w-full h-[200px] sm:h-[240px] rounded-xl p-4 text-xs outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+      className="input-futuristic w-full h-[200px] sm:h-[240px] rounded-xl p-4 text-sm sm:text-base outline-none resize-none leading-relaxed custom-scrollbar font-medium"
     />
   );
 }
@@ -1300,7 +1383,7 @@ function FastMentionReplyInput({ targetId, deal, teamMembers, onSend }: FastMent
             handleSend();
           }
         }}
-        className="input-futuristic flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none bg-slate-900/90"
+        className="input-futuristic flex-1 rounded-lg px-3 py-2 text-sm sm:text-base outline-none bg-slate-900/90"
         autoFocus
       />
 
@@ -1418,6 +1501,15 @@ function CrmDashboard() {
   const [reassignTo, setReassignTo] = useState("");
   const [isSavingUpdate, setIsSavingUpdate] = useState(false);
 
+  // Fase sincronizada global para alternância intercalada 100% simultânea: Trabalhando (0-2s) vs Vencidas (2-4s)
+  const [blinkPhase, setBlinkPhase] = useState<"working" | "expired">("working");
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBlinkPhase((prev) => (prev === "working" ? "expired" : "working"));
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Linha do tempo unificada (histórico de movimentações + atualizações + respostas a menções + conclusões de vinculadas)
   const unifiedTimelineList = useMemo(() => {
     if (!selectedDealForHistory) return dealHistoryList;
@@ -1492,8 +1584,11 @@ function CrmDashboard() {
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
   const [isUploadingQuoteFile, setIsUploadingQuoteFile] = useState(false);
+  const [isUploadingContractFile, setIsUploadingContractFile] = useState(false);
+  const contractFileInputRef = useRef<HTMLInputElement>(null);
+  const [newContractModalFile, setNewContractModalFile] = useState<File | null>(null);
   const [isQuoteUploaderOpen, setIsQuoteUploaderOpen] = useState(false);
-  const [previewingQuoteFile, setPreviewingQuoteFile] = useState<{ url: string; name: string } | null>(null);
+  const [previewingQuoteFile, setPreviewingQuoteFile] = useState<{ url: string; name: string; isContract?: boolean } | null>(null);
 
   // Modal de Conflito de Atividade em Andamento
   const [workingConflictModal, setWorkingConflictModal] = useState<{
@@ -2499,9 +2594,11 @@ function CrmDashboard() {
   };
 
   // Helper unificado para renderizar descrições com botões clicáveis (criação e conclusão de tarefas)
-  const renderInteractiveDescription = (rawText: string) => {
+  // Helper unificado para renderizar descrições no Histórico e Cartões:
+  // REGRA: O texto redigido pelo usuário aparece PRIMEIRO, e as linhas automáticas do sistema aparecem ABAIXO.
+  const renderInteractiveDescription = (rawText: string, isTimelineItem = false) => {
     if (!rawText) return null;
-    const sanitized = rawText
+    let sanitized = rawText
       .replace(/<!--.*?-->\s*/g, "")
       .replace(/\[TASK_COMPLETION_NOTIFICATION:.*?\]\s*/g, "")
       .replace(/\[WORK_ACTIVE:.*?\]\s*/g, "")
@@ -2509,6 +2606,7 @@ function CrmDashboard() {
       .replace(/\[QUOTE_DATA:.*?\]\s*/g, "")
       .replace(/\[PARENT_DEAL:.*?\]\s*/g, "")
       .replace(/\[QUOTE_FILE:.*?\]\s*/g, "")
+      .replace(/\[CONTRACT_FILE:.*?\]\s*/g, "")
       .replace(/\[SUBTASK_LINK:.*?\]\s*/g, "")
       .replace(/\[SUBTASK_COMPLETED:.*?\]\s*/g, "")
       .replace(/\[SUBTASK_COMPLETION:.*?\]\s*/g, "")
@@ -2518,229 +2616,415 @@ function CrmDashboard() {
       .replace(/\[MENTION_REPLY:.*?\]\s*/g, "")
       .replace(/\[RESPONSIBLE_LAST_SEEN:.*?\]\s*/g, "")
       .replace(/\[ESTIMATED_DURATION:.*?\]\s*/g, "")
-      .trim();
+      .replace(/^Atualização\s+(de|em)\s+andamento:\s*/gim, "");
 
+    if (!isTimelineItem) {
+      sanitized = sanitized
+        .replace(/\[QUOTE_DOC:.*?\]\s*/g, "")
+        .replace(/\[CONTRACT_DOC:.*?\]\s*/g, "")
+        .replace(/^[A-Za-z0-9À-ÿ\s._-]+?\s+anexou o documento de orçamento oficial\s+"[^"]+".*$/gim, "")
+        .replace(/^[A-Za-z0-9À-ÿ\s._-]+?\s+anexou o contrato\s+"[^"]+".*$/gim, "")
+        .replace(/^[A-Za-z0-9À-ÿ\s._-]+?\s+removeu o orçamento anexado.*$/gim, "")
+        .replace(/^[A-Za-z0-9À-ÿ\s._-]+?\s+removeu o contrato anexado.*$/gim, "");
+    }
+
+    sanitized = sanitized.trim();
     if (!sanitized) return null;
 
-    const lines = sanitized.split("\n");
+    let workingText = sanitized;
+    const userLines: string[] = [];
+    const systemLines: string[] = [];
+
+    // 0. Padrão Legado: "Atividade criada e direcionada para X. (Documento Anexado: Y)? Instruções: ..."
+    const createdWithInstMatch = workingText.match(/^(?:([A-Za-z0-9À-ÿ\s._-]+?)\s+criou a atividade e direcionou para\s+([A-Za-z0-9À-ÿ\s._-]+?)|Atividade criada e direcionada para\s+([A-Za-z0-9À-ÿ\s._-]+?))\.(?:\s*\|\s*Documento Anexado:\s*(.*?))?\s*Instruções:\s*([\s\S]*)$/i);
+    if (createdWithInstMatch) {
+      const creator = createdWithInstMatch[1]?.trim();
+      const assigned = (createdWithInstMatch[2] || createdWithInstMatch[3])?.trim();
+      const doc = createdWithInstMatch[4]?.trim() ? ` | Documento Anexado: ${createdWithInstMatch[4].trim()}` : "";
+      systemLines.push(creator ? `${creator} criou a atividade e direcionou para ${assigned}.${doc}` : `Atividade criada e direcionada para ${assigned}.${doc}`);
+      workingText = createdWithInstMatch[5] ? createdWithInstMatch[5].trim() : "";
+    }
+
+    // 1. Padrão Legado: "Encaminhado de A para B. Motivo/Instrução: ..."
+    const fwdMatch = workingText.match(/^Encaminhado de ([A-Za-z0-9À-ÿ\s._-]+?) para ([A-Za-z0-9À-ÿ\s._-]+?)\.\s*Motivo\/Instrução:\s*["']?([\s\S]*?)["']?$/i);
+    if (fwdMatch) {
+      systemLines.push(`Encaminhado de ${fwdMatch[1]} para ${fwdMatch[2]}.`);
+      workingText = fwdMatch[3] ? fwdMatch[3].trim() : "";
+    }
+
+    // 2. Padrão Legado: "Mudança de etapa: ... Atualização: ..."
+    const moveMatch = workingText.match(/^Mudança de etapa:\s*(.*?)\.\s*Atualização:\s*["']?([\s\S]*?)["']?$/i);
+    if (moveMatch) {
+      systemLines.push(`Mudança de etapa: ${moveMatch[1]}.`);
+      workingText = moveMatch[2] ? moveMatch[2].trim() : "";
+    }
+
+    // 3. Padrão Legado: "... com a atualização:\n..."
+    const updateWrapMatch = workingText.match(/^(.*?)\s+com a atualização:\s*([\s\S]*)$/i);
+    if (updateWrapMatch) {
+      systemLines.push(updateWrapMatch[1].trim());
+      workingText = updateWrapMatch[2] ? updateWrapMatch[2].trim() : "";
+    }
+
+    // 4. Padrão Legado: "Vinculada concluída por ... Atualização: ..."
+    const subtaskDoneMatch = workingText.match(/^Vinculada concluída por (.*?)\.\s*Atualização:\s*["']?([\s\S]*?)["']?$/i);
+    if (subtaskDoneMatch) {
+      systemLines.push(`Vinculada concluída por ${subtaskDoneMatch[1]}.`);
+      workingText = subtaskDoneMatch[2] ? subtaskDoneMatch[2].trim() : "";
+    }
+
+    const isSystemLine = (str: string) => {
+      const t = str.trim();
+      if (!t) return false;
+      const lower = t.toLowerCase();
+      if (lower.includes("alterou a etapa de") && lower.includes("para")) return true;
+      if (lower.includes("alterou o responsável de") && lower.includes("para")) return true;
+      if (lower.includes("alterou o responsavel de") && lower.includes("para")) return true;
+      if (lower.startsWith("etapa alterada")) return true;
+      if (lower.includes("atividade devolvida") || lower.includes("atividade reencaminhada") || lower.includes("atividade encaminhada") || lower.includes("atividade criada e direcionada")) return true;
+      if (lower.startsWith("encaminhado de ") && lower.includes(" para ")) return true;
+      if (lower.startsWith("mudança de etapa") || lower.startsWith("mudanca de etapa")) return true;
+      if (lower.startsWith("vinculada concluída por") || lower.startsWith("vinculada concluida por")) return true;
+      if (lower.includes("criou a tarefa") && lower.includes("para o")) return true;
+      if (lower.includes("concluiu a tarefa")) return true;
+      if (lower.includes("[quote_doc:") || lower.includes("anexou o documento de orçamento oficial") || lower.includes("anexou o orcamento oficial")) return true;
+      if (lower.includes("[contract_doc:") || lower.includes("anexou o contrato")) return true;
+      if (lower.includes("removeu o orçamento anexado") || lower.includes("removeu o orcamento anexado") || lower.includes("removeu o contrato anexado")) return true;
+      if (lower.includes("prazo anterior encerrado") || lower.includes("novo prazo estipulado")) return true;
+      return false;
+    };
+
+    const rawLines = workingText.split("\n");
+    for (const rLine of rawLines) {
+      const trimmed = rLine.trim();
+      if (!trimmed) continue;
+
+      // Se a linha contiver uma ação de etapa seguida de texto normal
+      const inlineStage = trimmed.match(/^([\s\S]*?alterou a etapa de\s+["“][^"”]+["”]\s+para\s+["“][^"”]+["”]\.?)(?:\s+([\s\S]*))?$/i);
+      if (inlineStage) {
+        systemLines.push(inlineStage[1].trim());
+        if (inlineStage[2]?.trim()) {
+          userLines.push(inlineStage[2].trim().replace(/^["']|["']$/g, ""));
+        }
+        continue;
+      }
+
+      // Se a linha contiver uma ação de responsável seguida de texto normal
+      const inlineReassign = trimmed.match(/^([\s\S]*?alterou o respons[aá]vel de\s+["“][^"”]+["”]\s+para\s+["“][^"”]+["”]\.?)(?:\s+([\s\S]*))?$/i);
+      if (inlineReassign) {
+        systemLines.push(inlineReassign[1].trim());
+        if (inlineReassign[2]?.trim()) {
+          userLines.push(inlineReassign[2].trim().replace(/^["']|["']$/g, ""));
+        }
+        continue;
+      }
+
+      // Se a linha contiver uma ação de criação seguida de instruções
+      const inlineCreated = trimmed.match(/^([\s\S]*?(?:Atividade criada e direcionada para\s+[A-Za-z0-9À-ÿ\s._-]+?|criou a atividade e direcionou para\s+[A-Za-z0-9À-ÿ\s._-]+?)\.?(?:\s*\|\s*Documento Anexado:\s*[^.]+?\.?)?)(?:\s*Instruções:\s*([\s\S]*))?$/i);
+      if (inlineCreated && inlineCreated[2]?.trim()) {
+        systemLines.push(inlineCreated[1].trim());
+        userLines.push(inlineCreated[2].trim().replace(/^["']|["']$/g, ""));
+        continue;
+      }
+
+      if (isSystemLine(trimmed)) {
+        systemLines.push(trimmed);
+      } else {
+        // Se for linha legada "Instruções: ..."
+        if (trimmed.toLowerCase().startsWith("instruções:")) {
+          const cleanInst = trimmed.replace(/^instruções:\s*/i, "").trim();
+          if (cleanInst) userLines.push(cleanInst);
+        } else {
+          // Remove aspas envolventes se houver
+          const cleanUser = trimmed.replace(/^["']|["']$/g, "").trim();
+          if (cleanUser) userLines.push(cleanUser);
+        }
+      }
+    }
+
+    // Renderizador especializado para linhas de sistema
+    const renderSystemBlock = (trimmedLine: string, lineIdx: number) => {
+      // 1. Criação de Tarefa Vinculada
+      const createMatch = trimmedLine.match(/^([A-Za-z0-9À-ÿ\s._-]+?)\s+criou a tarefa\s+"([^"]+)"\s+para o\s+([A-Za-z0-9À-ÿ\s._-]+)$/i);
+      if (createMatch) {
+        const creatorName = createMatch[1].trim();
+        const subtaskTitle = createMatch[2].trim();
+        const assignedName = createMatch[3].trim();
+
+        const creatorUser = teamMembers.find(
+          (m) =>
+            m.display_name?.toUpperCase() === creatorName.toUpperCase() ||
+            m.email?.toUpperCase() === creatorName.toUpperCase()
+        );
+        const assignedUser = teamMembers.find(
+          (m) =>
+            m.display_name?.toUpperCase() === assignedName.toUpperCase() ||
+            m.email?.toUpperCase() === assignedName.toUpperCase()
+        );
+        const matchedDeal = deals.find(
+          (d) =>
+            d.title.replace(/^\[(REQ\.\s*INTERNA|TAREFA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "").trim().toUpperCase() === subtaskTitle.toUpperCase() ||
+            d.title.toUpperCase().includes(subtaskTitle.toUpperCase())
+        );
+
+        return (
+          <div
+            key={`sys-${lineIdx}`}
+            className="flex flex-wrap items-center gap-1.5 text-xs text-white/90 py-1 pl-3 border-l-2 border-emerald-400 my-1"
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleUserFilter(creatorUser?.id || null, e);
+              }}
+              className="font-bold text-white hover:underline cursor-pointer uppercase"
+              title={`Filtrar por ${creatorName}`}
+            >
+              {creatorName}
+            </button>
+            <span className="text-white/80">criou a tarefa</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (matchedDeal) {
+                  openDealHistory(matchedDeal);
+                } else {
+                  toast.info(`Tarefa: ${subtaskTitle}`);
+                }
+              }}
+              className="font-black text-emerald-300 hover:text-white hover:underline inline-flex items-center gap-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 px-2 py-0.5 rounded-md cursor-pointer shadow-sm transition-all"
+              title="Clique para abrir esta tarefa"
+            >
+              <CheckSquare className="h-3.5 w-3.5 text-emerald-400" />
+              <span>{subtaskTitle}</span>
+            </button>
+            <span className="text-white/80">para o</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleUserFilter(assignedUser?.id || null, e);
+              }}
+              className="font-bold text-white hover:underline cursor-pointer uppercase"
+              title={`Filtrar por ${assignedName}`}
+            >
+              {assignedName}
+            </button>
+          </div>
+        );
+      }
+
+      // 2. Conclusão de Tarefa Vinculada
+      const completeMatch = trimmedLine.match(/^([A-Za-z0-9À-ÿ\s._-]+?)\s+concluiu a tarefa\s+"([^"]+)"(.*)$/i);
+      if (completeMatch) {
+        const userName = completeMatch[1].trim();
+        const subtaskTitle = completeMatch[2].trim();
+        const extraNotes = completeMatch[3] ? completeMatch[3].trim() : "";
+
+        const userObj = teamMembers.find(
+          (m) =>
+            m.display_name?.toUpperCase() === userName.toUpperCase() ||
+            m.email?.toUpperCase() === userName.toUpperCase()
+        );
+        const matchedDeal = deals.find(
+          (d) =>
+            d.title.replace(/^\[(REQ\.\s*INTERNA|TAREFA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "").trim().toUpperCase() === subtaskTitle.toUpperCase() ||
+            d.title.toUpperCase().includes(subtaskTitle.toUpperCase())
+        );
+
+        return (
+          <div
+            key={`sys-${lineIdx}`}
+            className="flex flex-wrap items-center gap-1.5 text-xs text-emerald-300 py-1 pl-3 border-l-2 border-emerald-500 my-1"
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleUserFilter(userObj?.id || null, e);
+              }}
+              className="font-bold text-white hover:underline cursor-pointer uppercase"
+              title={`Filtrar por ${userName}`}
+            >
+              {userName}
+            </button>
+            <span className="text-emerald-100/90">concluiu a tarefa</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (matchedDeal) {
+                  openDealHistory(matchedDeal);
+                } else {
+                  toast.info(`Tarefa: ${subtaskTitle}`);
+                }
+              }}
+              className="font-black text-emerald-200 hover:text-white hover:underline inline-flex items-center gap-1.5 bg-emerald-500/30 hover:bg-emerald-500/40 border border-emerald-400/50 px-2 py-0.5 rounded-md cursor-pointer shadow-sm transition-all"
+              title="Clique para abrir esta tarefa"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+              <span>{subtaskTitle}</span>
+            </button>
+            {extraNotes && <span className="text-white/80 text-xs ml-1">{extraNotes}</span>}
+          </div>
+        );
+      }
+
+      // 3. Orçamento Oficial Anexado na Linha do Tempo
+      const quoteDocMatch = trimmedLine.match(/^(\[QUOTE_DOC:.*?\]\s*)?([A-Za-z0-9À-ÿ\s._-]+?)\s+anexou o documento de orçamento oficial\s+"([^"]+)"\s*(?:\(([^)]+)\))?.*$/i);
+      if (quoteDocMatch || trimmedLine.includes("[QUOTE_DOC:")) {
+        let docUrl = "";
+        let fileName = "orcamento_oficial";
+        let fileSize = "";
+        let userName = "Usuário";
+
+        if (trimmedLine.includes("[QUOTE_DOC:")) {
+          try {
+            const jsonStr = trimmedLine.match(/\[QUOTE_DOC:(.*?)\]/)?.[1];
+            if (jsonStr) {
+              const parsed = JSON.parse(jsonStr);
+              docUrl = parsed.url;
+              fileName = parsed.name || fileName;
+              fileSize = parsed.sizeKb ? `${parsed.sizeKb} KB` : "";
+            }
+          } catch (e) {}
+        }
+
+        if (quoteDocMatch) {
+          userName = quoteDocMatch[2]?.trim() || userName;
+          fileName = quoteDocMatch[3]?.trim() || fileName;
+          if (quoteDocMatch[4]) fileSize = quoteDocMatch[4].trim();
+        }
+
+        const currentDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
+        const finalUrl = docUrl || currentDoc?.url;
+
+        return (
+          <div
+            key={`sys-${lineIdx}`}
+            className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/40 my-1 shadow-sm text-xs"
+          >
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+                <FileCheck className="h-4 w-4" />
+              </div>
+              <span className="font-bold text-white uppercase">{userName}</span>
+              <span className="text-emerald-200/90 font-medium">anexou o Orçamento Oficial:</span>
+              {finalUrl ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewingQuoteFile({ url: finalUrl, name: fileName, isContract: false });
+                  }}
+                  className="font-black text-emerald-300 hover:text-emerald-200 underline underline-offset-2 cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1"
+                  title="Clique para visualizar o orçamento"
+                >
+                  <span>{fileName}</span>
+                  {fileSize ? <span className="font-mono text-[10px] no-underline font-normal text-muted-foreground">({fileSize})</span> : null}
+                </button>
+              ) : (
+                <span className="font-mono text-xs font-bold text-emerald-300 truncate max-w-[260px]">{fileName}</span>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      // 3.1. Contrato Anexado na Linha do Tempo
+      const contractDocMatch = trimmedLine.match(/^(\[CONTRACT_DOC:.*?\]\s*)?([A-Za-z0-9À-ÿ\s._-]+?)\s+anexou o contrato\s+"([^"]+)"\s*(?:\(([^)]+)\))?.*$/i);
+      if (contractDocMatch || trimmedLine.includes("[CONTRACT_DOC:")) {
+        let docUrl = "";
+        let fileName = "contrato_oficial";
+        let fileSize = "";
+        let userName = "Usuário";
+
+        if (trimmedLine.includes("[CONTRACT_DOC:")) {
+          try {
+            const jsonStr = trimmedLine.match(/\[CONTRACT_DOC:(.*?)\]/)?.[1];
+            if (jsonStr) {
+              const parsed = JSON.parse(jsonStr);
+              docUrl = parsed.url;
+              fileName = parsed.name || fileName;
+              fileSize = parsed.sizeKb ? `${parsed.sizeKb} KB` : "";
+            }
+          } catch (e) {}
+        }
+
+        if (contractDocMatch) {
+          userName = contractDocMatch[2]?.trim() || userName;
+          fileName = contractDocMatch[3]?.trim() || fileName;
+          if (contractDocMatch[4]) fileSize = contractDocMatch[4].trim();
+        }
+
+        const currentContract = getDealContractFile(selectedDealForHistory, dealHistoryList);
+        const finalUrl = docUrl || currentContract?.url;
+
+        return (
+          <div
+            key={`sys-${lineIdx}`}
+            className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-gradient-to-r from-sky-950/70 via-slate-900 to-slate-900 border border-sky-500/40 my-1 shadow-sm text-xs"
+          >
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 shrink-0">
+                <FileText className="h-4 w-4" />
+              </div>
+              <span className="font-bold text-white uppercase">{userName}</span>
+              <span className="text-sky-200/90 font-medium">anexou o Contrato:</span>
+              {finalUrl ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewingQuoteFile({ url: finalUrl, name: fileName, isContract: true });
+                  }}
+                  className="font-black text-sky-300 hover:text-sky-200 underline underline-offset-2 cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1"
+                  title="Clique para visualizar o contrato"
+                >
+                  <span>{fileName}</span>
+                  {fileSize ? <span className="font-mono text-[10px] no-underline font-normal text-muted-foreground">({fileSize})</span> : null}
+                </button>
+              ) : (
+                <span className="font-mono text-xs font-bold text-sky-300 truncate max-w-[260px]">{fileName}</span>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      // 4. Linhas de Log Automático do Sistema (Mudança de etapa, alteração de responsável, encaminhamento, prazos)
+      return (
+        <div
+          key={`sys-${lineIdx}`}
+          className="flex items-center gap-2 text-xs sm:text-sm text-sky-300/90 font-medium py-1 px-2.5 rounded-lg bg-sky-500/10 border border-sky-400/20 my-1 select-none"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-sky-400 shrink-0 shadow-[0_0_6px_rgba(56,189,248,0.8)]" />
+          <span className="leading-snug">{formatMentionsInText(trimmedLine)}</span>
+        </div>
+      );
+    };
 
     return (
-      <div className="space-y-1 pt-0.5">
-        {lines.map((line, lineIdx) => {
-          const trimmedLine = line.trim();
-          if (!trimmedLine) return <div key={lineIdx} className="h-1" />;
-
-          // 1. Criação de Tarefa Vinculada
-          const createMatch = trimmedLine.match(/^([A-Za-z0-9À-ÿ\s._-]+?)\s+criou a tarefa\s+"([^"]+)"\s+para o\s+([A-Za-z0-9À-ÿ\s._-]+)$/i);
-          if (createMatch) {
-            const creatorName = createMatch[1].trim();
-            const subtaskTitle = createMatch[2].trim();
-            const assignedName = createMatch[3].trim();
-
-            const creatorUser = teamMembers.find(
-              (m) =>
-                m.display_name?.toUpperCase() === creatorName.toUpperCase() ||
-                m.email?.toUpperCase() === creatorName.toUpperCase()
-            );
-            const assignedUser = teamMembers.find(
-              (m) =>
-                m.display_name?.toUpperCase() === assignedName.toUpperCase() ||
-                m.email?.toUpperCase() === assignedName.toUpperCase()
-            );
-            const matchedDeal = deals.find(
-              (d) =>
-                d.title.replace(/^\[(REQ\.\s*INTERNA|TAREFA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "").trim().toUpperCase() === subtaskTitle.toUpperCase() ||
-                d.title.toUpperCase().includes(subtaskTitle.toUpperCase())
-            );
-
-            return (
-              <div
-                key={lineIdx}
-                className="flex flex-wrap items-center gap-1.5 text-xs text-white/90 py-1 pl-3 border-l-2 border-emerald-400 my-1"
-              >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleUserFilter(creatorUser?.id || null, e);
-                  }}
-                  className="font-bold text-white hover:underline cursor-pointer uppercase"
-                  title={`Filtrar por ${creatorName}`}
-                >
-                  {creatorName}
-                </button>
-                <span className="text-white/80">criou a tarefa</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (matchedDeal) {
-                      openDealHistory(matchedDeal);
-                    } else {
-                      toast.info(`Tarefa: ${subtaskTitle}`);
-                    }
-                  }}
-                  className="font-black text-emerald-300 hover:text-white hover:underline inline-flex items-center gap-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 px-2 py-0.5 rounded-md cursor-pointer shadow-sm transition-all"
-                  title="Clique para abrir esta tarefa"
-                >
-                  <CheckSquare className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>{subtaskTitle}</span>
-                </button>
-                <span className="text-white/80">para o</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleUserFilter(assignedUser?.id || null, e);
-                  }}
-                  className="font-bold text-white hover:underline cursor-pointer uppercase"
-                  title={`Filtrar por ${assignedName}`}
-                >
-                  {assignedName}
-                </button>
-              </div>
-            );
-          }
-
-          // 2. Conclusão de Tarefa Vinculada
-          const completeMatch = trimmedLine.match(/^([A-Za-z0-9À-ÿ\s._-]+?)\s+concluiu a tarefa\s+"([^"]+)"(.*)$/i);
-          if (completeMatch) {
-            const userName = completeMatch[1].trim();
-            const subtaskTitle = completeMatch[2].trim();
-            const extraNotes = completeMatch[3] ? completeMatch[3].trim() : "";
-
-            const userObj = teamMembers.find(
-              (m) =>
-                m.display_name?.toUpperCase() === userName.toUpperCase() ||
-                m.email?.toUpperCase() === userName.toUpperCase()
-            );
-            const matchedDeal = deals.find(
-              (d) =>
-                d.title.replace(/^\[(REQ\.\s*INTERNA|TAREFA|ORÇAMENTO|VISITA\s*TÉCNICA)\]\s*/i, "").trim().toUpperCase() === subtaskTitle.toUpperCase() ||
-                d.title.toUpperCase().includes(subtaskTitle.toUpperCase())
-            );
-
-            return (
-              <div
-                key={lineIdx}
-                className="flex flex-wrap items-center gap-1.5 text-xs text-emerald-300 py-1 pl-3 border-l-2 border-emerald-500 my-1"
-              >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleUserFilter(userObj?.id || null, e);
-                  }}
-                  className="font-bold text-white hover:underline cursor-pointer uppercase"
-                  title={`Filtrar por ${userName}`}
-                >
-                  {userName}
-                </button>
-                <span className="text-emerald-100/90">concluiu a tarefa</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (matchedDeal) {
-                      openDealHistory(matchedDeal);
-                    } else {
-                      toast.info(`Tarefa: ${subtaskTitle}`);
-                    }
-                  }}
-                  className="font-black text-emerald-200 hover:text-white hover:underline inline-flex items-center gap-1.5 bg-emerald-500/30 hover:bg-emerald-500/40 border border-emerald-400/50 px-2 py-0.5 rounded-md cursor-pointer shadow-sm transition-all"
-                  title="Clique para abrir esta tarefa"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>{subtaskTitle}</span>
-                </button>
-                {extraNotes && <span className="text-white/80 text-xs ml-1">{extraNotes}</span>}
-              </div>
-            );
-          }
-
-          // 3. Orçamento Oficial Anexado na Linha do Tempo
-          const quoteDocMatch = trimmedLine.match(/^(\[QUOTE_DOC:.*?\]\s*)?([A-Za-z0-9À-ÿ\s._-]+?)\s+anexou o documento de orçamento oficial\s+"([^"]+)"\s*(?:\(([^)]+)\))?.*$/i);
-          if (quoteDocMatch || trimmedLine.includes("[QUOTE_DOC:")) {
-            let docUrl = "";
-            let fileName = "orcamento_oficial";
-            let fileSize = "";
-            let userName = "Usuário";
-
-            if (trimmedLine.includes("[QUOTE_DOC:")) {
-              try {
-                const jsonStr = trimmedLine.match(/\[QUOTE_DOC:(.*?)\]/)?.[1];
-                if (jsonStr) {
-                  const parsed = JSON.parse(jsonStr);
-                  docUrl = parsed.url;
-                  fileName = parsed.name || fileName;
-                  fileSize = parsed.sizeKb ? `${parsed.sizeKb} KB` : "";
-                }
-              } catch (e) {}
-            }
-
-            if (quoteDocMatch) {
-              userName = quoteDocMatch[2]?.trim() || userName;
-              fileName = quoteDocMatch[3]?.trim() || fileName;
-              if (quoteDocMatch[4]) fileSize = quoteDocMatch[4].trim();
-            }
-
-            const currentDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
-            const finalUrl = docUrl || currentDoc?.url;
-
-            return (
-              <div
-                key={lineIdx}
-                className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/40 my-1 shadow-sm"
-              >
-                <div className="flex items-center gap-2.5 text-xs">
-                  <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
-                    <FileCheck className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-white uppercase">{userName}</span>
-                    <span className="text-emerald-200/90 ml-1 font-semibold">anexou o Orçamento Oficial</span>
-                    <p className="font-mono text-[11px] text-emerald-300 font-bold mt-0.5 truncate max-w-[260px]">
-                      {fileName} {fileSize ? `(${fileSize})` : ""}
-                    </p>
-                  </div>
-                </div>
-
-                {finalUrl && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPreviewingQuoteFile({ url: finalUrl, name: fileName });
-                    }}
-                    className="btn-futuristic px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow cursor-pointer shrink-0 ml-auto"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    <span>Visualizar</span>
-                  </button>
-                )}
-              </div>
-            );
-          }
-
-          // 4. Substituição amigável de qualquer linha legada "Instruções: "
-          if (trimmedLine.toLowerCase().startsWith("instruções:")) {
-            const cleanInstruction = trimmedLine.replace(/^instruções:\s*/i, "").trim();
-            const authorName = selectedDealForHistory?.creator_name || selectedDealForHistory?.latest_update_author || "Autor";
-            return (
-              <p key={lineIdx} className="text-white/90 text-xs whitespace-pre-wrap leading-relaxed">
-                <strong className="text-sky-300 font-bold">[{authorName}]: </strong>
-                {cleanInstruction}
+      <div className="space-y-2 pt-0.5">
+        {/* 1. TEXTO QUE O USUÁRIO ESCREVEU (SEMPRE EM PRIMEIRO LUGAR) */}
+        {userLines.length > 0 && (
+          <div className="space-y-1">
+            {userLines.map((uLine, uIdx) => (
+              <p key={`usr-${uIdx}`} className="text-slate-100 text-sm sm:text-base whitespace-pre-wrap leading-relaxed font-normal">
+                {formatMentionsInText(uLine)}
               </p>
-            );
-          }
+            ))}
+          </div>
+        )}
 
-
-          return (
-            <p key={lineIdx} className="text-white/90 text-xs whitespace-pre-wrap leading-relaxed">
-              {formatMentionsInText(line)}
-            </p>
-          );
-        })}
+        {/* 2. LINHAS CRIADAS AUTOMATICAMENTE PELO SISTEMA (SEMPRE ABAIXO DO TEXTO DO USUÁRIO) */}
+        {systemLines.length > 0 && (
+          <div className={`space-y-1.5 ${userLines.length > 0 ? "pt-2 border-t border-white/10" : ""}`}>
+            {systemLines.map((sLine, sIdx) => renderSystemBlock(sLine, sIdx))}
+          </div>
+        )}
       </div>
     );
   };
@@ -3836,6 +4120,197 @@ function CrmDashboard() {
     });
   }
 
+  // Upload e Otimização Automática do Arquivo de Contrato Anexado
+  async function handleUploadContractFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !selectedDealForHistory) return;
+
+    setIsUploadingContractFile(true);
+    const toastId = toast.loading("Otimizando e comprimindo contrato...");
+
+    try {
+      const { file: optimizedBlob, fileName } = await compressImageForUpload(file);
+      const originalSizeKb = Math.round(file.size / 1024);
+      const optimizedSizeKb = Math.round(optimizedBlob.size / 1024);
+
+      toast.loading(`Salvando contrato (${optimizedSizeKb} KB - reduzido de ${originalSizeKb} KB)...`, { id: toastId });
+
+      const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `contracts/${selectedDealForHistory.id}/${Date.now()}_${sanitizedName}`;
+
+      let publicUrl = "";
+      try {
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("crm-attachments")
+          .upload(path, optimizedBlob, {
+            upsert: true,
+            contentType: optimizedBlob.type || (fileName.endsWith(".pdf") ? "application/pdf" : "image/webp"),
+          });
+
+        if (!uploadError && uploadData) {
+          const { data: urlData } = supabase.storage.from("crm-attachments").getPublicUrl(path);
+          publicUrl = urlData.publicUrl;
+        } else if (uploadError?.message?.toLowerCase().includes("not found")) {
+          await supabase.storage.createBucket("crm-attachments", { public: true });
+          const { data: retryData, error: retryErr } = await supabase.storage
+            .from("crm-attachments")
+            .upload(path, optimizedBlob, { upsert: true, contentType: optimizedBlob.type });
+          if (!retryErr && retryData) {
+            const { data: urlData } = supabase.storage.from("crm-attachments").getPublicUrl(path);
+            publicUrl = urlData.publicUrl;
+          }
+        }
+      } catch (storageErr) {
+        console.warn("Storage upload warning, falling back to data URL:", storageErr);
+      }
+
+      if (!publicUrl) {
+        publicUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(optimizedBlob);
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+
+      const contractTag = `[CONTRACT_FILE:${JSON.stringify({ url: publicUrl, name: fileName, uploadedAt: nowIso })}]`;
+
+      const cleanNotes = (selectedDealForHistory.notes || "")
+        .replace(/\[CONTRACT_FILE:.*?\]\s*/g, "")
+        .trim();
+
+      const updatedNotesWithContract = [contractTag, cleanNotes].filter(Boolean).join("\n").trim();
+
+      const updateDealPayload: any = {
+        contract_file_url: publicUrl,
+        contract_file_name: fileName,
+        contract_file_uploaded_at: nowIso,
+        notes: updatedNotesWithContract,
+        updated_at: nowIso,
+      };
+
+      try {
+        await supabase
+          .from("crm_deals")
+          .update(updateDealPayload)
+          .eq("id", selectedDealForHistory.id);
+      } catch {
+        await supabase
+          .from("crm_deals")
+          .update({
+            notes: updatedNotesWithContract,
+            updated_at: nowIso,
+          })
+          .eq("id", selectedDealForHistory.id);
+      }
+
+      const docMeta = JSON.stringify({ url: publicUrl, name: fileName, sizeKb: optimizedSizeKb, uploadedAt: nowIso });
+      await registerHistoryEntry(
+        selectedDealForHistory.id,
+        "contract_file_uploaded",
+        `[CONTRACT_DOC:${docMeta}] ${userName} anexou o contrato "${fileName}" (${optimizedSizeKb} KB).`
+      );
+
+      const updatedDeal: Deal = {
+        ...selectedDealForHistory,
+        contract_file_url: publicUrl,
+        contract_file_name: fileName,
+        contract_file_uploaded_at: nowIso,
+        notes: updatedNotesWithContract,
+        updated_at: nowIso,
+        latest_update_at: nowIso,
+        latest_update_author: userName,
+      };
+
+      setSelectedDealForHistory(updatedDeal);
+      setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
+
+      // Insere linha imutável no bloco de atualização do card expandido
+      const uploadContractLog = `${userName} anexou o contrato "${fileName}".`;
+      appendAutoLog(uploadContractLog);
+
+      toast.success("Contrato anexado com sucesso!", { id: toastId });
+    } catch (err: any) {
+      console.error("Erro ao anexar contrato:", err);
+      toast.error("Erro ao anexar contrato: " + (err.message || "Tente novamente"), { id: toastId });
+    } finally {
+      setIsUploadingContractFile(false);
+      if (contractFileInputRef.current) {
+        contractFileInputRef.current.value = "";
+      }
+    }
+  }
+
+  // Exclusão e Desvinculação do Arquivo de Contrato
+  function handleRemoveContractFile() {
+    if (!selectedDealForHistory) return;
+    setCrmConfirmConfig({
+      isOpen: true,
+      title: "Remover Contrato",
+      description: "Deseja remover o contrato anexado a esta atividade?",
+      confirmText: "Remover Contrato",
+      variant: "warning",
+      onConfirm: async () => {
+        setCrmConfirmConfig(null);
+        try {
+          const nowIso = new Date().toISOString();
+          const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+          const cleanNotes = (selectedDealForHistory.notes || "").replace(/\[CONTRACT_FILE:.*?\]\s*/g, "").trim();
+
+          try {
+            await supabase
+              .from("crm_deals")
+              .update({
+                contract_file_url: null,
+                contract_file_name: null,
+                contract_file_uploaded_at: null,
+                notes: cleanNotes || null,
+                updated_at: nowIso,
+              })
+              .eq("id", selectedDealForHistory.id);
+          } catch {
+            await supabase
+              .from("crm_deals")
+              .update({
+                notes: cleanNotes || null,
+                updated_at: nowIso,
+              })
+              .eq("id", selectedDealForHistory.id);
+          }
+
+          await registerHistoryEntry(
+            selectedDealForHistory.id,
+            "contract_file_removed",
+            `${userName} removeu o contrato anexado.`
+          );
+
+          const updatedDeal: Deal = {
+            ...selectedDealForHistory,
+            contract_file_url: null,
+            contract_file_name: null,
+            contract_file_uploaded_at: null,
+            notes: cleanNotes || undefined,
+            updated_at: nowIso,
+          };
+
+          setSelectedDealForHistory(updatedDeal);
+          setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)));
+
+          // Insere linha imutável no bloco de atualização do card expandido
+          const removeContractText = `${userName} removeu o contrato anexado.`;
+          appendAutoLog(removeContractText);
+
+          toast.success("Contrato removido.");
+        } catch (err: any) {
+          toast.error("Erro ao remover: " + err.message);
+        }
+      },
+    });
+  }
+
   // Concluir Vinculada (Fecha e armazena como concluída, gera linhas automáticas na vinculada e na atividade mãe)
   function handleCompleteSubtask(deal: Deal) {
     const rawComment = (newCommentRef.current || newComment).trim();
@@ -3886,7 +4361,7 @@ function CrmDashboard() {
             .trim();
           const allTags = [...existingTags.filter((t) => !t.startsWith("[TASK_COMPLETION_NOTIFICATION:")), notifTag];
           const tagsPrefix = allTags.length > 0 ? allTags.join("\n") + "\n\n" : "";
-          const combinedNotesText = `${tagsPrefix}${[cleanOldNotes, ...autoGeneratedLogs, autoLogLine, completionText].filter(Boolean).join("\n\n")}`.trim();
+          const combinedNotesText = `${tagsPrefix}${[completionText, autoLogLine, ...autoGeneratedLogs, cleanOldNotes].filter(Boolean).join("\n\n")}`.trim();
 
           const targetStage = isNotAuthor ? deal.stage : "archived";
 
@@ -4458,11 +4933,14 @@ function CrmDashboard() {
       // Cria o primeiro registro no Histórico / Linha do Tempo
       try {
         const docMsg = uploadedFileName ? ` | Documento Anexado: ${uploadedFileName}` : "";
+        const userText = (notesToSave || "").trim();
+        const autoAction = `Atividade criada e direcionada para ${assignedName}.${docMsg}`.trim();
+        const historyDesc = userText ? `${userText}\n\n${autoAction}` : autoAction;
         await supabase.from("crm_deal_history").insert({
           deal_id: createdData.id,
           user_id: user?.id,
           user_name: user?.user_metadata?.display_name || user?.email || "Usuário",
-          description: `Atividade criada e direcionada para ${assignedName}.${docMsg} Instruções: ${notesToSave}`,
+          description: historyDesc,
         });
       } catch (hErr) {
         console.warn("Aviso ao registrar histórico inicial:", hErr);
@@ -4710,9 +5188,10 @@ function CrmDashboard() {
 
       // Preserva tags de arquivos anexados e atividades vinculadas
       const existingQuoteTag = deal.notes?.match(/\[QUOTE_FILE:.*?\]/)?.[0] || (deal.quote_file_url ? `[QUOTE_FILE:${JSON.stringify({ url: deal.quote_file_url, name: deal.quote_file_name || "orcamento_oficial", uploadedAt: deal.quote_file_uploaded_at || nowIso })}]` : "");
+      const existingContractTag = deal.notes?.match(/\[CONTRACT_FILE:.*?\]/)?.[0] || (deal.contract_file_url ? `[CONTRACT_FILE:${JSON.stringify({ url: deal.contract_file_url, name: deal.contract_file_name || "contrato_oficial", uploadedAt: deal.contract_file_uploaded_at || nowIso })}]` : "");
       const existingParentTag = deal.notes?.match(/\[PARENT_DEAL:.*?\]/)?.[0] || "";
       const cleanUpdate = updateText.trim();
-      const metaTags = [existingQuoteTag, existingParentTag].filter(Boolean).join("\n");
+      const metaTags = [existingQuoteTag, existingContractTag, existingParentTag].filter(Boolean).join("\n");
       const latestActivityNotes = metaTags ? `${metaTags}\n${cleanUpdate}`.trim() : cleanUpdate;
 
       // Prazo é zerado ao mudar de coluna, a menos que um novo prazo tenha sido estipulado na atualização
@@ -4731,17 +5210,25 @@ function CrmDashboard() {
 
       if (error) throw error;
 
-      let desc = `Mudança de etapa: "${oldStageTitle}" ➔ "${newStageTitle}". Atualização: "${updateText.trim()}"`;
+      const cleanUserText = updateText.trim();
+      const currentUserName = user?.user_metadata?.display_name || user?.email || "Você";
+      let autoLines: string[] = [
+        `${currentUserName} alterou a etapa de "${oldStageTitle}" para "${newStageTitle}".`
+      ];
       if (isReturnedToCreator) {
-        desc += ` (Devolvido ao criador ${newAssignedName})`;
+        autoLines.push(`Atividade devolvida ao criador (${newAssignedName}).`);
       } else if (isReassigned) {
-        desc += ` (Encaminhado para ${newAssignedName})`;
+        autoLines.push(`${currentUserName} alterou o responsável de "${currentAssigned}" para "${newAssignedName}".`);
       }
       if (deal.expected_close_date && !targetDeadline) {
-        desc += ` (Prazo anterior encerrado)`;
+        autoLines.push(`Prazo anterior encerrado.`);
       } else if (targetDeadline && targetDeadline !== deal.expected_close_date) {
-        desc += ` (Novo prazo estipulado: ${targetDeadline.split("-").reverse().join("/")})`;
+        autoLines.push(`Novo prazo estipulado: ${targetDeadline.split("-").reverse().join("/")}.`);
       }
+
+      const desc = cleanUserText
+        ? `${cleanUserText}\n\n${autoLines.join("\n")}`
+        : autoLines.join("\n");
 
       await registerHistoryEntry(
         deal.id,
@@ -4857,7 +5344,10 @@ function CrmDashboard() {
       const targetStage = stageToMove || deal.stage;
       const isStageChanged = Boolean(stageToMove && stageToMove !== deal.stage);
 
-      const combinedNotesText = [...autoGeneratedLogs, commentRaw].filter(Boolean).join("\n\n");
+      const cleanLogs = autoGeneratedLogs.filter(Boolean);
+      const combinedNotesText = cleanLogs.length > 0
+        ? `${commentRaw}\n\n${cleanLogs.join("\n")}`
+        : commentRaw;
 
       // Detecção e criação de Menções (@usuario)
       const mentionTags: string[] = [];
@@ -4902,22 +5392,27 @@ function CrmDashboard() {
         .update(updatePayload)
         .eq("id", deal.id);
 
-      let desc = "";
-      let actionType: DealHistoryItem["action_type"] = "comment";
-
-      if (isReturnedToCreator) {
-        actionType = "reassigned";
-        desc = `↩ Atividade DEVOLVIDA ao criador (${newAssignedName}) com a atualização:\n${commentRaw}`;
-      } else if (isReassigned) {
-        actionType = "reassigned";
-        desc = `↪ Atividade reencaminhada para ${newAssignedName} (${currentAssigned} → ${newAssignedName}) com a atualização:\n${commentRaw}`;
-      } else if (isStageChanged) {
-        actionType = "stage_change";
-        desc = `Etapa alterada para ${getStageDisplayName(targetStage)} com a atualização:\n${commentRaw}`;
+      let autoLines: string[] = [];
+      if (cleanLogs.length > 0) {
+        autoLines.push(...cleanLogs);
       } else {
-        actionType = "comment";
-        desc = `Atualização de andamento:\n${commentRaw}`;
+        if (isReturnedToCreator) {
+          autoLines.push(`Atividade devolvida ao criador (${newAssignedName}).`);
+        } else if (isReassigned) {
+          autoLines.push(`${currentUserName} alterou o responsável de "${currentAssigned}" para "${newAssignedName}".`);
+        }
+        if (isStageChanged) {
+          const fromStageName = STAGES.find((s) => s.id === deal.stage)?.title || deal.stage;
+          const toStageName = STAGES.find((s) => s.id === targetStage)?.title || targetStage;
+          autoLines.push(`${currentUserName} alterou a etapa de "${fromStageName}" para "${toStageName}".`);
+        }
       }
+      autoLines = Array.from(new Set(autoLines));
+
+      const actionType: DealHistoryItem["action_type"] = isReturnedToCreator || isReassigned ? "reassigned" : isStageChanged ? "stage_change" : "comment";
+      const desc = autoLines.length > 0
+        ? `${commentRaw}\n\n${autoLines.join("\n")}`
+        : commentRaw;
 
       const { data: histData, error: histError } = await supabase
         .from("crm_deal_history")
@@ -4994,14 +5489,85 @@ function CrmDashboard() {
 
       const targetContractDeadline = contractDeliveryDeadline ? contractDeliveryDeadline : null;
 
-      await supabase
-        .from("crm_deals")
-        .update({
-          stage: "won",
-          expected_close_date: targetContractDeadline,
-          updated_at: nowIso,
-        })
-        .eq("id", deal.id);
+      let attachedContractUrl: string | null = null;
+      let attachedContractName: string | null = null;
+      let updatedNotes = deal.notes || "";
+
+      if (newContractModalFile) {
+        try {
+          const { file: optimizedBlob, fileName } = await compressImageForUpload(newContractModalFile);
+          const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const path = `contracts/${deal.id}/${Date.now()}_${sanitizedName}`;
+
+          try {
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from("crm-attachments")
+              .upload(path, optimizedBlob, {
+                upsert: true,
+                contentType: optimizedBlob.type || (fileName.endsWith(".pdf") ? "application/pdf" : "image/webp"),
+              });
+
+            if (!uploadError && uploadData) {
+              const { data: urlData } = supabase.storage.from("crm-attachments").getPublicUrl(path);
+              attachedContractUrl = urlData.publicUrl;
+            }
+          } catch (stgErr) {
+            console.warn("Storage upload fallback in won contract:", stgErr);
+          }
+
+          if (!attachedContractUrl) {
+            attachedContractUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = (err) => reject(err);
+              reader.readAsDataURL(optimizedBlob);
+            });
+          }
+
+          attachedContractName = fileName;
+          const contractTag = `[CONTRACT_FILE:${JSON.stringify({ url: attachedContractUrl, name: fileName, uploadedAt: nowIso })}]`;
+          const cleanNotes = (deal.notes || "").replace(/\[CONTRACT_FILE:.*?\]\s*/g, "").trim();
+          updatedNotes = [contractTag, cleanNotes].filter(Boolean).join("\n").trim();
+
+          const docMeta = JSON.stringify({ url: attachedContractUrl, name: fileName, sizeKb: Math.round(optimizedBlob.size / 1024), uploadedAt: nowIso });
+          await registerHistoryEntry(
+            deal.id,
+            "contract_file_uploaded",
+            `[CONTRACT_DOC:${docMeta}] ${user?.user_metadata?.display_name || user?.email || "Usuário"} anexou o contrato "${fileName}".`
+          );
+        } catch (contractUploadErr) {
+          console.warn("Erro ao anexar contrato no fechamento:", contractUploadErr);
+        }
+      }
+
+      const updateDealPayload: any = {
+        stage: "won",
+        expected_close_date: targetContractDeadline,
+        notes: updatedNotes,
+        updated_at: nowIso,
+      };
+      if (attachedContractUrl) {
+        updateDealPayload.contract_file_url = attachedContractUrl;
+        updateDealPayload.contract_file_name = attachedContractName;
+        updateDealPayload.contract_file_uploaded_at = nowIso;
+      }
+
+      try {
+        await supabase
+          .from("crm_deals")
+          .update(updateDealPayload)
+          .eq("id", deal.id);
+      } catch {
+        await supabase
+          .from("crm_deals")
+          .update({
+            stage: "won",
+            expected_close_date: targetContractDeadline,
+            notes: updatedNotes,
+            updated_at: nowIso,
+          })
+          .eq("id", deal.id);
+      }
 
       await registerHistoryEntry(
         deal.id,
@@ -5085,12 +5651,17 @@ function CrmDashboard() {
                 ...d,
                 stage: "won",
                 expected_close_date: targetContractDeadline,
+                notes: updatedNotes,
+                contract_file_url: attachedContractUrl || d.contract_file_url,
+                contract_file_name: attachedContractName || d.contract_file_name,
+                contract_file_uploaded_at: attachedContractUrl ? nowIso : d.contract_file_uploaded_at,
                 updated_at: nowIso,
               }
             : d
         )
       );
       setContractDeliveryDeadline("");
+      setNewContractModalFile(null);
       setContractModalDeal(null);
     } catch (err: any) {
       toast.error("Erro na integração: " + err.message);
@@ -5997,7 +6568,7 @@ function CrmDashboard() {
                   </div>
                 ) : (
                   <>
-                {/* STATUS OFICIAL EM TEMPO REAL: PULSO TRABALHANDO/VENCIDA */}
+                {/* STATUS OFICIAL EM TEMPO REAL: PULSO TRABALHANDO/VENCIDA SINCRONIZADO GLOBALMENTE */}
                 {(() => {
                   const activeWorker = getDealActiveWorker(deal);
                   const isExpiredTask = !isPendingAcceptance && internalStyle.isExpired && deal.stage !== "completed" && deal.stage !== "won" && deal.stage !== "lost" && deal.stage !== "archived";
@@ -6005,10 +6576,13 @@ function CrmDashboard() {
                   if (!activeWorker && !isExpiredTask) return null;
 
                   const isWorking = Boolean(activeWorker);
+                  const isVisible = isWorking ? blinkPhase === "working" : blinkPhase === "expired";
+
+                  if (!isVisible) return null;
 
                   return (
                     <div
-                      className="absolute inset-0 rounded-xl bg-slate-950/70 backdrop-blur-[2px] p-3 flex flex-col items-center justify-center text-center z-20 pointer-events-none transition-opacity duration-300 animate-pulse group-hover:opacity-0"
+                      className="absolute inset-0 rounded-xl bg-slate-950/85 backdrop-blur-[2px] p-3 flex flex-col items-center justify-center text-center z-20 pointer-events-none group-hover:hidden select-none animate-in fade-in duration-0"
                     >
                       {/* Linha 1: TRABALHANDO (azul/ciano) ou VENCIDA (vermelho vivo) */}
                       <span
@@ -6284,6 +6858,50 @@ function CrmDashboard() {
                       })()}
                     </div>
                   )}
+
+                  {/* Documento Anexo Fixo no Card: Orçamento ou Contrato */}
+                  {(() => {
+                    const parentInfo = getParentDealInfo(deal);
+                    const parentDeal = parentInfo?.deal || (parentInfo?.id ? deals.find((d) => d.id === parentInfo.id) : null);
+                    const cardQuote = getDealQuoteFile(deal) || (parentDeal ? getDealQuoteFile(parentDeal) : null);
+                    const cardContract = getDealContractFile(deal) || (parentDeal ? getDealContractFile(parentDeal) : null);
+                    const attachedDoc = cardContract || cardQuote;
+                    if (!attachedDoc) return null;
+
+                    const isContract = Boolean(cardContract);
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (attachedDoc.file_url) {
+                            setDocumentPreviewModal({
+                              isOpen: true,
+                              fileUrl: attachedDoc.file_url,
+                              fileName: attachedDoc.file_name || (isContract ? "Contrato" : "Orçamento"),
+                              isPdf: (attachedDoc.file_name || "").toLowerCase().endsWith(".pdf") || attachedDoc.file_url.toLowerCase().includes(".pdf"),
+                            });
+                          }
+                        }}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider border shrink-0 transition-all cursor-pointer shadow-sm hover:scale-105 ${
+                          isContract
+                            ? "bg-cyan-950/80 text-cyan-300 border-cyan-500/50 hover:bg-cyan-900/90 shadow-[0_0_8px_rgba(6,182,212,0.3)]"
+                            : "bg-emerald-950/80 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900/90 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                        }`}
+                        title={
+                          isContract
+                            ? `Contrato Anexo: ${attachedDoc.file_name}. Clique para visualizar.`
+                            : `Orçamento Anexo: ${attachedDoc.file_name}${attachedDoc.value ? ` • R$ ${Number(attachedDoc.value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}. Clique para visualizar.`
+                        }
+                      >
+                        <Paperclip className="h-2.5 w-2.5 shrink-0" />
+                        <span className="truncate max-w-[85px] sm:max-w-[110px]">
+                          {isContract ? "CONTRATO" : "ORÇAMENTO"}
+                        </span>
+                      </button>
+                    );
+                  })()}
                 </div>
                 </>
                 )}
@@ -7435,30 +8053,30 @@ function CrmDashboard() {
                 </div>
 
                 {/* Ações no Canto Superior Direito: Fechar e Excluir (Apenas Administrador) */}
-                <div className="w-[105px] shrink-0 flex flex-col items-end gap-2.5">
-                  {/* Botão Fechar (mesma fonte e tamanho do botão Atualizar) */}
+                <div className="w-[105px] shrink-0 flex flex-col items-end gap-2.5 overflow-visible py-1 px-1">
+                  {/* Botão Fechar (mesmo padrão de glow e zoom do botão Atualizar) */}
                   <button
                     type="button"
                     onClick={handleCloseSelectedDealModal}
-                    className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm border border-white/20 w-full"
+                    className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/40 hover:border-sky-400/60 shadow-[0_0_15px_rgba(56,189,248,0.25)] hover:shadow-[0_0_20px_rgba(56,189,248,0.45)] transition-all cursor-pointer flex items-center justify-center gap-1.5 hover:scale-105 w-full"
                     title="Fechar detalhes da atividade"
                   >
-                    <X className="h-4 w-4 text-slate-300" />
+                    <X className="h-4 w-4 text-sky-400" />
                     <span>Fechar</span>
                   </button>
 
-                  {/* Botão Excluir (Apenas Administrador) - Abaixo de Fechar, totalmente na cor vermelha */}
+                  {/* Botão Excluir (Apenas Administrador) - Mesmo padrão de glow e zoom do botão Arquivar */}
                   {role === "admin" && (
                     <button
                       type="button"
                       onClick={() => handleDeleteDeal(selectedDealForHistory)}
                       disabled={isDeletingDeal}
-                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-500 hover:text-white border-2 border-rose-500 hover:border-rose-400 bg-rose-500/15 hover:bg-rose-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(244,63,94,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.45)] w-full"
-                      style={{ color: "#f43f5e", borderColor: "#f43f5e" }}
+                      className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] transition-all cursor-pointer flex items-center justify-center gap-1.5 hover:scale-105 w-full"
+                      style={{ color: "#ef4444", borderColor: "#ef4444" }}
                       title="Excluir permanentemente esta atividade (Administrador)"
                     >
-                      <Trash2 className="h-4 w-4 text-rose-500" style={{ color: "#f43f5e" }} />
-                      <span className="font-black" style={{ color: "#f43f5e" }}>Excluir</span>
+                      <Trash2 className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
+                      <span className="font-black text-red-500" style={{ color: "#ef4444" }}>Excluir</span>
                     </button>
                   )}
                 </div>
@@ -7548,11 +8166,84 @@ function CrmDashboard() {
                       unifiedTimelineList.map((item) => {
                         const isReply = item.action_type === "reply" || (item as any).isReply;
                         const isSubtaskComp = item.action_type === "subtask_completed" || (item as any).isSubtaskCompletion;
+                        const isQuoteAttachment = item.action_type === "quote_file_uploaded" || item.description.includes("[QUOTE_DOC:") || /anexou o documento de orçamento/i.test(item.description);
+                        const isContractAttachment = item.action_type === "contract_file_uploaded" || item.description.includes("[CONTRACT_DOC:") || /anexou o contrato/i.test(item.description);
+                        const isDocAttachment = isQuoteAttachment || isContractAttachment;
+
+                        if (isDocAttachment) {
+                          const isContract = isContractAttachment;
+                          let docUrl = "";
+                          let fileName = isContract ? "contrato_oficial" : "orcamento_oficial";
+                          let fileSize = "";
+                          let userName = item.user_name || "Usuário";
+
+                          const docTagMatch = item.description.match(/\[(QUOTE_DOC|CONTRACT_DOC):(.*?)(?:\]|$)/);
+                          if (docTagMatch?.[2]) {
+                            try {
+                              const parsed = JSON.parse(docTagMatch[2]);
+                              docUrl = parsed.url;
+                              fileName = parsed.name || fileName;
+                              fileSize = parsed.sizeKb ? `${parsed.sizeKb} KB` : "";
+                            } catch (e) {}
+                          }
+
+                          if (!docUrl) {
+                            const fallback = isContract 
+                              ? getDealContractFile(selectedDealForHistory, dealHistoryList) 
+                              : getDealQuoteFile(selectedDealForHistory, dealHistoryList);
+                            docUrl = fallback?.url || "";
+                            if (!fileName || fileName === "contrato_oficial" || fileName === "orcamento_oficial") {
+                              fileName = fallback?.name || fileName;
+                            }
+                          }
+
+                          return (
+                            <div
+                              key={item.id}
+                              className={`p-3 rounded-xl border text-xs sm:text-sm shadow-inner transition-all flex flex-wrap items-center justify-between gap-2.5 ${
+                                isContract 
+                                  ? "bg-sky-950/25 border-sky-500/30 text-sky-200" 
+                                  : "bg-emerald-950/25 border-emerald-500/30 text-emerald-200"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                <div className={`p-1.5 rounded-lg ${isContract ? "bg-sky-500/20 text-sky-400" : "bg-emerald-500/20 text-emerald-400"} shrink-0`}>
+                                  {isContract ? <FileText className="h-4 w-4" /> : <FileCheck className="h-4 w-4" />}
+                                </div>
+                                <span className="font-bold text-white uppercase">{userName}</span>
+                                <span className="text-slate-300 font-medium">
+                                  {isContract ? "anexou o Contrato:" : "anexou o Orçamento Oficial:"}
+                                </span>
+                                {docUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPreviewingQuoteFile({ url: docUrl, name: fileName, isContract });
+                                    }}
+                                    className={`font-black underline underline-offset-2 cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1 ${
+                                      isContract ? "text-sky-300 hover:text-sky-200" : "text-emerald-300 hover:text-emerald-200"
+                                    }`}
+                                    title={`Clique para visualizar ${isContract ? "o contrato" : "o orçamento"}`}
+                                  >
+                                    <span>{fileName}</span>
+                                    {fileSize ? <span className="font-mono text-[10px] no-underline font-normal text-muted-foreground">({fileSize})</span> : null}
+                                  </button>
+                                ) : (
+                                  <span className="font-mono text-xs font-bold text-white truncate">{fileName}</span>
+                                )}
+                              </div>
+                              <span className="font-mono text-xs text-muted-foreground shrink-0 ml-auto">
+                                {new Date(item.created_at).toLocaleString("pt-BR")}
+                              </span>
+                            </div>
+                          );
+                        }
 
                         return (
                           <div
                             key={item.id}
-                            className={`p-3.5 rounded-xl bg-black/40 border space-y-1.5 text-xs shadow-inner transition-all ${
+                            className={`p-4 rounded-xl bg-black/40 border space-y-2 text-sm shadow-inner transition-all ${
                               isReply
                                 ? "border-sky-400/40 bg-sky-950/20 shadow-[0_0_10px_rgba(56,189,248,0.05)] border-l-4 border-l-sky-400"
                                 : isSubtaskComp
@@ -7560,43 +8251,46 @@ function CrmDashboard() {
                                 : "border-white/10"
                             }`}
                           >
-                            <div className="flex items-center justify-between text-muted-foreground border-b border-white/5 pb-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-white uppercase text-[11px] flex items-center gap-1.5">
+                            <div className="flex items-center justify-between text-muted-foreground border-b border-white/5 pb-1.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-white uppercase text-xs sm:text-sm flex items-center gap-1.5">
                                   {isReply ? (
-                                    <Reply className="h-3.5 w-3.5 text-sky-400" />
+                                    <Reply className="h-4 w-4 text-sky-400" />
                                   ) : isSubtaskComp ? (
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                                   ) : (
-                                    <UserIcon className="h-3.5 w-3.5 text-accent" />
+                                    <UserIcon className="h-4 w-4 text-accent" />
                                   )}
-                                  {item.user_name}
+                                  <span>{item.user_name}</span>
                                 </span>
+                                {!isReply && !isSubtaskComp && (
+                                  <span className="text-slate-300 font-medium lowercase text-xs sm:text-sm">escreveu:</span>
+                                )}
                                 {isReply && (
-                                  <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 uppercase flex items-center gap-1 shadow-sm">
+                                  <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 uppercase flex items-center gap-1 shadow-sm">
                                     Resposta
                                   </span>
                                 )}
                                 {isSubtaskComp && (
-                                  <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 uppercase flex items-center gap-1 shadow-sm">
+                                  <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 uppercase flex items-center gap-1 shadow-sm">
                                     Vinculada Concluída
                                   </span>
                                 )}
                               </div>
-                              <span className="font-mono text-[10px] text-muted-foreground">
+                              <span className="font-mono text-xs text-muted-foreground">
                                 {new Date(item.created_at).toLocaleString("pt-BR")}
                               </span>
                             </div>
 
                             {/* Renderização Inteligente de Respostas ou Descrições */}
                             {isReply && (item as any).rawReplyText ? (
-                              <div className="space-y-1 pt-0.5 pl-2">
-                                <p className="text-white/95 text-xs whitespace-pre-wrap leading-relaxed">
+                              <div className="space-y-1 pt-1 pl-2">
+                                <p className="text-slate-100 text-sm sm:text-base whitespace-pre-wrap leading-relaxed font-normal">
                                   {formatMentionsInText((item as any).rawReplyText)}
                                 </p>
                               </div>
                             ) : (
-                              renderInteractiveDescription(item.description)
+                              renderInteractiveDescription(item.description, true)
                             )}
                           </div>
                         );
@@ -7611,36 +8305,21 @@ function CrmDashboard() {
                     {selectedDealForHistory.notes && (
                       <div className={`p-3 rounded-xl bg-white/5 border border-white/10 space-y-2 custom-scrollbar ${isPendingModal ? "flex-1 min-h-0 overflow-y-auto" : "max-h-[45vh] overflow-y-auto"}`}>
                         {(() => {
-                          const latestHistoryItem = dealHistoryList.length > 0 ? dealHistoryList[0] : null;
-                          const latestAuthorName = (latestHistoryItem?.user_name || selectedDealForHistory.latest_update_author || selectedDealForHistory.creator_name || "Autor").toUpperCase();
-                          const latestTimestamp = latestHistoryItem?.created_at || selectedDealForHistory.updated_at || selectedDealForHistory.created_at;
+                          const latestUpdateItem = dealHistoryList.find((h) => h.action_type !== "reply" && !h.description.startsWith("↩ Resposta")) || null;
+                          const latestAuthorName = (latestUpdateItem?.user_name || selectedDealForHistory.latest_update_author || selectedDealForHistory.creator_name || "Autor").toUpperCase();
+                          const latestTimestamp = latestUpdateItem?.created_at || selectedDealForHistory.latest_update_at || selectedDealForHistory.updated_at || selectedDealForHistory.created_at;
 
                           return (
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-1.5">
-                              <div className="flex flex-wrap items-center gap-2.5 text-xs">
-                                <span className="font-black uppercase tracking-widest text-accent flex items-center gap-1.5 text-xs">
-                                  <AlertCircle className="h-4 w-4" /> Última Atualização
+                              <div className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm text-foreground">
+                                <User className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                                <span className="font-bold uppercase tracking-wide text-white">
+                                  {latestAuthorName}
                                 </span>
-                                <span className="text-white/30">•</span>
-                                <span className="text-slate-300">
-                                  Autor:{" "}
-                                  <span className="text-white font-bold uppercase text-xs sm:text-sm">
-                                    {latestAuthorName}
-                                  </span>
-                                </span>
-                                <span className="text-white/30">•</span>
-                                <span className="text-slate-300">
-                                  Responsável:{" "}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleToggleUserFilter(selectedDealForHistory.assigned_user_id, e)}
-                                    className="text-white font-bold hover:underline cursor-pointer uppercase text-xs sm:text-sm"
-                                    title={`Filtrar por responsável: ${selectedDealForHistory.assigned_user_name || "Nenhum"}`}
-                                  >
-                                    {selectedDealForHistory.assigned_user_name || "Nenhum"}
-                                  </button>
-                                </span>
-                                <span className="text-white/30">•</span>
+                                <span className="text-slate-300 font-medium lowercase text-xs sm:text-sm">escreveu:</span>
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0">
                                 {(() => {
                                   const agingText =
                                     aging.days === 0
@@ -7660,18 +8339,18 @@ function CrmDashboard() {
                                     </div>
                                   );
                                 })()}
+                                <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 border border-sky-400/30 px-2.5 py-1 rounded-md flex items-center gap-1.5 shrink-0">
+                                  <Clock className="h-3.5 w-3.5 text-sky-400" />
+                                  {new Date(latestTimestamp).toLocaleString("pt-BR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit",
+                                  })}
+                                </span>
                               </div>
-                              <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 border border-sky-400/30 px-2.5 py-1 rounded-md flex items-center gap-1.5 shrink-0">
-                                <Clock className="h-3.5 w-3.5 text-sky-400" />
-                                {new Date(latestTimestamp).toLocaleString("pt-BR", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  second: "2-digit",
-                                })}
-                              </span>
                             </div>
                           );
                         })()}
@@ -7685,6 +8364,7 @@ function CrmDashboard() {
                             .replace(/\[WORK_LOG:.*?\]\s*/g, "")
                             .replace(/\[QUOTE_DATA:.*?\]\s*/g, "")
                             .replace(/\[QUOTE_FILE:.*?\]\s*/g, "")
+                            .replace(/\[CONTRACT_FILE:.*?\]\s*/g, "")
                             .replace(/\[SUBTASK_LINK:.*?\]\s*/g, "")
                             .replace(/\[SUBTASK_COMPLETED:.*?\]\s*/g, "")
                             .replace(/\[SUBTASK_COMPLETION:.*?\]\s*/g, "")
@@ -7694,10 +8374,10 @@ function CrmDashboard() {
                             .replace(/\[RESPONSIBLE_LAST_SEEN:.*?\]\s*/g, "")
                             .trim();
 
-                          // Obtém a atualização mais recente: seja do histórico mais recente ou das notas
-                          const latestHistoryItem = dealHistoryList.length > 0 ? dealHistoryList[0] : null;
-                          const effectiveText = (latestHistoryItem?.description && latestHistoryItem.description.trim()) || cleanNotes;
-                          const latestTimestamp = latestHistoryItem?.created_at || selectedDealForHistory.updated_at || selectedDealForHistory.created_at;
+                          // Obtém a atualização mais recente (ignorando respostas a menções)
+                          const latestUpdateItem = dealHistoryList.find((h) => h.action_type !== "reply" && !h.description.startsWith("↩ Resposta")) || null;
+                          const effectiveText = (latestUpdateItem?.description && latestUpdateItem.description.trim()) || cleanNotes;
+                          const latestTimestamp = latestUpdateItem?.created_at || selectedDealForHistory.latest_update_at || selectedDealForHistory.updated_at || selectedDealForHistory.created_at;
 
                           const dealMentions = getDealMentions(selectedDealForHistory);
                           const dealReplies = getDealMentionReplies(selectedDealForHistory);
@@ -7710,6 +8390,7 @@ function CrmDashboard() {
                           const pendingNotif = getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance");
                           const isAuthor = Boolean(user?.id && selectedDealForHistory.user_id && user.id === selectedDealForHistory.user_id);
                           const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
+                          const contractDoc = getDealContractFile(selectedDealForHistory, dealHistoryList);
 
                           if (!effectiveText && dealMentions.length === 0 && dealSubtaskCompletions.length === 0 && !isPendingModal) return null;
 
@@ -7717,10 +8398,10 @@ function CrmDashboard() {
                             <div className="space-y-3">
                               {effectiveText && (
                                 isPendingModal ? (
-                                  <div className="text-sm leading-relaxed text-slate-100 font-medium bg-amber-950/30 p-4 rounded-2xl border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] space-y-3">
+                                  <div className="text-sm sm:text-base leading-relaxed text-slate-100 font-medium bg-amber-950/30 p-4 rounded-2xl border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] space-y-3">
                                     <div className="flex items-center justify-between border-b border-amber-500/30 pb-2">
                                       <div className="flex items-center gap-2">
-                                        <span className="font-mono text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                                        <span className="font-mono text-sm sm:text-base font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                                           <AlertTriangle className="h-4 w-4 animate-pulse" />
                                           Atividade Finalizada pelo Responsável ({pendingNotif?.concluded_by_user_name || selectedDealForHistory.assigned_user_name || "Responsável"})
                                         </span>
@@ -7730,23 +8411,82 @@ function CrmDashboard() {
                                       </span>
                                     </div>
 
-                                    <div className="text-xs sm:text-sm text-white/95 leading-relaxed pl-1 whitespace-pre-wrap">
+                                    <div className="text-sm sm:text-base text-slate-100 leading-relaxed pl-1 whitespace-pre-wrap font-normal">
                                       {renderInteractiveDescription(pendingNotif?.completion_notes || effectiveText)}
                                     </div>
 
-                                    {/* Documento ou Orçamento Anexado se houver */}
-                                    {quoteDoc && (
-                                      <div className="pt-2 border-t border-amber-500/20 flex items-center gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name })}
-                                          className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm"
-                                          title={isBudgetDeal(selectedDealForHistory) ? "Visualizar orçamento anexado" : "Visualizar documento anexado"}
-                                        >
-                                          <Paperclip className="h-3.5 w-3.5 text-emerald-400" />
-                                          <span>{isBudgetDeal(selectedDealForHistory) ? "ORÇAMENTO ANEXADO" : "DOCUMENTO ANEXADO"}</span>
-                                        </button>
-                                        <span className="text-[11px] font-mono text-muted-foreground truncate">{quoteDoc.name}</span>
+                                    {/* Linhas de Verificação dos Últimos Documentos Anexados: Último Orçamento e Último Contrato */}
+                                    {(quoteDoc || contractDoc) && (
+                                      <div className="pt-2 border-t border-amber-500/20 space-y-2">
+                                        {quoteDoc && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name, isContract: false })}
+                                            className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-slate-900/90 border border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
+                                            title="Clique para visualizar o orçamento anexado"
+                                          >
+                                            <div className="flex items-center gap-2 text-xs min-w-0 flex-1">
+                                              <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform">
+                                                <FileCheck className="h-4 w-4" />
+                                              </div>
+                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
+                                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-400 shrink-0">
+                                                  ÚLTIMO ORÇAMENTO ANEXADO:
+                                                </span>
+                                                {quoteDoc.quoteData?.quoteNumber && (
+                                                  <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">
+                                                    Nº {quoteDoc.quoteData.quoteNumber}
+                                                  </span>
+                                                )}
+                                                <span className="font-mono text-xs font-bold text-white group-hover:text-emerald-300 group-hover:underline truncate max-w-[280px] sm:max-w-[420px]">
+                                                  {quoteDoc.name}
+                                                </span>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0">
+                                              {quoteDoc.quoteData?.totalAmount && quoteDoc.quoteData.totalAmount > 0 && (
+                                                <span className="font-mono font-black text-emerald-400 text-xs px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-400/30 hidden sm:inline-block">
+                                                  {`R$ ${quoteDoc.quoteData.totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                                </span>
+                                              )}
+                                              <span className="font-mono text-[10px] sm:text-[11px] font-semibold text-emerald-300/80 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                                <Clock className="h-3 w-3 text-emerald-400 shrink-0" />
+                                                {new Date(quoteDoc.uploadedAt).toLocaleString("pt-BR")}
+                                              </span>
+                                            </div>
+                                          </button>
+                                        )}
+
+                                        {contractDoc && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewingQuoteFile({ url: contractDoc.url, name: contractDoc.name, isContract: true })}
+                                            className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2 px-3 rounded-xl bg-gradient-to-r from-sky-950/60 via-slate-900/90 to-slate-900/90 border border-sky-500/40 hover:border-sky-400/80 hover:bg-sky-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
+                                            title="Clique para visualizar o contrato anexado"
+                                          >
+                                            <div className="flex items-center gap-2 text-xs min-w-0 flex-1">
+                                              <div className="p-1 rounded-lg bg-sky-500/20 text-sky-400 shrink-0 group-hover:scale-110 transition-transform">
+                                                <FileText className="h-4 w-4" />
+                                              </div>
+                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
+                                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-sky-400 shrink-0">
+                                                  ÚLTIMO CONTRATO ANEXADO:
+                                                </span>
+                                                <span className="font-mono text-xs font-bold text-white group-hover:text-sky-300 group-hover:underline truncate max-w-[280px] sm:max-w-[420px]">
+                                                  {contractDoc.name}
+                                                </span>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0">
+                                              <span className="font-mono text-[10px] sm:text-[11px] font-semibold text-sky-300/80 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                                <Clock className="h-3 w-3 text-sky-400 shrink-0" />
+                                                {new Date(contractDoc.uploadedAt).toLocaleString("pt-BR")}
+                                              </span>
+                                            </div>
+                                          </button>
+                                        )}
                                       </div>
                                     )}
 
@@ -7775,58 +8515,135 @@ function CrmDashboard() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="text-sm leading-relaxed text-slate-100 font-medium bg-black/30 p-3 rounded-xl border border-white/5 space-y-2">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        {renderInteractiveDescription(effectiveText)}
-                                      </div>
+                                  <div className="space-y-2">
+                                    <div className="text-sm sm:text-base leading-relaxed text-slate-100 font-medium bg-black/30 p-4 rounded-xl border border-white/5 space-y-2">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1 min-w-0">
+                                          {renderInteractiveDescription(effectiveText)}
+                                        </div>
 
-                                      <div className="shrink-0 flex items-center gap-1.5 ml-2 pt-0.5 select-none">
-                                        {canMarkAsRead && userMention && (
+                                        <div className="shrink-0 flex items-center gap-1.5 ml-2 pt-0.5 select-none">
+                                          {canMarkAsRead && userMention && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleMarkMentionAsRead(selectedDealForHistory, userMention.id)}
+                                              className="p-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                              title="lido"
+                                            >
+                                              <Check className="h-4 w-4" />
+                                            </button>
+                                          )}
                                           <button
                                             type="button"
-                                            onClick={() => handleMarkMentionAsRead(selectedDealForHistory, userMention.id)}
-                                            className="p-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
-                                            title="lido"
+                                            onClick={() => {
+                                              const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
+                                              setReplyingToMentionId(targetId);
+                                            }}
+                                            className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                                            title="responder"
                                           >
-                                            <Check className="h-4 w-4" />
-                                          </button>
-                                        )}
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
-                                            setReplyingToMentionId(targetId);
-                                          }}
-                                          className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
-                                          title="responder"
-                                        >
-                                          <Reply className="h-4 w-4" />
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    {isReplyingCurrent && (() => {
-                                      const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
-                                      return (
-                                        <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
-                                          <FastMentionReplyInput
-                                            targetId={targetId}
-                                            deal={selectedDealForHistory}
-                                            teamMembers={teamMembers}
-                                            onSend={handleSendMentionReply}
-                                          />
-                                          <button
-                                            type="button"
-                                            onClick={() => setReplyingToMentionId(null)}
-                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center shrink-0"
-                                            title="cancelar"
-                                          >
-                                            <X className="h-4 w-4" />
+                                            <Reply className="h-4 w-4" />
                                           </button>
                                         </div>
-                                      );
-                                    })()}
+                                      </div>
+
+                                      {isReplyingCurrent && (() => {
+                                        const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
+                                        return (
+                                          <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
+                                            <FastMentionReplyInput
+                                              targetId={targetId}
+                                              deal={selectedDealForHistory}
+                                              teamMembers={teamMembers}
+                                              onSend={handleSendMentionReply}
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => setReplyingToMentionId(null)}
+                                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center shrink-0"
+                                              title="cancelar"
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+
+                                    {/* Linhas de Verificação dos Últimos Documentos Anexados: Último Orçamento e Último Contrato */}
+                                    {(quoteDoc || contractDoc) && (
+                                      <div className="space-y-2 pt-0.5">
+                                        {quoteDoc && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name, isContract: false })}
+                                            className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-slate-900/90 border border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
+                                            title="Clique para visualizar o orçamento anexado"
+                                          >
+                                            <div className="flex items-center gap-2.5 text-xs min-w-0 flex-1">
+                                              <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform">
+                                                <FileCheck className="h-4 w-4" />
+                                              </div>
+                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
+                                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-400 shrink-0">
+                                                  ÚLTIMO ORÇAMENTO ANEXADO:
+                                                </span>
+                                                {quoteDoc.quoteData?.quoteNumber && (
+                                                  <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">
+                                                    Nº {quoteDoc.quoteData.quoteNumber}
+                                                  </span>
+                                                )}
+                                                <span className="font-mono text-xs font-bold text-white group-hover:text-emerald-300 group-hover:underline truncate max-w-[320px] sm:max-w-[480px]">
+                                                  {quoteDoc.name}
+                                                </span>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0">
+                                              {quoteDoc.quoteData?.totalAmount && quoteDoc.quoteData.totalAmount > 0 && (
+                                                <span className="font-mono font-black text-emerald-400 text-xs px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-400/30 hidden sm:inline-block">
+                                                  {`R$ ${quoteDoc.quoteData.totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                                </span>
+                                              )}
+                                              <span className="font-mono text-[11px] font-semibold text-emerald-300/80 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                                <Clock className="h-3 w-3 text-emerald-400 shrink-0" />
+                                                {new Date(quoteDoc.uploadedAt).toLocaleString("pt-BR")}
+                                              </span>
+                                            </div>
+                                          </button>
+                                        )}
+
+                                        {contractDoc && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewingQuoteFile({ url: contractDoc.url, name: contractDoc.name, isContract: true })}
+                                            className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2.5 px-3 rounded-xl bg-gradient-to-r from-sky-950/60 via-slate-900/90 to-slate-900/90 border border-sky-500/40 hover:border-sky-400/80 hover:bg-sky-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
+                                            title="Clique para visualizar o contrato anexado"
+                                          >
+                                            <div className="flex items-center gap-2.5 text-xs min-w-0 flex-1">
+                                              <div className="p-1 rounded-lg bg-sky-500/20 text-sky-400 shrink-0 group-hover:scale-110 transition-transform">
+                                                <FileText className="h-4 w-4" />
+                                              </div>
+                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
+                                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-sky-400 shrink-0">
+                                                  ÚLTIMO CONTRATO ANEXADO:
+                                                </span>
+                                                <span className="font-mono text-xs font-bold text-white group-hover:text-sky-300 group-hover:underline truncate max-w-[320px] sm:max-w-[480px]">
+                                                  {contractDoc.name}
+                                                </span>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0">
+                                              <span className="font-mono text-[11px] font-semibold text-sky-300/80 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                                <Clock className="h-3 w-3 text-sky-400 shrink-0" />
+                                                {new Date(contractDoc.uploadedAt).toLocaleString("pt-BR")}
+                                              </span>
+                                            </div>
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 )
                               )}
@@ -7846,28 +8663,28 @@ function CrmDashboard() {
                                     return (
                                       <div
                                         key={comp.id}
-                                        className={`p-2.5 rounded-xl bg-black/40 border text-xs space-y-1.5 transition-all ${
+                                        className={`p-3 rounded-xl bg-black/40 border text-xs space-y-1.5 transition-all ${
                                           isNewCompletion
                                             ? "border-amber-500/50 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/30"
                                             : "border-white/10"
                                         }`}
                                       >
-                                        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-b border-white/5 pb-1">
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-white/5 pb-1">
                                           <div className="flex items-center gap-1.5 font-bold text-emerald-200 uppercase">
-                                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                                             <span>{comp.userName} concluiu a vinculada "{comp.subtaskTitle}" (Nº {comp.reqNumber})</span>
                                             {isNewCompletion && (
-                                              <span className="ml-1 text-[8px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/25 px-1.5 py-0.5 rounded border border-amber-500/50 animate-pulse shadow-sm">
+                                              <span className="ml-1 text-[9px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/25 px-1.5 py-0.5 rounded border border-amber-500/50 animate-pulse shadow-sm">
                                                 Nova
                                               </span>
                                             )}
                                           </div>
-                                          <span className="font-mono text-[9px]">
+                                          <span className="font-mono text-[10px]">
                                             {new Date(comp.created_at).toLocaleString("pt-BR")}
                                           </span>
                                         </div>
                                         {comp.completionText && (
-                                          <p className="text-white/95 text-xs pl-5 leading-relaxed whitespace-pre-wrap font-medium">
+                                          <p className="text-slate-100 text-sm sm:text-base pl-5 leading-relaxed whitespace-pre-wrap font-normal">
                                             <strong className="text-emerald-300 font-bold">Atualização de Fechamento: </strong>
                                             {formatMentionsInText(comp.completionText)}
                                           </p>
@@ -7879,10 +8696,7 @@ function CrmDashboard() {
                               )}
 
                               {dealReplies.length > 0 && (
-                                <div className="space-y-1.5 pl-3 border-l-2 border-sky-400/40">
-                                  <span className="text-[10px] font-black uppercase tracking-wider text-sky-300 block">
-                                    Respostas ({dealReplies.length}):
-                                  </span>
+                                <div className="space-y-1.5 pt-1">
                                   {dealReplies.map((reply) => {
                                     const isNewReply = 
                                       reply.user_id !== selectedDealForHistory.assigned_user_id &&
@@ -7891,27 +8705,27 @@ function CrmDashboard() {
                                     return (
                                       <div
                                         key={reply.id}
-                                        className={`p-2 rounded-xl bg-black/40 border text-xs space-y-1 transition-all ${
+                                        className={`px-3 py-2 rounded-xl bg-black/40 border text-xs space-y-1 transition-all ${
                                           isNewReply 
                                             ? "border-amber-500/40 bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.05)]" 
                                             : "border-white/10"
                                         }`}
                                       >
-                                        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-b border-white/5 pb-1">
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-white/5 pb-0.5">
                                           <div className="flex items-center gap-1.5 font-bold text-sky-200 uppercase">
                                             <Reply className="h-3 w-3 text-sky-400" />
-                                            <span>{reply.user_name}</span>
+                                            <span>{reply.user_name} respondeu:</span>
                                             {isNewReply && (
                                               <span className="ml-1 text-[8px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/40 animate-pulse">
                                                 Nova
                                               </span>
                                             )}
                                           </div>
-                                          <span className="font-mono text-[9px]">
+                                          <span className="font-mono text-[10px]">
                                             {new Date(reply.created_at).toLocaleString("pt-BR")}
                                           </span>
                                         </div>
-                                        <p className="text-white/90 text-xs pl-4 leading-relaxed whitespace-pre-wrap">
+                                        <p className="text-slate-100 text-xs sm:text-[13px] pl-3 leading-snug whitespace-pre-wrap font-normal">
                                           {formatMentionsInText(reply.reply_text)}
                                         </p>
                                       </div>
@@ -7931,9 +8745,9 @@ function CrmDashboard() {
                     isAdmin || selectedDealForHistory.assigned_user_id === user?.id ? (
                       <div className="flex-1 min-h-0 flex flex-col justify-between gap-2.5 overflow-hidden">
                         <div className="flex-1 min-h-0 flex flex-col p-3.5 rounded-xl bg-white/[0.02] border border-white/10 space-y-2.5">
-                          {/* Linha Única de Ações: Tarefa Vinculada, Orçamento, Etapa e Responsável */}
+                          {/* Linha Única de Ações: Tarefa Vinculada, Orçamento, Contrato, Etapa e Responsável */}
                           <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 pb-2 border-b border-white/10">
-                            {/* Ações da Esquerda: Tarefa Vinculada e Orçamento (Apenas para atividades primárias) */}
+                            {/* Ações da Esquerda: Tarefa Vinculada, Orçamento e Contrato */}
                             {(() => {
                               const parentInfo = getParentDealInfo(selectedDealForHistory);
                               const isSubtaskDeal = Boolean(parentInfo);
@@ -7948,12 +8762,12 @@ function CrmDashboard() {
                               }
 
                               const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
+                              const contractDoc = getDealContractFile(selectedDealForHistory, dealHistoryList);
                               const isBudget = isBudgetDeal(selectedDealForHistory);
+                              const isContractColumn = selectedDealForHistory.stage === "won" || selectedDealForHistory.stage === "completed" || Boolean(contractDoc);
+
                               const attachLabel = isBudget ? "ANEXAR ORÇAMENTO" : "ANEXAR DOCUMENTO";
-                              const attachedLabel = isBudget ? "ORÇAMENTO ANEXADO" : "DOCUMENTO ANEXADO";
-                              const tooltipTitle = isBudget ? "Orçamento Anexado" : "Documento Anexado";
                               const buttonHoverTitle = isBudget ? "Clique para selecionar e anexar orçamento" : "Clique para selecionar e anexar documento";
-                              const viewHoverTitle = isBudget ? "Clique para visualizar o orçamento anexado" : "Clique para visualizar o documento anexado";
 
                               return (
                                 <div className="flex flex-wrap items-center gap-2">
@@ -7967,13 +8781,13 @@ function CrmDashboard() {
                                       setSubtaskNotes("");
                                       setIsSubtaskModalOpen(true);
                                     }}
-                                    className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm"
+                                    className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm"
                                     title="Criar e vincular uma atividade a esta atividade principal"
                                   >
                                     <PlusCircle className="h-3.5 w-3.5 text-emerald-400" /> VINCULAR ATIVIDADE
                                   </button>
 
-                                  {/* 2. Anexo de Arquivo com Compressão Client-side e Tooltip Inteligente */}
+                                  {/* 2. Anexo de Orçamento/Documento */}
                                   <input
                                     ref={quoteFileInputRef}
                                     type="file"
@@ -7983,67 +8797,15 @@ function CrmDashboard() {
                                     className="hidden"
                                   />
 
-                                  {quoteDoc ? (
-                                    <TooltipProvider delayDuration={100}>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <button
-                                            type="button"
-                                            disabled={isUploadingQuoteFile}
-                                            onClick={() => {
-                                              setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name });
-                                            }}
-                                            className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                                            title={viewHoverTitle}
-                                          >
-                                            <Paperclip className="h-3.5 w-3.5 text-emerald-400" />
-                                            <span>{attachedLabel}</span>
-                                          </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent
-                                          side="top"
-                                          align="start"
-                                          sideOffset={8}
-                                          className="p-3 rounded-xl bg-slate-950/98 border border-emerald-500/50 text-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-2xl z-[100] min-w-[290px] max-w-[350px] space-y-2 animate-in fade-in zoom-in-95"
-                                        >
-                                          <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                                            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                                              <FileCheck className="h-4 w-4" /> {tooltipTitle}
-                                            </span>
-                                            <span className="font-mono text-[10px] font-bold text-sky-300 truncate max-w-[150px]">
-                                              {quoteDoc.name}
-                                            </span>
-                                          </div>
-
-                                          {quoteDoc.quoteData?.customerName && (
-                                            <div className="text-xs space-y-0.5 text-left">
-                                              <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">Identificação:</p>
-                                              <p className="font-bold text-white leading-tight">
-                                                {quoteDoc.quoteData.customerName}
-                                              </p>
-                                            </div>
-                                          )}
-
-                                          {quoteDoc.quoteData?.totalAmount && quoteDoc.quoteData.totalAmount > 0 && (
-                                            <div className="flex items-center justify-between text-xs border-t border-white/10 pt-1.5 bg-emerald-500/15 p-2 rounded-lg border border-emerald-400/30">
-                                              <span className="text-emerald-300 font-black uppercase text-[11px]">Valor Extraído:</span>
-                                              <span className="font-mono font-black text-emerald-400 text-sm">
-                                                {`R$ ${quoteDoc.quoteData.totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                  ) : (
+                                  {(quoteDoc || !isContractColumn) && (
                                     <button
                                       type="button"
                                       disabled={isUploadingQuoteFile}
                                       onClick={() => {
                                         quoteFileInputRef.current?.click();
                                       }}
-                                      className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                                      title={buttonHoverTitle}
+                                      className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                                      title={quoteDoc ? (isBudget ? "Clique para selecionar e anexar um novo orçamento" : "Clique para selecionar e anexar um novo documento") : buttonHoverTitle}
                                     >
                                       {isUploadingQuoteFile ? (
                                         <>
@@ -8053,175 +8815,64 @@ function CrmDashboard() {
                                       ) : (
                                         <>
                                           <Paperclip className="h-3.5 w-3.5 text-emerald-400" />
-                                          <span>{attachLabel}</span>
+                                          <span>{quoteDoc ? (isBudget ? "ANEXAR NOVO ORÇAMENTO" : "ANEXAR NOVO DOCUMENTO") : attachLabel}</span>
                                         </>
                                       )}
                                     </button>
                                   )}
-                                </div>
-                              );
-                            })()}
 
-                            {/* Menus da Direita: Etapa e Responsável Juntos */}
-                            <div className="flex flex-wrap items-center gap-2">
-                              {/* 3. Etapa: [Etapa atual / Mover] */}
-                              {(() => {
-                                const isInternalDeal =
-                                  selectedDealForHistory.title.toLowerCase().includes("[req. interna]") ||
-                                  selectedDealForHistory.stage === "lead";
+                                  {/* 3. Anexo de Contrato Exclusivo da Coluna CONTRATOS (ou atividades com contrato) */}
+                                   {isContractColumn && (
+                                     <>
+                                       <input
+                                         ref={contractFileInputRef}
+                                         type="file"
+                                         accept="image/*,application/pdf"
+                                         onChange={handleUploadContractFile}
+                                         disabled={isUploadingContractFile}
+                                         className="hidden"
+                                       />
 
-                                const isLinkedSubtask = Boolean(getParentDealInfo(selectedDealForHistory));
-
-                                const currentStageName = STAGES.find((s) => s.id === selectedDealForHistory.stage)?.title || selectedDealForHistory.stage;
-
-                                if (isInternalDeal || isLinkedSubtask) {
-                                  return (
-                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
-                                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa:</span>
-                                      <span className="font-bold text-sky-400 uppercase">{currentStageName}</span>
-                                    </div>
-                                  );
-                                }
-
-                                const curStageIndex = STAGES.findIndex((s) => s.id === (selectedDealForHistory.stage === "proposal" ? "negotiation" : selectedDealForHistory.stage));
-
-                                // Regra: Uma atividade não pode retroceder. Um orçamento não pode passar direto para contratos ou perdidos sem ter passado por negociações.
-                                const availableStages = STAGES.filter((s) => {
-                                  if (s.id === selectedDealForHistory.stage) return true;
-                                  const sIdx = STAGES.findIndex((st) => st.id === s.id);
-                                  if (sIdx < curStageIndex) return false; // Bloqueia retrocesso
-                                  if (selectedDealForHistory.stage === "qualification") {
-                                    // Se está em orçamentos, só pode avançar para negociações
-                                    return s.id === "negotiation";
-                                  }
-                                  if (selectedDealForHistory.stage === "negotiation" || (selectedDealForHistory.stage as string) === "proposal") {
-                                    // Se está em negociações, pode ir para CONTRATOS (won) ou PERDIDOS (lost)
-                                    return s.id === "won" || s.id === "lost";
-                                  }
-                                  if (selectedDealForHistory.stage === "won") {
-                                    // Se está em contratos, pode ir para CONCLUÍDAS (completed) ou PERDIDOS (lost)
-                                    return s.id === "completed" || s.id === "lost";
-                                  }
-                                  return sIdx === curStageIndex + 1;
-                                });
-
-                                const canChangeStage =
-                                  role === "admin" ||
-                                  !selectedDealForHistory.assigned_user_id ||
-                                  selectedDealForHistory.assigned_user_id === user?.id ||
-                                  selectedDealForHistory.user_id === user?.id;
-
-                                return (
-                                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa:</span>
-                                    {canChangeStage && availableStages.length > 1 ? (
-                                      <select
-                                        value={stageToMove || selectedDealForHistory.stage}
-                                        onChange={(e) => {
-                                          const targetStage = e.target.value as Deal["stage"];
-                                          if (targetStage) {
-                                            const originalStage = selectedDealForHistory.stage;
-                                            
-                                            // Se voltou para a etapa original da atividade antes de atualizar
-                                            if (targetStage === originalStage) {
-                                              setAutoGeneratedLogs((prev) =>
-                                                prev.filter((l) => !l.includes("alterou a etapa de"))
-                                              );
-                                              setStageToMove(null);
-                                              return;
-                                            }
-
-                                            if (targetStage === "negotiation") {
-                                              const parentInfo = getParentDealInfo(selectedDealForHistory);
-                                              const parentDeal = parentInfo?.deal || deals.find((d) => d.id === parentInfo?.id);
-                                              const hasQuoteAttached = Boolean(
-                                                getDealQuoteFile(selectedDealForHistory, dealHistoryList) ||
-                                                (parentDeal && getDealQuoteFile(parentDeal))
-                                              );
-                                              if (!hasQuoteAttached) {
-                                                return toast.error("Não é possível avançar para NEGOCIAÇÕES sem o orçamento anexado.");
-                                              }
-                                            }
-
-                                            const fromStageName = STAGES.find((s) => s.id === originalStage)?.title || originalStage;
-                                            const toStageName = STAGES.find((s) => s.id === targetStage)?.title || targetStage;
-                                            const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-                                            const stageLine = `${userName} alterou a etapa de "${fromStageName}" para "${toStageName}".`;
-                                            
-                                            // Remove alteração anterior de etapa da lista se houver e adiciona a nova
-                                            setAutoGeneratedLogs((prev) => [
-                                              ...prev.filter((l) => !l.includes("alterou a etapa de")),
-                                              stageLine,
-                                            ]);
-                                            setStageToMove(targetStage);
-                                          }
-                                        }}
-                                        className="input-futuristic rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider bg-transparent text-accent border border-accent/40 outline-none cursor-pointer hover:border-accent"
-                                      >
-                                        {availableStages.map((s) => (
-                                          <option key={s.id} value={s.id} className="bg-slate-900 text-white">
-                                            {s.id === (stageToMove || selectedDealForHistory.stage) ? s.title : `➔ ${s.title}`}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <span className="font-bold text-accent uppercase">{currentStageName}</span>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-
-                              {/* 4. Responsável: [Usuário] */}
-                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                                  Responsável:
-                                </span>
-                                <select
-                                  value={reassignTo || selectedDealForHistory.assigned_user_id || ""}
-                                  onChange={(e) => {
-                                    const selectedId = e.target.value;
-                                    setReassignTo(selectedId);
-                                    const originalId = selectedDealForHistory.assigned_user_id;
-
-                                    // Remove qualquer log prévio de alteração de responsável desta edição
-                                    setAutoGeneratedLogs((prev) =>
-                                      prev.filter((l) => !l.includes("alterou o responsável de"))
-                                    );
-
-                                    // Se o novo selecionado for diferente do responsável original da atividade, adiciona a linha atualizada
-                                    if (selectedId && selectedId !== originalId) {
-                                      const selectedMember = teamMembers.find((m) => m.id === selectedId);
-                                      const newName = selectedMember?.display_name || selectedMember?.email || "Novo Responsável";
-                                      const currentName = selectedDealForHistory.assigned_user_name || "Anterior";
-                                      const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-                                      const reassignLine = `${userName} alterou o responsável de "${currentName}" para "${newName}".`;
-                                      
-                                      setAutoGeneratedLogs((prev) => [
-                                        ...prev.filter((l) => !l.includes("alterou o responsável de")),
-                                        reassignLine,
-                                      ]);
-                                    }
-                                  }}
-                                  className="input-futuristic rounded px-2 py-0.5 text-xs outline-none bg-transparent font-bold border border-white/15 cursor-pointer max-w-[200px]"
-                                >
-                                  <option value={selectedDealForHistory.assigned_user_id || ""} className="bg-slate-900">
-                                    {selectedDealForHistory.assigned_user_name || "Nenhum"}
-                                  </option>
-                                  {teamMembers
-                                    .filter((m) => m.id !== selectedDealForHistory.assigned_user_id)
-                                    .map((m) => (
-                                      <option key={m.id} value={m.id} className="bg-slate-900">
-                                        {m.display_name || m.email}
-                                      </option>
-                                    ))}
-                                </select>
-                              </div>
-                            </div>
+                                       <button
+                                         type="button"
+                                         disabled={isUploadingContractFile}
+                                         onClick={() => {
+                                           contractFileInputRef.current?.click();
+                                         }}
+                                         className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-sky-300 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                                         title={contractDoc ? "Clique para selecionar e anexar um novo contrato" : "Clique para selecionar e anexar contrato"}
+                                       >
+                                         {isUploadingContractFile ? (
+                                           <>
+                                             <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
+                                             <span>COMPACTANDO E ENVIANDO...</span>
+                                           </>
+                                         ) : (
+                                           <>
+                                             <FileText className="h-3.5 w-3.5 text-sky-400" />
+                                             <span>{contractDoc ? "ANEXAR NOVO CONTRATO" : "ANEXAR CONTRATO"}</span>
+                                           </>
+                                         )}
+                                       </button>
+                                     </>
+                                   )}
+                                 </div>
+                               );
+                             })()}
                           </div>
 
                           {/* FORMULÁRIO DE ATUALIZAÇÃO SEMPRE VISÍVEL E PRONTO PARA DIGITAR */}
-                          <form onSubmit={handleAddHistoryOrReassign} className="flex-1 min-h-0 flex flex-col justify-between gap-2 overflow-hidden">
-                            {/* Bloco de Linhas Automáticas Imutáveis */}
+                          <form onSubmit={handleAddHistoryOrReassign} className="flex-1 min-h-0 flex flex-col justify-between gap-2 overflow-visible">
+                            <FastDealCommentInput
+                              dealId={selectedDealForHistory.id}
+                              onTextChange={(text) => {
+                                newCommentRef.current = text;
+                              }}
+                              teamMembers={teamMembers}
+                              resetCounter={commentResetCounter}
+                            />
+
+                            {/* Bloco de Linhas Automáticas Imutáveis (Abaixo do texto digitado) */}
                             {autoGeneratedLogs.length > 0 && (
                               <div className="shrink-0 space-y-1.5 p-2.5 rounded-xl bg-sky-950/30 border border-sky-500/20 max-h-[100px] overflow-y-auto custom-scrollbar">
                                 {autoGeneratedLogs.map((log, idx) => (
@@ -8233,81 +8884,230 @@ function CrmDashboard() {
                               </div>
                             )}
 
-                            <FastDealCommentInput
-                              dealId={selectedDealForHistory.id}
-                              onTextChange={(text) => {
-                                newCommentRef.current = text;
-                              }}
-                              teamMembers={teamMembers}
-                              resetCounter={commentResetCounter}
-                            />
+                            {/* Linha Inferior de Ações: Etapa, Responsável, Concluir/Arquivar e Atualizar */}
+                            <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 pt-2 pb-1.5 px-1 border-t border-white/5 overflow-visible">
+                              {/* Menus da Esquerda: Etapa e Responsável */}
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* 1. Etapa: [Etapa atual / Mover] */}
+                                {(() => {
+                                  const isInternalDeal =
+                                    selectedDealForHistory.title.toLowerCase().includes("[req. interna]") ||
+                                    selectedDealForHistory.stage === "lead";
 
-                            {/* Botões de Ação */}
-                            <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
-                              {/* Ações Especiais: Concluir (se vinculada), Desarquivar ou Arquivar (em vermelho) e Atualizar */}
-                              {(() => {
-                                const parentInfo = getParentDealInfo(selectedDealForHistory);
-                                const isLinkedSubtask = Boolean(parentInfo);
+                                  const isLinkedSubtask = Boolean(getParentDealInfo(selectedDealForHistory));
 
-                                if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
+                                  const currentStageName = STAGES.find((s) => s.id === selectedDealForHistory.stage)?.title || selectedDealForHistory.stage;
+
+                                  if (isInternalDeal || isLinkedSubtask) {
+                                    return (
+                                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa:</span>
+                                        <span className="font-bold text-sky-400 uppercase">{currentStageName}</span>
+                                      </div>
+                                    );
+                                  }
+
+                                  const curStageIndex = STAGES.findIndex((s) => s.id === (selectedDealForHistory.stage === "proposal" ? "negotiation" : selectedDealForHistory.stage));
+
+                                  // Regra: Uma atividade não pode retroceder. Um orçamento não pode passar direto para contratos ou perdidos sem ter passado por negociações.
+                                  const availableStages = STAGES.filter((s) => {
+                                    if (s.id === selectedDealForHistory.stage) return true;
+                                    const sIdx = STAGES.findIndex((st) => st.id === s.id);
+                                    if (sIdx < curStageIndex) return false; // Bloqueia retrocesso
+                                    if (selectedDealForHistory.stage === "qualification") {
+                                      // Se está em orçamentos, só pode avançar para negociações
+                                      return s.id === "negotiation";
+                                    }
+                                    if (selectedDealForHistory.stage === "negotiation" || (selectedDealForHistory.stage as string) === "proposal") {
+                                      // Se está em negociações, pode ir para CONTRATOS (won) ou PERDIDOS (lost)
+                                      return s.id === "won" || s.id === "lost";
+                                    }
+                                    if (selectedDealForHistory.stage === "won") {
+                                      // Se está em contratos, pode ir para CONCLUÍDAS (completed) ou PERDIDOS (lost)
+                                      return s.id === "completed" || s.id === "lost";
+                                    }
+                                    return sIdx === curStageIndex + 1;
+                                  });
+
+                                  const canChangeStage =
+                                    role === "admin" ||
+                                    !selectedDealForHistory.assigned_user_id ||
+                                    selectedDealForHistory.assigned_user_id === user?.id ||
+                                    selectedDealForHistory.user_id === user?.id;
+
                                   return (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCompleteSubtask(selectedDealForHistory)}
-                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                      title="Concluir e fechar esta vinculada"
-                                    >
-                                      <CheckCircle2 className="h-4 w-4 text-rose-400" />
-                                      <span>Concluir</span>
-                                    </button>
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa:</span>
+                                      {canChangeStage && availableStages.length > 1 ? (
+                                        <select
+                                          value={stageToMove || selectedDealForHistory.stage}
+                                          onChange={(e) => {
+                                            const targetStage = e.target.value as Deal["stage"];
+                                            if (targetStage) {
+                                              const originalStage = selectedDealForHistory.stage;
+                                              
+                                              // Se voltou para a etapa original da atividade antes de atualizar
+                                              if (targetStage === originalStage) {
+                                                setAutoGeneratedLogs((prev) =>
+                                                  prev.filter((l) => !l.includes("alterou a etapa de"))
+                                                );
+                                                setStageToMove(null);
+                                                return;
+                                              }
+
+                                              if (targetStage === "negotiation") {
+                                                const parentInfo = getParentDealInfo(selectedDealForHistory);
+                                                const parentDeal = parentInfo?.deal || deals.find((d) => d.id === parentInfo?.id);
+                                                const hasQuoteAttached = Boolean(
+                                                  getDealQuoteFile(selectedDealForHistory, dealHistoryList) ||
+                                                  (parentDeal && getDealQuoteFile(parentDeal))
+                                                );
+                                                if (!hasQuoteAttached) {
+                                                  return toast.error("Não é possível avançar para NEGOCIAÇÕES sem o orçamento anexado.");
+                                                }
+                                              }
+
+                                              const fromStageName = STAGES.find((s) => s.id === originalStage)?.title || originalStage;
+                                              const toStageName = STAGES.find((s) => s.id === targetStage)?.title || targetStage;
+                                              const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+                                              const stageLine = `${userName} alterou a etapa de "${fromStageName}" para "${toStageName}".`;
+                                              
+                                              // Remove alteração anterior de etapa da lista se houver e adiciona a nova
+                                              setAutoGeneratedLogs((prev) => [
+                                                ...prev.filter((l) => !l.includes("alterou a etapa de")),
+                                                stageLine,
+                                              ]);
+                                              setStageToMove(targetStage);
+                                            }
+                                          }}
+                                          className="input-futuristic rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider bg-transparent text-accent border border-accent/40 outline-none cursor-pointer hover:border-accent"
+                                        >
+                                          {availableStages.map((s) => (
+                                            <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                                              {s.id === (stageToMove || selectedDealForHistory.stage) ? s.title : `➔ ${s.title}`}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <span className="font-bold text-accent uppercase">{currentStageName}</span>
+                                      )}
+                                    </div>
                                   );
-                                }
+                                })()}
 
-                                const originStage =
-                                  selectedDealForHistory.stage === "archived"
-                                    ? getArchivedOriginStage(selectedDealForHistory)
-                                    : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
+                                {/* 2. Responsável: [Usuário] */}
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
+                                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                    Responsável:
+                                  </span>
+                                  <select
+                                    value={reassignTo || selectedDealForHistory.assigned_user_id || ""}
+                                    onChange={(e) => {
+                                      const selectedId = e.target.value;
+                                      setReassignTo(selectedId);
+                                      const originalId = selectedDealForHistory.assigned_user_id;
 
-                                const isArchivableStage =
-                                  originStage === "lead" ||
-                                  ((originStage === "completed" || originStage === "lost") && isAdmin);
+                                      // Remove qualquer log prévio de alteração de responsável desta edição
+                                      setAutoGeneratedLogs((prev) =>
+                                        prev.filter((l) => !l.includes("alterou o responsável de"))
+                                      );
 
-                                if (!isLinkedSubtask && isArchivableStage) {
-                                  return selectedDealForHistory.stage === "archived" ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
-                                      className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                      title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
-                                    >
-                                      <ArchiveRestore className="h-4 w-4 text-emerald-400" />
-                                      <span>Desarquivar</span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleArchiveDeal(selectedDealForHistory)}
-                                      className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-300 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105"
-                                      style={{ borderColor: "#ef4444", color: "#ef4444" }}
-                                      title="Arquivar esta atividade totalmente finalizada"
-                                    >
-                                      <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
-                                      <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
-                                    </button>
-                                  );
-                                }
+                                      // Se o novo selecionado for diferente do responsável original da atividade, adiciona a linha atualizada
+                                      if (selectedId && selectedId !== originalId) {
+                                        const selectedMember = teamMembers.find((m) => m.id === selectedId);
+                                        const newName = selectedMember?.display_name || selectedMember?.email || "Novo Responsável";
+                                        const currentName = selectedDealForHistory.assigned_user_name || "Anterior";
+                                        const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+                                        const reassignLine = `${userName} alterou o responsável de "${currentName}" para "${newName}".`;
+                                        
+                                        setAutoGeneratedLogs((prev) => [
+                                          ...prev.filter((l) => !l.includes("alterou o responsável de")),
+                                          reassignLine,
+                                        ]);
+                                      }
+                                    }}
+                                    className="input-futuristic rounded px-2 py-0.5 text-xs outline-none bg-transparent font-bold border border-white/15 cursor-pointer max-w-[200px]"
+                                  >
+                                    <option value={selectedDealForHistory.assigned_user_id || ""} className="bg-slate-900">
+                                      {selectedDealForHistory.assigned_user_name || "Nenhum"}
+                                    </option>
+                                    {teamMembers
+                                      .filter((m) => m.id !== selectedDealForHistory.assigned_user_id)
+                                      .map((m) => (
+                                        <option key={m.id} value={m.id} className="bg-slate-900">
+                                          {m.display_name || m.email}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              </div>
 
-                                return null;
-                              })()}
+                              {/* Ações da Direita: Concluir/Arquivar e Atualizar com Glow Desobstruído */}
+                              <div className="flex items-center gap-2.5 py-1 px-1 overflow-visible shrink-0">
+                                {(() => {
+                                  const parentInfo = getParentDealInfo(selectedDealForHistory);
+                                  const isLinkedSubtask = Boolean(parentInfo);
 
-                              <button
-                                type="submit"
-                                disabled={isSavingUpdate}
-                                className="btn-ghost-neon px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 border border-sky-500/30 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                              >
-                                <Save className="h-4 w-4 text-sky-400" />
-                                <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
-                              </button>
+                                  if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCompleteSubtask(selectedDealForHistory)}
+                                        className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(244,63,94,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                        title="Concluir e fechar esta vinculada"
+                                      >
+                                        <CheckCircle2 className="h-4 w-4 text-rose-400" />
+                                        <span>Concluir</span>
+                                      </button>
+                                    );
+                                  }
+
+                                  const originStage =
+                                    selectedDealForHistory.stage === "archived"
+                                      ? getArchivedOriginStage(selectedDealForHistory)
+                                      : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
+
+                                  const isArchivableStage =
+                                    originStage === "lead" ||
+                                    ((originStage === "completed" || originStage === "lost") && isAdmin);
+
+                                  if (!isLinkedSubtask && isArchivableStage) {
+                                    return selectedDealForHistory.stage === "archived" ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
+                                        className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                        title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
+                                      >
+                                        <ArchiveRestore className="h-4 w-4 text-emerald-400" />
+                                        <span>Desarquivar</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleArchiveDeal(selectedDealForHistory)}
+                                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                        style={{ borderColor: "#ef4444", color: "#ef4444" }}
+                                        title="Arquivar esta atividade totalmente finalizada"
+                                      >
+                                        <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
+                                        <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
+                                      </button>
+                                    );
+                                  }
+
+                                  return null;
+                                })()}
+
+                                <button
+                                  type="submit"
+                                  disabled={isSavingUpdate}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/40 hover:border-sky-400/60 flex items-center gap-1.5 shadow-[0_0_15px_rgba(56,189,248,0.25)] hover:shadow-[0_0_20px_rgba(56,189,248,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                >
+                                  <Save className="h-4 w-4 text-sky-400" />
+                                  <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
+                                </button>
+                              </div>
                             </div>
                           </form>
                         </div>
@@ -8778,6 +9578,52 @@ function CrmDashboard() {
                   />
                 </div>
               </div>
+
+              {/* ANEXAR CONTRATO OPCIONAL */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-sky-300 flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-sky-400" /> Documento do Contrato (Opcional)
+                </label>
+                {!newContractModalFile ? (
+                  <label className="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-dashed border-sky-500/30 hover:border-sky-400/60 bg-sky-500/5 hover:bg-sky-500/10 transition-all cursor-pointer text-xs text-sky-300 font-bold group">
+                    <FileText className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform" />
+                    <span>Clique para anexar o contrato</span>
+                    <input
+                      type="file"
+                      accept=".pdf,image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setNewContractModalFile(file);
+                        }
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <div className="flex items-center justify-between p-2 rounded-xl border border-sky-500/40 bg-sky-500/15 text-sky-200">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="h-4 w-4 text-sky-400 shrink-0" />
+                      <span className="text-xs font-bold truncate">
+                        {newContractModalFile.name}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-black/40 text-sky-300 border border-sky-500/30 shrink-0">
+                        {newContractModalFile.size < 1024 * 1024
+                          ? `${Math.round(newContractModalFile.size / 1024)} KB`
+                          : `${(newContractModalFile.size / (1024 * 1024)).toFixed(1)} MB`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewContractModalFile(null)}
+                      className="btn-ghost-neon p-1.5 rounded-lg text-rose-400 hover:text-white bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/30 cursor-pointer transition-all ml-2"
+                      title="Remover anexo"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
@@ -8786,6 +9632,7 @@ function CrmDashboard() {
                 disabled={isSyncing}
                 onClick={() => {
                   setContractDeliveryDeadline("");
+                  setNewContractModalFile(null);
                   setContractModalDeal(null);
                 }}
                 className="btn-ghost-neon rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-white"
@@ -10305,10 +11152,19 @@ function CrmDashboard() {
             {/* Header da Visualização */}
             <div className="shrink-0 flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2 truncate pr-4">
-                <FileCheck className="h-5 w-5 text-emerald-400 shrink-0" />
-                <span className="font-bold text-sm uppercase tracking-wider truncate text-sky-300">
-                  {previewingQuoteFile.name}
-                </span>
+                {previewingQuoteFile.isContract ? (
+                  <FileText className="h-5 w-5 text-sky-400 shrink-0" />
+                ) : (
+                  <FileCheck className="h-5 w-5 text-emerald-400 shrink-0" />
+                )}
+                <div className="truncate">
+                  <span className="font-bold text-sm uppercase tracking-wider truncate text-sky-300 block">
+                    {previewingQuoteFile.name}
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+                    {previewingQuoteFile.isContract ? "Documento de Contrato" : "Documento de Orçamento"}
+                  </span>
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <a
@@ -10322,26 +11178,44 @@ function CrmDashboard() {
                   <Download className="h-4 w-4" /> Download
                 </a>
 
-                <label className="btn-ghost-neon px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-white border-sky-400/40 hover:bg-sky-500/20 flex items-center gap-1.5 cursor-pointer shadow-sm">
-                  <UploadCloud className="h-4 w-4" />
-                  <span>Substituir</span>
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={handleUploadQuoteFile}
-                    disabled={isUploadingQuoteFile}
-                    className="hidden"
-                  />
-                </label>
+                {previewingQuoteFile.isContract ? (
+                  <label className="btn-ghost-neon px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-white border-sky-400/40 hover:bg-sky-500/20 flex items-center gap-1.5 cursor-pointer shadow-sm">
+                    <UploadCloud className="h-4 w-4" />
+                    <span>Substituir</span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={handleUploadContractFile}
+                      disabled={isUploadingContractFile}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <label className="btn-ghost-neon px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 hover:text-white border-sky-400/40 hover:bg-sky-500/20 flex items-center gap-1.5 cursor-pointer shadow-sm">
+                    <UploadCloud className="h-4 w-4" />
+                    <span>Substituir</span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={handleUploadQuoteFile}
+                      disabled={isUploadingQuoteFile}
+                      className="hidden"
+                    />
+                  </label>
+                )}
 
                 <button
                   type="button"
                   onClick={async () => {
-                    await handleRemoveQuoteFile();
+                    if (previewingQuoteFile.isContract) {
+                      await handleRemoveContractFile();
+                    } else {
+                      await handleRemoveQuoteFile();
+                    }
                     setPreviewingQuoteFile(null);
                   }}
                   className="btn-ghost-neon px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 border-rose-500/40 flex items-center gap-1.5 cursor-pointer"
-                  title="Excluir orçamento oficial"
+                  title={previewingQuoteFile.isContract ? "Excluir contrato anexado" : "Excluir orçamento oficial"}
                 >
                   <Trash2 className="h-4 w-4" />
                   <span>Excluir</span>

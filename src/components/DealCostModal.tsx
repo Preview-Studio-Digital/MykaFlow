@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   extractDealCostAnalysis,
   formatSecondsDetailed,
@@ -27,6 +28,35 @@ interface DealCostModalProps {
   allDeals: any[];
 }
 
+function getUserSessionTheme(role?: string | null, userName?: string | null) {
+  const cleanName = (userName || "").toUpperCase();
+  const isAdm = role === "admin" || cleanName.includes("DIÓGENES") || cleanName.includes("DIOGENES") || cleanName.includes("ADMIN");
+  if (isAdm) {
+    return {
+      activeCard: "bg-amber-950/30 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.25)]",
+      activeIcon: "bg-amber-500/25 text-amber-400 border border-amber-500/40 animate-pulse",
+      activeBadge: "bg-amber-500/25 text-amber-300 border border-amber-400/50",
+      activeName: "text-amber-300",
+    };
+  }
+  const isFin = role === "financeiro" || cleanName.includes("FINANCEIRO");
+  if (isFin) {
+    return {
+      activeCard: "bg-emerald-950/30 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.25)]",
+      activeIcon: "bg-emerald-500/25 text-emerald-400 border border-emerald-500/40 animate-pulse",
+      activeBadge: "bg-emerald-500/25 text-emerald-300 border border-emerald-400/50",
+      activeName: "text-emerald-300",
+    };
+  }
+  // Padrão Comercial / CRM (ex: DIEGO)
+  return {
+    activeCard: "bg-sky-950/30 border-sky-500/50 shadow-[0_0_15px_rgba(56,189,248,0.25)]",
+    activeIcon: "bg-sky-500/25 text-sky-400 border border-sky-500/40 animate-pulse",
+    activeBadge: "bg-sky-500/25 text-sky-300 border border-sky-400/50",
+    activeName: "text-sky-300",
+  };
+}
+
 export function DealCostModal({
   isOpen,
   onClose,
@@ -35,11 +65,21 @@ export function DealCostModal({
 }: DealCostModalProps) {
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const [activeView, setActiveView] = useState<"collaborators" | "sessions">("collaborators");
+  const [userRolesMap, setUserRolesMap] = useState<Record<string, string>>({});
 
-  // Sincronizar salários salvos na nuvem quando o modal abre
+  // Sincronizar salários salvos na nuvem e buscar papéis de usuários
   useEffect(() => {
     if (isOpen) {
       syncSalaryConfigsFromSupabase();
+      supabase.from("user_roles").select("user_id, role").then(({ data }) => {
+        if (data) {
+          const map: Record<string, string> = {};
+          data.forEach((r: any) => {
+            if (r.user_id) map[r.user_id] = r.role;
+          });
+          setUserRolesMap(map);
+        }
+      });
     }
   }, [isOpen]);
 
@@ -100,6 +140,15 @@ export function DealCostModal({
                 <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-500/25 text-amber-300 border border-amber-400/50 uppercase tracking-widest inline-flex items-center gap-1 shadow-sm">
                   <Calculator className="h-3 w-3" /> CUSTO EM TEMPO REAL
                 </span>
+                {costData.isSubtaskDeal ? (
+                  <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded-md bg-sky-500/25 text-sky-300 border border-sky-400/50 uppercase tracking-widest inline-flex items-center gap-1 shadow-sm">
+                    ATIVIDADE VINCULADA
+                  </span>
+                ) : costData.subtasksCount > 0 ? (
+                  <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 uppercase tracking-widest inline-flex items-center gap-1 shadow-sm">
+                    ATIVIDADE PRIMÁRIA (CONSOLIDADA)
+                  </span>
+                ) : null}
                 <span className="font-mono text-xs font-bold text-slate-400">
                   Nº {costData.reqNumber}
                 </span>
@@ -112,6 +161,15 @@ export function DealCostModal({
               <h2 className="text-lg sm:text-xl font-black uppercase tracking-wide text-white truncate mt-1">
                 {deal.title.replace(/^\[TAREFA\]\s*/i, "").replace(/^\[VINCULADA\]\s*/i, "").trim()}
               </h2>
+              {costData.parentDealInfo?.title && (
+                <p className="text-xs text-sky-300 font-bold mt-0.5 flex items-center gap-1">
+                  <span>↳ Vinculada à Atividade Primária:</span>
+                  <span className="text-white underline">{costData.parentDealInfo.title}</span>
+                  {costData.parentDealInfo.reqNumber && (
+                    <span className="font-mono text-[10px] text-slate-400">({costData.parentDealInfo.reqNumber})</span>
+                  )}
+                </p>
+              )}
             </div>
           </div>
 
@@ -132,7 +190,7 @@ export function DealCostModal({
           {/* 1. CUSTO TOTAL CONSOLIDADO */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/20 via-amber-950/30 to-black border border-amber-500/50 shadow-[0_0_25px_rgba(245,158,11,0.2)] flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-amber-300">
-              <span>CUSTO TOTAL ACUMULADO</span>
+              <span>{costData.isSubtaskDeal ? "CUSTO DESTA VINCULADA" : "CUSTO TOTAL CONSOLIDADO"}</span>
               <TrendingUp className="h-4 w-4 text-amber-400" />
             </div>
             <div className="my-2">
@@ -141,7 +199,9 @@ export function DealCostModal({
               </span>
             </div>
             <p className="text-[10px] text-amber-200/80 font-bold uppercase tracking-wider">
-              {costData.subtasksCount > 0
+              {costData.isSubtaskDeal
+                ? "Horas e custos próprios (somados à Primária)"
+                : costData.subtasksCount > 0
                 ? `Principal + ${costData.subtasksCount} ${costData.subtasksCount === 1 ? "vinculada" : "vinculadas"}`
                 : "Atividade Única"}
             </p>
@@ -150,7 +210,7 @@ export function DealCostModal({
           {/* 2. TEMPO TOTAL INVESTIDO */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-500/15 via-sky-950/25 to-black border border-sky-500/40 shadow-[0_0_20px_rgba(56,189,248,0.15)] flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-sky-300">
-              <span>TEMPO TOTAL INVESTIDO</span>
+              <span>{costData.isSubtaskDeal ? "TEMPO DESTA VINCULADA" : "TEMPO TOTAL INVESTIDO"}</span>
               <Clock className="h-4 w-4 text-sky-400" />
             </div>
             <div className="my-2">
@@ -159,9 +219,15 @@ export function DealCostModal({
               </span>
             </div>
             <div className="flex items-center justify-between text-[10px] text-sky-200/80 font-mono font-bold">
-              <span>Principal: {formatSecondsDetailed(costData.mainDealSeconds)}</span>
-              {costData.subtasksCount > 0 && (
-                <span>Vinc: {formatSecondsDetailed(costData.subtasksSeconds)}</span>
+              {costData.isSubtaskDeal ? (
+                <span>Sessões diretas deste card</span>
+              ) : (
+                <>
+                  <span>Principal: {formatSecondsDetailed(costData.mainDealSeconds)}</span>
+                  {costData.subtasksCount > 0 && (
+                    <span>Vinc: {formatSecondsDetailed(costData.subtasksSeconds)}</span>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -298,50 +364,54 @@ export function DealCostModal({
           ) : (
             /* EXTRATO CRONOLÓGICO DE TODAS AS SESSÕES */
             <div className="space-y-2">
-              {costData.allSessions.map((sess, idx) => (
-                <div
-                  key={sess.sessionId || idx}
-                  className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
-                    sess.isActive
-                      ? "bg-emerald-950/30 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
-                      : sess.isSubtask
-                      ? "bg-black/50 border-sky-500/25"
-                      : "bg-black/50 border-white/10"
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div
-                      className={`p-2 rounded-xl shrink-0 ${
-                        sess.isActive
-                          ? "bg-emerald-500/25 text-emerald-400 border border-emerald-500/40 animate-pulse"
-                          : sess.isSubtask
-                          ? "bg-sky-500/20 text-sky-400 border border-sky-500/30"
-                          : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                      }`}
-                    >
-                      {sess.isSubtask ? <GitFork className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
-                    </div>
+              {costData.allSessions.map((sess, idx) => {
+                const userRole = userRolesMap[sess.userId] || null;
+                const userTheme = getUserSessionTheme(userRole, sess.userName);
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold uppercase text-white tracking-wide">
-                          {sess.userName}
-                        </span>
-                        {sess.isSubtask ? (
-                          <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30 uppercase">
-                            VINCULADA #{sess.reqNumber}
-                          </span>
-                        ) : (
-                          <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase">
-                            PRINCIPAL
-                          </span>
-                        )}
-                        {sess.isActive && (
-                          <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 uppercase animate-pulse">
-                            AO VIVO
-                          </span>
-                        )}
+                return (
+                  <div
+                    key={sess.sessionId || idx}
+                    className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                      sess.isActive
+                        ? userTheme.activeCard
+                        : sess.isSubtask
+                        ? "bg-black/50 border-sky-500/25"
+                        : "bg-black/50 border-white/10"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div
+                        className={`p-2 rounded-xl shrink-0 ${
+                          sess.isActive
+                            ? userTheme.activeIcon
+                            : sess.isSubtask
+                            ? "bg-sky-500/20 text-sky-400 border border-sky-500/30"
+                            : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                        }`}
+                      >
+                        {sess.isSubtask ? <GitFork className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
                       </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`font-bold uppercase tracking-wide ${sess.isActive ? userTheme.activeName : "text-white"}`}>
+                            {sess.userName}
+                          </span>
+                          {sess.isSubtask ? (
+                            <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30 uppercase">
+                              VINCULADA #{sess.reqNumber}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase">
+                              PRINCIPAL
+                            </span>
+                          )}
+                          {sess.isActive && (
+                            <span className={`font-mono text-[9px] font-black px-1.5 py-0.5 rounded uppercase animate-pulse ${userTheme.activeBadge}`}>
+                              AO VIVO
+                            </span>
+                          )}
+                        </div>
 
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground font-mono text-[11px] mt-0.5">
                         <span>
@@ -381,7 +451,8 @@ export function DealCostModal({
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           )}
         </div>

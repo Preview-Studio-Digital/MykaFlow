@@ -44,6 +44,8 @@ export interface DealCostAnalysis {
   dealId: string;
   dealTitle: string;
   reqNumber: string;
+  isSubtaskDeal?: boolean;
+  parentDealInfo?: { id?: string; title?: string; reqNumber?: string } | null;
   totalCost: number;
   totalSeconds: number;
   totalHoursFormatted: string;
@@ -96,39 +98,72 @@ export function saveLocalSalaryConfig(config: UserSalaryConfig): void {
 
 /**
  * Sincroniza todas as configurações de salário salvas na nuvem (Supabase)
+ * e sobe automaticamente qualquer configuração existente no localStorage para a nuvem
  */
 export async function syncSalaryConfigsFromSupabase(): Promise<Record<string, UserSalaryConfig>> {
   try {
-    const { data, error } = await supabase
-      .from("crm_deal_history")
-      .select("*")
-      .eq("action_type", "team_salary_config_updated")
-      .order("created_at", { ascending: true });
+    const local = { ...getLocalSalaryConfigs() };
+    const cloudMap: Record<string, UserSalaryConfig> = {};
 
-    if (!error && data && data.length > 0) {
-      const merged = { ...getLocalSalaryConfigs() };
-      data.forEach((row) => {
-        try {
-          if (row.description) {
-            const parsed = JSON.parse(row.description) as UserSalaryConfig;
-            if (parsed.userId) {
-              merged[parsed.userId] = {
-                userId: parsed.userId,
-                baseSalary: Number(parsed.baseSalary) || 0,
-                chargesMultiplier: Number(parsed.chargesMultiplier) || 1.0,
-                monthlyHours: Number(parsed.monthlyHours) || 160,
-                updatedAt: parsed.updatedAt || row.created_at,
-              };
-            }
+    // 1. Busca prioritária da tabela oficial profiles
+    try {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, base_salary, charges_multiplier, monthly_hours, updated_at");
+
+      if (profs && profs.length > 0) {
+        profs.forEach((p: any) => {
+          if (p.id) {
+            cloudMap[p.id] = {
+              userId: p.id,
+              baseSalary: Number(p.base_salary) || 0,
+              chargesMultiplier: Number(p.charges_multiplier) || 1.0,
+              monthlyHours: Number(p.monthly_hours) || 160,
+              updatedAt: p.updated_at || undefined,
+            };
           }
-        } catch (e) {}
-      });
-      memorySalaryCache = merged;
-      try {
-        localStorage.setItem(SALARY_STORAGE_KEY, JSON.stringify(merged));
-      } catch (e) {}
-      return merged;
+        });
+      }
+    } catch (profErr) {
+      console.warn("Aviso ao ler salários da tabela profiles:", profErr);
     }
+
+    // 2. Fallback de histórico de alterações
+    try {
+      const { data, error } = await supabase
+        .from("crm_deal_history")
+        .select("*")
+        .eq("action_type", "team_salary_config_updated")
+        .order("created_at", { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        data.forEach((row) => {
+          try {
+            if (row.description) {
+              const parsed = JSON.parse(row.description) as UserSalaryConfig;
+              if (parsed.userId && !cloudMap[parsed.userId]?.baseSalary) {
+                cloudMap[parsed.userId] = {
+                  userId: parsed.userId,
+                  baseSalary: Number(parsed.baseSalary) || 0,
+                  chargesMultiplier: Number(parsed.chargesMultiplier) || 1.0,
+                  monthlyHours: Number(parsed.monthlyHours) || 160,
+                  updatedAt: parsed.updatedAt || row.created_at,
+                };
+              }
+            }
+          } catch (e) {}
+        });
+      }
+    } catch (histErr) {}
+
+    // 3. Mesclar tudo (nuvem + local)
+    const finalMerged = { ...local, ...cloudMap };
+    memorySalaryCache = finalMerged;
+    try {
+      localStorage.setItem(SALARY_STORAGE_KEY, JSON.stringify(finalMerged));
+    } catch (e) {}
+
+    return finalMerged;
   } catch (err) {
     console.warn("Aviso ao sincronizar configurações de salário do Supabase:", err);
   }
@@ -180,7 +215,22 @@ export async function saveUserSalaryConfig(
   // 1. Salvar no cache local e localStorage para resposta instantânea
   saveLocalSalaryConfig(config);
 
-  // 2. Persistir no banco de dados Supabase na nuvem (compartilhado entre todos os usuários)
+  // 2. Persistir diretamente na tabela profiles
+  try {
+    await supabase
+      .from("profiles")
+      .update({
+        base_salary: config.baseSalary,
+        charges_multiplier: config.chargesMultiplier,
+        monthly_hours: config.monthlyHours,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq("id", userId);
+  } catch (profErr) {
+    console.warn("Aviso ao atualizar profiles com salário:", profErr);
+  }
+
+  // 3. Registrar auditoria em crm_deal_history
   try {
     const { data: authData } = await supabase.auth.getUser();
     const currentUserId = authData?.user?.id || null;
@@ -195,19 +245,8 @@ export async function saveUserSalaryConfig(
       created_at: new Date().toISOString(),
     });
   } catch (supabaseErr) {
-    console.warn("Aviso ao salvar salário no Supabase crm_deal_history:", supabaseErr);
+    console.warn("Aviso ao salvar histórico de salário:", supabaseErr);
   }
-
-  // 3. Tentativa adicional na tabela profiles caso colunas existam
-  try {
-    await supabase
-      .from("profiles")
-      .update({
-        base_salary: config.baseSalary,
-        charges_multiplier: config.chargesMultiplier,
-      } as any)
-      .eq("id", userId);
-  } catch (err) {}
 }
 
 /**
@@ -315,19 +354,67 @@ export function extractDealCostAnalysis(
 
   // 1. Identificar todas as subtarefas vinculadas a esta atividade principal
   const linkedSubtasks = (allDeals || []).filter((d) => {
-    if (d.id === mainDeal.id) return false;
+    if (!d || d.id === mainDeal.id) return false;
     if (!d.notes) return false;
+
+    // A. Busca via Tag [PARENT_DEAL:{...}]
     try {
-      const match = d.notes.match(/\[PARENT_DEAL:(.*?)\]/);
-      if (match && match[1]) {
-        const parsed = JSON.parse(match[1]);
-        if (parsed.id === mainDeal.id || parsed.reqNumber === mainReqNumber) {
-          return true;
+      if (d.notes.includes("[PARENT_DEAL:")) {
+        const startIdx = d.notes.indexOf("[PARENT_DEAL:");
+        const jsonStart = startIdx + "[PARENT_DEAL:".length;
+        const endIdx = d.notes.indexOf("}]", jsonStart);
+        let parsed: any = null;
+        if (endIdx !== -1) {
+          parsed = JSON.parse(d.notes.substring(jsonStart, endIdx + 1));
+        } else {
+          const match = d.notes.match(/\[PARENT_DEAL:(\{.*?\})\]/s) || d.notes.match(/\[PARENT_DEAL:(.*?)\]/s);
+          if (match && match[1]) parsed = JSON.parse(match[1]);
+        }
+
+        if (parsed) {
+          const parentId = parsed.parentId || parsed.id;
+          const parentReq = parsed.parentReq || parsed.reqNumber;
+          if (parentId && parentId === mainDeal.id) return true;
+          if (parentReq && (parentReq === mainReqNumber || parentReq === mainDeal.req_number)) return true;
         }
       }
     } catch (e) {}
+
+    // B. Fallback via texto nos notes: "Atividade vinculada a: ... (Nº ...)"
+    try {
+      const match = d.notes.match(/(?:Tarefa|Atividade)\s*vinculada\s*a:\s*(.*?)\s*\(Nº\s*([0-9.]+)\)/i);
+      if (match && match[2]) {
+        const reqNum = match[2].trim();
+        if (reqNum === mainReqNumber || reqNum === mainDeal.req_number) return true;
+      }
+    } catch (e) {}
+
     return false;
   });
+
+  // Identificar se a atividade aberta é ela mesma uma atividade vinculada a outra primária
+  let parentDealInfo: { id?: string; title?: string; reqNumber?: string } | null = null;
+  try {
+    if (mainDeal.notes?.includes("[PARENT_DEAL:")) {
+      const startIdx = mainDeal.notes.indexOf("[PARENT_DEAL:");
+      const jsonStart = startIdx + "[PARENT_DEAL:".length;
+      const endIdx = mainDeal.notes.indexOf("}]", jsonStart);
+      let parsed: any = null;
+      if (endIdx !== -1) {
+        parsed = JSON.parse(mainDeal.notes.substring(jsonStart, endIdx + 1));
+      } else {
+        const match = mainDeal.notes.match(/\[PARENT_DEAL:(\{.*?\})\]/s) || mainDeal.notes.match(/\[PARENT_DEAL:(.*?)\]/s);
+        if (match && match[1]) parsed = JSON.parse(match[1]);
+      }
+      if (parsed) {
+        parentDealInfo = {
+          id: parsed.parentId || parsed.id,
+          title: parsed.parentTitle || parsed.title,
+          reqNumber: parsed.parentReq || parsed.reqNumber,
+        };
+      }
+    }
+  } catch (e) {}
 
   const allRelevantDeals = [
     { deal: mainDeal, isSubtask: false, subtaskTitle: undefined },
@@ -477,6 +564,8 @@ export function extractDealCostAnalysis(
     dealId: mainDeal.id,
     dealTitle: mainDeal.title,
     reqNumber: mainReqNumber,
+    isSubtaskDeal: Boolean(parentDealInfo),
+    parentDealInfo,
     totalCost,
     totalSeconds,
     totalHoursFormatted: formatSecondsDetailed(totalSeconds),

@@ -137,16 +137,19 @@ export function EditMemberDialog({
         console.warn("Aviso ao atualizar user_roles:", roleErr);
       }
 
-      // 4. Sincronizar com Supabase Auth via RPC (se a função estiver disponível no banco)
+      // 4. Sincronizar com Supabase Auth e perfis via RPC
       try {
         await supabase.rpc("admin_update_user_credentials", {
           target_user_id: targetUser!.id,
           new_name: name.trim().toUpperCase(),
           new_email: email.trim().toLowerCase(),
           new_password: password.trim() ? password.trim() : null,
+          new_base_salary: finalSalary,
+          new_charges_multiplier: finalMultiplier,
+          new_monthly_hours: 160,
         });
       } catch (rpcCatch) {
-        console.warn("Aviso ao sincronizar Supabase Auth:", rpcCatch);
+        console.warn("Aviso ao sincronizar Supabase Auth via RPC:", rpcCatch);
       }
 
       // 5. Se for a própria conta logada e alterou senha, atualiza também a sessão local

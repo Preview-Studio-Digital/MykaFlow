@@ -1582,6 +1582,7 @@ function CrmDashboard() {
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [subtaskAssignedTo, setSubtaskAssignedTo] = useState("");
   const [subtaskDeadline, setSubtaskDeadline] = useState("");
+  const [subtaskDuration, setSubtaskDuration] = useState("");
   const [subtaskNotes, setSubtaskNotes] = useState("");
   const subtaskNotesRef = useRef("");
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
@@ -2688,8 +2689,8 @@ function CrmDashboard() {
       if (lower.startsWith("encaminhado de ") && lower.includes(" para ")) return true;
       if (lower.startsWith("mudança de etapa") || lower.startsWith("mudanca de etapa")) return true;
       if (lower.startsWith("vinculada concluída por") || lower.startsWith("vinculada concluida por")) return true;
-      if (lower.includes("criou a tarefa") && lower.includes("para o")) return true;
-      if (lower.includes("concluiu a tarefa")) return true;
+      if (lower.includes("criou a atividade vinculada") || lower.includes("criou a vinculada") || (lower.includes("criou a tarefa") && lower.includes("para o"))) return true;
+      if (lower.includes("concluiu a atividade vinculada") || lower.includes("concluiu a vinculada") || lower.includes("concluiu a tarefa")) return true;
       if (lower.includes("[quote_doc:") || lower.includes("anexou o documento de orçamento oficial") || lower.includes("anexou o orcamento oficial")) return true;
       if (lower.includes("[contract_doc:") || lower.includes("anexou o contrato")) return true;
       if (lower.includes("removeu o orçamento anexado") || lower.includes("removeu o orcamento anexado") || lower.includes("removeu o contrato anexado")) return true;
@@ -2748,7 +2749,7 @@ function CrmDashboard() {
     // Renderizador especializado para linhas de sistema
     const renderSystemBlock = (trimmedLine: string, lineIdx: number) => {
       // 1. Criação de Tarefa Vinculada
-      const createMatch = trimmedLine.match(/^([A-Za-z0-9À-ÿ\s._-]+?)\s+criou a tarefa\s+"([^"]+)"\s+para o\s+([A-Za-z0-9À-ÿ\s._-]+)$/i);
+      const createMatch = trimmedLine.match(/^([A-Za-z0-9À-ÿ\s._-]+?)\s+criou a (?:atividade vinculada|vinculada|tarefa)\s+"([^"]+)"\s+para o\s+([A-Za-z0-9À-ÿ\s._-]+)$/i);
       if (createMatch) {
         const creatorName = createMatch[1].trim();
         const subtaskTitle = createMatch[2].trim();
@@ -2786,7 +2787,7 @@ function CrmDashboard() {
             >
               {creatorName}
             </button>
-            <span className="text-white/80">criou a tarefa</span>
+            <span className="text-white/80">criou a atividade vinculada</span>
             <button
               type="button"
               onClick={(e) => {
@@ -3531,6 +3532,9 @@ function CrmDashboard() {
 
       const rawSubNotes = (subtaskNotesRef.current || subtaskNotes).trim();
       const subtaskNotesFormatted = rawSubNotes ? `[${creatorName}]: ${rawSubNotes}${rawSubNotes.endsWith(".") ? "" : "."}` : "";
+      const durationTag = subtaskDuration.trim()
+        ? `[ESTIMATED_DURATION:${subtaskDuration.trim().toUpperCase()}]`
+        : "";
 
       const subtaskPayload = {
         title: `[TAREFA] ${subtaskTitle.trim().toUpperCase()}`,
@@ -3540,6 +3544,7 @@ function CrmDashboard() {
         assigned_user_id: subtaskAssignedTo,
         expected_close_date: subtaskDeadline || null,
         notes: [
+          durationTag,
           `${parentDealTag} Atividade vinculada a: ${parentCleanTitle} (Nº ${parentReqNum})`,
           subtaskNotesFormatted,
         ].filter(Boolean).join("\n"),
@@ -3560,14 +3565,14 @@ function CrmDashboard() {
           user_id: user?.id,
           user_name: creatorName,
           action_type: "created",
-          description: `Vinculada criada a partir da atividade "${selectedDealForHistory.title}" e direcionada para ${assignedName}.`,
+          description: `Atividade vinculada criada a partir da atividade "${selectedDealForHistory.title}" e direcionada para ${assignedName}.`,
         });
       } catch (hErr) {
         console.warn("Aviso ao criar histórico da vinculada:", hErr);
       }
 
       // 2. Monta o texto limpo da criação da vinculada e insere na lista de logs imutáveis
-      const subtaskText = `${creatorName} criou a vinculada "${subtaskTitle.trim().toUpperCase()}" para o ${assignedName}.`;
+      const subtaskText = `${creatorName} criou a atividade vinculada "${subtaskTitle.trim().toUpperCase()}" para o ${assignedName}.`;
 
       // Adiciona a nova vinculada na lista local de deals
       const newDealItem: Deal = {
@@ -3588,6 +3593,7 @@ function CrmDashboard() {
       setSubtaskTitle("");
       setSubtaskAssignedTo("");
       setSubtaskDeadline("");
+      setSubtaskDuration("");
       setSubtaskNotes("");
       setIsSubtaskModalOpen(false);
       setModalUpdateTab("comment");
@@ -6878,12 +6884,11 @@ function CrmDashboard() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (attachedDoc.file_url) {
-                            setDocumentPreviewModal({
-                              isOpen: true,
-                              fileUrl: attachedDoc.file_url,
-                              fileName: attachedDoc.file_name || (isContract ? "Contrato" : "Orçamento"),
-                              isPdf: (attachedDoc.file_name || "").toLowerCase().endsWith(".pdf") || attachedDoc.file_url.toLowerCase().includes(".pdf"),
+                          if (attachedDoc.url) {
+                            setPreviewingQuoteFile({
+                              url: attachedDoc.url,
+                              name: attachedDoc.name || (isContract ? "Contrato Oficial" : "Orçamento Oficial"),
+                              isContract,
                             });
                           }
                         }}
@@ -6894,8 +6899,8 @@ function CrmDashboard() {
                         }`}
                         title={
                           isContract
-                            ? `Contrato Anexo: ${attachedDoc.file_name}. Clique para visualizar.`
-                            : `Orçamento Anexo: ${attachedDoc.file_name}${attachedDoc.value ? ` • R$ ${Number(attachedDoc.value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}. Clique para visualizar.`
+                            ? `Contrato Anexo: ${attachedDoc.name}. Clique para visualizar.`
+                            : `Orçamento Anexo: ${attachedDoc.name}${(attachedDoc as any).value ? ` • R$ ${Number((attachedDoc as any).value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}. Clique para visualizar.`
                         }
                       >
                         <Paperclip className="h-2.5 w-2.5 shrink-0" />
@@ -8795,6 +8800,7 @@ function CrmDashboard() {
                                       setSubtaskTitle("");
                                       setSubtaskAssignedTo("");
                                       setSubtaskDeadline("");
+                                      setSubtaskDuration("");
                                       setSubtaskNotes("");
                                       setIsSubtaskModalOpen(true);
                                     }}
@@ -11300,7 +11306,7 @@ function CrmDashboard() {
             <form onSubmit={handleCreateSubtask} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                 {/* Título da Vinculada */}
-                <div className="md:col-span-6">
+                <div className="md:col-span-5">
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                       Título da Vinculada <span className="text-rose-400">*</span>
@@ -11317,19 +11323,6 @@ function CrmDashboard() {
                     className="input-futuristic w-full rounded-xl px-3.5 py-2 text-xs uppercase font-bold outline-none"
                     required
                     autoFocus
-                  />
-                </div>
-
-                {/* Prazo */}
-                <div className="md:col-span-3">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
-                    Prazo (Opcional)
-                  </label>
-                  <input
-                    type="date"
-                    value={subtaskDeadline}
-                    onChange={(e) => setSubtaskDeadline(e.target.value)}
-                    className="input-futuristic w-full rounded-xl px-3 py-2 text-xs outline-none bg-black text-white cursor-pointer font-mono"
                   />
                 </div>
 
@@ -11350,6 +11343,43 @@ function CrmDashboard() {
                         {m.display_name || m.email}
                       </option>
                     ))}
+                  </select>
+                </div>
+
+                {/* Prazo */}
+                <div className="md:col-span-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                    Prazo (Opcional)
+                  </label>
+                  <input
+                    type="date"
+                    value={subtaskDeadline}
+                    onChange={(e) => setSubtaskDeadline(e.target.value)}
+                    className="input-futuristic w-full rounded-xl px-2.5 py-2 text-xs outline-none bg-black text-white cursor-pointer font-mono"
+                  />
+                </div>
+
+                {/* Duração Estimada */}
+                <div className="md:col-span-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+                    Duração
+                  </label>
+                  <select
+                    value={subtaskDuration}
+                    onChange={(e) => setSubtaskDuration(e.target.value)}
+                    className="input-futuristic w-full rounded-xl px-2.5 py-2 text-xs outline-none bg-black/60 font-bold"
+                  >
+                    <option value="">Selecione</option>
+                    <option value="1 hora" className="bg-slate-900 font-bold">1 hora</option>
+                    <option value="2 horas" className="bg-slate-900 font-bold">2 horas</option>
+                    <option value="3 horas" className="bg-slate-900 font-bold">3 horas</option>
+                    <option value="4 horas" className="bg-slate-900 font-bold">4 horas</option>
+                    <option value="5 horas" className="bg-slate-900 font-bold">5 horas</option>
+                    <option value="6 horas" className="bg-slate-900 font-bold">6 horas</option>
+                    <option value="8 horas" className="bg-slate-900 font-bold">8 horas</option>
+                    <option value="12 horas" className="bg-slate-900 font-bold">12 horas</option>
+                    <option value="24 horas" className="bg-slate-900 font-bold">24 horas</option>
+                    <option value="48 horas" className="bg-slate-900 font-bold">48 horas</option>
                   </select>
                 </div>
               </div>

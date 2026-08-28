@@ -75,6 +75,7 @@ import {
   Reply,
   Inbox,
   CheckCheck,
+  DollarSign,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -83,6 +84,7 @@ import {
   isDealPendingAuthorAcceptance,
   type TaskCompletionNotification,
 } from "@/components/InboxModal";
+import { DealCostModal } from "@/components/DealCostModal";
 import {
   Tooltip,
   TooltipTrigger,
@@ -1500,6 +1502,7 @@ function CrmDashboard() {
   const [stageToMove, setStageToMove] = useState<Deal["stage"] | null>(null);
   const [reassignTo, setReassignTo] = useState("");
   const [isSavingUpdate, setIsSavingUpdate] = useState(false);
+  const [isCostModalOpen, setIsCostModalOpen] = useState(false);
 
   // Fase sincronizada global para alternância intercalada 100% simultânea: Trabalhando (0-2s) vs Vencidas (2-4s)
   const [blinkPhase, setBlinkPhase] = useState<"working" | "expired">("working");
@@ -8079,6 +8082,20 @@ function CrmDashboard() {
                       <span className="font-black text-red-500" style={{ color: "#ef4444" }}>Excluir</span>
                     </button>
                   )}
+
+                  {/* Botão Custo (Apenas Administrador) - Abaixo de Excluir, totalmente dourado */}
+                  {role === "admin" && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCostModalOpen(true)}
+                      className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-amber-400 bg-amber-500/15 hover:bg-amber-500/25 border-2 !border-amber-500 hover:!border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.35)] hover:shadow-[0_0_20px_rgba(245,158,11,0.55)] transition-all cursor-pointer flex items-center justify-center gap-1.5 hover:scale-105 w-full"
+                      style={{ color: "#fbbf24", borderColor: "#f59e0b" }}
+                      title="Ver extrato e cálculo de custo em tempo real desta atividade (Administrador)"
+                    >
+                      <DollarSign className="h-4 w-4 text-amber-400" style={{ color: "#fbbf24" }} />
+                      <span className="font-black text-amber-400" style={{ color: "#fbbf24" }}>Custo</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -11963,6 +11980,16 @@ function CrmDashboard() {
           variant={crmConfirmConfig.variant || "danger"}
           requireKeyword={crmConfirmConfig.requireKeyword}
           isLoading={isDeletingDeal}
+        />
+      )}
+
+      {/* Modal de Custos em Tempo Real (Apenas Administrador) */}
+      {isCostModalOpen && selectedDealForHistory && (
+        <DealCostModal
+          isOpen={isCostModalOpen}
+          onClose={() => setIsCostModalOpen(false)}
+          deal={selectedDealForHistory}
+          allDeals={deals}
         />
       )}
     </div>

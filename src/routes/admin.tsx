@@ -34,7 +34,8 @@ import { EditMemberDialog, type MemberProfile } from "@/components/EditMemberDia
 import { DailySnapshotModal } from "@/components/DailySnapshotModal";
 import { AdminPanel } from "@/components/AdminPanel";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { Wallet } from "lucide-react";
+import { Wallet, DollarSign } from "lucide-react";
+import { getUserSalaryConfig, computeHourlyRate } from "@/lib/salary-cost-tracker";
 
 export const Route = createFileRoute("/admin")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -806,6 +807,22 @@ function UserList({
                     >
                       {roleTheme.label}
                     </span>
+
+                    {/* Badge de Taxa Horária / Custo da Atividade */}
+                    {(() => {
+                      const sCfg = getUserSalaryConfig(p.id);
+                      if (!sCfg || sCfg.baseSalary <= 0) return null;
+                      const hrRate = computeHourlyRate(sCfg.baseSalary, sCfg.chargesMultiplier, sCfg.monthlyHours);
+                      return (
+                        <span
+                          className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md border uppercase tracking-wider bg-amber-500/15 text-amber-300 border-amber-400/40 shadow-sm inline-flex items-center gap-0.5"
+                          title={`Salário Base: R$ ${sCfg.baseSalary.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} | Multiplicador: ${sCfg.chargesMultiplier}x | Total com Encargos: R$ ${(sCfg.baseSalary * sCfg.chargesMultiplier).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
+                        >
+                          <DollarSign className="h-2.5 w-2.5 text-amber-400" />
+                          R$ {hrRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Status da Atividade Atual / Inativo */}

@@ -218,11 +218,44 @@ export function getCleanDealTitle(title: string): string {
     .trim();
 }
 
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function getMentionTextForUser(
+  userNameOrId: string | undefined | null,
+  teamMembersList: Array<{ id: string; display_name?: string | null; email?: string }> = []
+): string {
+  if (!userNameOrId) return "";
+  const cleanSearch = userNameOrId.replace(/^@/, "").trim().toLowerCase();
+  if (!cleanSearch) return "";
+
+  let member = teamMembersList.find((m) => m.id === userNameOrId);
+  if (!member) {
+    member = teamMembersList.find((m) => {
+      const name = (m.display_name || "").trim().toLowerCase();
+      const email = (m.email || "").trim().toLowerCase();
+      const first = name.split(" ")[0];
+      return name === cleanSearch || email === cleanSearch || first === cleanSearch;
+    });
+  }
+
+  if (member) {
+    const name = member.display_name || member.email || "";
+    const firstName = name.split(" ")[0];
+    return `@${firstName} `;
+  }
+
+  const firstName = cleanSearch.split(" ")[0];
+  return `@${firstName} `;
+}
+
 interface InboxModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: any;
   deals?: MentionDeal[];
+  teamMembers?: Array<{ id: string; display_name?: string | null; email?: string }>;
   onOpenDeal?: (deal: MentionDeal) => void;
   onAcceptCompletion?: (deal: MentionDeal, notificationId?: string) => Promise<void> | void;
 }
@@ -232,11 +265,14 @@ export function InboxModal({
   onClose,
   currentUser,
   deals: propDeals,
+  teamMembers: propTeamMembers,
   onOpenDeal,
   onAcceptCompletion,
 }: InboxModalProps) {
   const navigate = useNavigate();
   const [internalDeals, setInternalDeals] = useState<MentionDeal[]>([]);
+  const [internalTeamMembers, setInternalTeamMembers] = useState<Array<{ id: string; display_name?: string | null; email?: string }>>([]);
+  const teamMembers = propTeamMembers && propTeamMembers.length > 0 ? propTeamMembers : internalTeamMembers;
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
@@ -265,7 +301,12 @@ export function InboxModal({
     if (!propDeals || propDeals.length === 0) {
       fetchDeals();
     }
-  }, [isOpen, propDeals]);
+    if (!propTeamMembers || propTeamMembers.length === 0) {
+      supabase.from("profiles").select("id, display_name, email").then(({ data }) => {
+        if (data) setInternalTeamMembers(data);
+      });
+    }
+  }, [isOpen, propDeals, propTeamMembers]);
 
   // Atividade em andamento do usuário logado (Trabalhando Ao Vivo)
   const activeDeal = useMemo(() => {
@@ -470,18 +511,47 @@ export function InboxModal({
       created_at: nowIso,
     };
 
+    // Detecta menções no texto para notificar os membros citados (inclusive o autor da menção)
+    const mentionTags: string[] = [];
+    teamMembers.forEach((member) => {
+      const memberName = member.display_name || member.email || "";
+      const firstName = memberName.split(" ")[0];
+      const nameEscaped = escapeRegExp(memberName);
+      const firstEscaped = escapeRegExp(firstName);
+      const emailEscaped = escapeRegExp(member.email || "");
+      const mentionRegex = new RegExp(`@(${nameEscaped}|${firstEscaped}|${emailEscaped})(?:$|[^A-Za-z0-9À-ÿ_])`, "i");
+      if (mentionRegex.test(text)) {
+        const mentionObj: DealMention = {
+          id: crypto.randomUUID(),
+          deal_id: deal.id,
+          author_id: currentUser.id,
+          author_name: userName,
+          mentioned_user_id: member.id,
+          mentioned_user_name: memberName,
+          content: text,
+          created_at: nowIso,
+          read_by_user: false,
+        };
+        mentionTags.push(`[MENTION:${JSON.stringify(mentionObj)}]`);
+      }
+    });
+
     const replyTag = `[MENTION_REPLY:${JSON.stringify(newReply)}]`;
-    const autoLog = `${userName} respondeu à menção de @${mention.author_name}: "${text}"`;
-    const updatedNotes = `${replyTag}\n${deal.notes || ""}\n\n${autoLog}`.trim();
+    const tagsBlock = mentionTags.length > 0 ? mentionTags.join("\n") + "\n" : "";
+    const updatedNotes = `${replyTag}\n${tagsBlock}${deal.notes || ""}`.trim();
+    const historyDesc = `↩ Resposta à atualização:\n${text}`;
 
     try {
       await supabase.from("crm_deals").update({ notes: updatedNotes, updated_at: nowIso }).eq("id", deal.id);
       try {
         await supabase.from("crm_deal_history").insert({
+          id: newReply.id,
           deal_id: deal.id,
           user_id: currentUser.id,
           user_name: userName,
-          description: autoLog,
+          action_type: "reply",
+          description: historyDesc,
+          created_at: nowIso,
         });
       } catch (hErr) {}
 
@@ -1041,7 +1111,14 @@ export function InboxModal({
 
                           <button
                             type="button"
-                            onClick={() => setReplyingToMentionId(mention.id)}
+                            onClick={() => {
+                              const authorMention = getMentionTextForUser(mention.author_name || mention.author_id, teamMembers);
+                              setReplyText((prev) => ({
+                                ...prev,
+                                [mention.id]: prev[mention.id] || authorMention,
+                              }));
+                              setReplyingToMentionId(mention.id);
+                            }}
                             className="btn-ghost-neon px-3 py-1.5 rounded-xl text-xs font-bold text-sky-400 hover:text-white border border-sky-500/30 flex items-center gap-1 cursor-pointer"
                           >
                             <MessageSquare className="h-3.5 w-3.5" />

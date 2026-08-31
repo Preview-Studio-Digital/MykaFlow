@@ -34,8 +34,15 @@ import { EditMemberDialog, type MemberProfile } from "@/components/EditMemberDia
 import { DailySnapshotModal } from "@/components/DailySnapshotModal";
 import { AdminPanel } from "@/components/AdminPanel";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { Wallet, DollarSign } from "lucide-react";
-import { getUserSalaryConfig, computeHourlyRate, syncSalaryConfigsFromSupabase } from "@/lib/salary-cost-tracker";
+import { Wallet } from "lucide-react";
+import {
+  getUserSalaryConfig,
+  computeHourlyRate,
+  syncSalaryConfigsFromSupabase,
+  getUserMonthlyWorkedSeconds,
+  computeEffectiveHourlyRateByProductivity,
+  computeHistoricalProductivityRate,
+} from "@/lib/salary-cost-tracker";
 
 export const Route = createFileRoute("/admin")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -113,7 +120,8 @@ function AdminPage() {
   const [selectedUserForProductivity, setSelectedUserForProductivity] = useState<MemberProfile | null>(null);
   const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
 
-  // Rastreamento de atividades ativas em tempo real
+  // Rastreamento de atividades ativas em tempo real e histórico de deals
+  const [dealsWithNotes, setDealsWithNotes] = useState<any[]>([]);
   const [activeActivities, setActiveActivities] = useState<
     Record<string, { dealId: string; title: string; reqNumber?: string | null; startedAt: string }>
   >({});
@@ -126,13 +134,15 @@ function AdminPage() {
 
   async function fetchActiveActivities() {
     try {
-      // Busca no banco APENAS as atividades que estão com cronômetro ativo no momento
+      // Busca todas as atividades para cálculo de horas do mês e atividades ativas
       const { data: deals, error: dealsErr } = await supabase
         .from("crm_deals")
-        .select("id, title, notes")
-        .like("notes", "%[WORK_ACTIVE:%");
+        .select("id, title, notes, created_at, stage");
 
       if (dealsErr) throw dealsErr;
+      if (deals) {
+        setDealsWithNotes(deals);
+      }
 
       const activeMap: Record<
         string,
@@ -536,7 +546,7 @@ function AdminPage() {
                             </div>
                           ) : (
                             <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
-                              <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
+              <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
                               <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
                                 INATIVO NO MOMENTO
                               </span>
@@ -545,6 +555,85 @@ function AdminPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Cards à Direita: Custo Nominal e Custo Efetivo / Hora baseado na Média Histórica de Produtividade */}
+                    {!isCompanyView && (() => {
+                      const sCfg = getUserSalaryConfig(selectedUserForProductivity.id);
+                      const {
+                        effectiveHourlyRate,
+                        nominalHourlyRate,
+                        occupancyRate,
+                        totalWorkedHours,
+                        expectedWorkHours,
+                        totalMonthlyCost,
+                        daysAnalyzed,
+                      } = computeHistoricalProductivityRate(
+                        selectedUserForProductivity.id,
+                        dealsWithNotes,
+                        sCfg.baseSalary,
+                        sCfg.chargesMultiplier,
+                        sCfg.monthlyHours || 160,
+                        activeActivities[selectedUserForProductivity.id]?.startedAt
+                      );
+
+                      const occupancyPercent = Math.round(occupancyRate * 100);
+
+                      return (
+                        <div className="flex items-center gap-2.5 shrink-0 animate-in fade-in ml-auto pl-2">
+                          {/* Card 1: Custo Nominal / Hora (Custo Orçado Padrão de 160h) */}
+                          <div 
+                            className="flex flex-col justify-center px-3 py-1.5 rounded-xl bg-slate-900/90 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)] text-left min-w-[130px] sm:min-w-[145px]"
+                            title={`Custo Total Mensal: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} / Base Contratual: ${sCfg.monthlyHours || 160}h mês`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[9px] font-mono font-black uppercase tracking-wider text-cyan-400 leading-tight">
+                                CUSTO NOMINAL / H
+                              </span>
+                              <span className="text-[8px] font-mono text-cyan-300/70 font-bold">160h</span>
+                            </div>
+                            <span className="text-xs sm:text-sm font-mono font-black text-white leading-tight mt-0.5">
+                              {nominalHourlyRate > 0 ? `R$ ${nominalHourlyRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h` : "R$ 0,00/h"}
+                            </span>
+                          </div>
+
+                          {/* Card 2: Custo Efetivo / Hora (Baseado na Taxa de Ocupação Média Histórica) */}
+                          <div 
+                            className={`flex flex-col justify-center px-3 py-1.5 rounded-xl bg-slate-900/90 border shadow-lg text-left min-w-[140px] sm:min-w-[160px] ${
+                              effectiveHourlyRate > nominalHourlyRate * 1.05
+                                ? "border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                                : effectiveHourlyRate > 0
+                                ? "border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                                : "border-white/15 shadow-none"
+                            }`}
+                            title={
+                              totalWorkedHours > 0
+                                ? `Média Histórica: ${occupancyPercent}% de ocupação produtiva (${totalWorkedHours.toFixed(1)}h ativas de ${expectedWorkHours.toFixed(0)}h esperadas em ${daysAnalyzed} dias úteis). Custo Nominal R$ ${nominalHourlyRate.toFixed(2)}/h ÷ ${occupancyPercent}% = R$ ${effectiveHourlyRate.toFixed(2)}/h.`
+                                : `Sem histórico suficiente registrado. Custo total mensal: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                            }
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={`text-[9px] font-mono font-black uppercase tracking-wider leading-tight ${
+                                effectiveHourlyRate > nominalHourlyRate * 1.05 ? "text-amber-400" : effectiveHourlyRate > 0 ? "text-emerald-400" : "text-slate-400"
+                              }`}>
+                                CUSTO EFETIVO / H
+                              </span>
+                              {totalWorkedHours > 0 && (
+                                <span className={`text-[8px] font-mono font-black px-1.5 py-0.5 rounded ${
+                                  occupancyPercent < 75 ? "bg-amber-500/20 text-amber-300" : "bg-emerald-500/20 text-emerald-300"
+                                }`} title={`Taxa Média de Ocupação: ${occupancyPercent}%`}>
+                                  {occupancyPercent}%
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-xs sm:text-sm font-mono font-black leading-tight mt-0.5 ${
+                              effectiveHourlyRate > nominalHourlyRate * 1.05 ? "text-amber-300" : effectiveHourlyRate > 0 ? "text-emerald-300" : "text-slate-400"
+                            }`}>
+                              {effectiveHourlyRate > 0 ? `R$ ${effectiveHourlyRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h` : "R$ 0,00/h"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </>
                 );
               })()}
@@ -808,22 +897,6 @@ function UserList({
                     >
                       {roleTheme.label}
                     </span>
-
-                    {/* Badge de Taxa Horária / Custo da Atividade */}
-                    {(() => {
-                      const sCfg = getUserSalaryConfig(p.id);
-                      if (!sCfg || sCfg.baseSalary <= 0) return null;
-                      const hrRate = computeHourlyRate(sCfg.baseSalary, sCfg.chargesMultiplier, sCfg.monthlyHours);
-                      return (
-                        <span
-                          className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md border uppercase tracking-wider bg-amber-500/15 text-amber-300 border-amber-400/40 shadow-sm inline-flex items-center gap-0.5"
-                          title={`Salário Base: R$ ${sCfg.baseSalary.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} | Multiplicador: ${sCfg.chargesMultiplier}x | Total com Encargos: R$ ${(sCfg.baseSalary * sCfg.chargesMultiplier).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
-                        >
-                          <DollarSign className="h-2.5 w-2.5 text-amber-400" />
-                          R$ {hrRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h
-                        </span>
-                      );
-                    })()}
                   </div>
 
                   {/* Status da Atividade Atual / Inativo */}

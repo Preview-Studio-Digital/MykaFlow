@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Clock, Briefcase, Calendar, Users, Percent, Hourglass, ArrowLeft, ArrowRight, Sparkles, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -169,7 +169,6 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
   const [loading, setLoading] = useState(true);
   
   const [selectedUserId, setSelectedUserId] = useState<string>(initialUserId || "");
-  const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "week" | "month" | "all">("today");
   const [isExpandedActive, setIsExpandedActive] = useState(false);
   const [highlightedActivityId, setHighlightedActivityId] = useState<string | null>(null);
   const [hoveredSlice, setHoveredSlice] = useState<any>(null);
@@ -411,6 +410,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     return sessions;
   }, [deals, currentTime]);
 
+  const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "thisWeek" | "last7" | "last15" | "month" | "last30" | "all">("today");
+
   // Apply filters: User & Date range
   const filteredSessions = useMemo(() => {
     return allSessions.filter((session) => {
@@ -431,18 +432,39 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         yesterday.setDate(now.getDate() - 1);
         return sessionDate.toDateString() === yesterday.toDateString();
       }
-      if (dateFilter === "week") {
-        // Simple 7-day range
-        const oneWeekAgo = new Date(currentTime);
-        oneWeekAgo.setDate(now.getDate() - 7);
-        return sessionDate >= oneWeekAgo;
+      if (dateFilter === "thisWeek") {
+        // Semana atual (a partir de segunda-feira)
+        const dayOfWeek = now.getDay();
+        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(currentTime);
+        monday.setDate(now.getDate() - diffToMonday);
+        monday.setHours(0, 0, 0, 0);
+        return sessionDate >= monday;
+      }
+      if (dateFilter === "last7") {
+        // Últimos 7 dias
+        const sevenDaysAgo = new Date(currentTime);
+        sevenDaysAgo.setDate(now.getDate() - 7);
+        return sessionDate >= sevenDaysAgo;
+      }
+      if (dateFilter === "last15") {
+        // Últimos 15 dias
+        const fifteenDaysAgo = new Date(currentTime);
+        fifteenDaysAgo.setDate(now.getDate() - 15);
+        return sessionDate >= fifteenDaysAgo;
       }
       if (dateFilter === "month") {
-        // Same month and year
+        // Mês atual
         return (
           sessionDate.getMonth() === now.getMonth() &&
           sessionDate.getFullYear() === now.getFullYear()
         );
+      }
+      if (dateFilter === "last30") {
+        // Últimos 30 dias
+        const thirtyDaysAgo = new Date(currentTime);
+        thirtyDaysAgo.setDate(now.getDate() - 30);
+        return sessionDate >= thirtyDaysAgo;
       }
       return true; // "all"
     });
@@ -759,16 +781,34 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         yesterday.setDate(now.getDate() - 1);
         return sessionDate.toDateString() === yesterday.toDateString();
       }
-      if (dateFilter === "week") {
-        const oneWeekAgo = new Date(currentTime);
-        oneWeekAgo.setDate(now.getDate() - 7);
-        return sessionDate >= oneWeekAgo;
+      if (dateFilter === "thisWeek") {
+        const dayOfWeek = now.getDay();
+        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(currentTime);
+        monday.setDate(now.getDate() - diffToMonday);
+        monday.setHours(0, 0, 0, 0);
+        return sessionDate >= monday;
+      }
+      if (dateFilter === "last7") {
+        const sevenDaysAgo = new Date(currentTime);
+        sevenDaysAgo.setDate(now.getDate() - 7);
+        return sessionDate >= sevenDaysAgo;
+      }
+      if (dateFilter === "last15") {
+        const fifteenDaysAgo = new Date(currentTime);
+        fifteenDaysAgo.setDate(now.getDate() - 15);
+        return sessionDate >= fifteenDaysAgo;
       }
       if (dateFilter === "month") {
         return (
           sessionDate.getMonth() === now.getMonth() &&
           sessionDate.getFullYear() === now.getFullYear()
         );
+      }
+      if (dateFilter === "last30") {
+        const thirtyDaysAgo = new Date(currentTime);
+        thirtyDaysAgo.setDate(now.getDate() - 30);
+        return sessionDate >= thirtyDaysAgo;
       }
       return true; // "all"
     });
@@ -858,6 +898,501 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
     return list;
   }, [metrics]);
+
+  // Gráfico Temporal de Produtividade (%) - Usuário vs Empresa ao longo do tempo + Faixa Padrão de Mercado
+  const productivityTimelineData = useMemo(() => {
+    const now = new Date(currentTime);
+    const result: Array<{
+      label: string;
+      fullLabel: string;
+      userPct: number;
+      companyPct: number;
+      userSeconds: number;
+      companySeconds: number;
+      marketMin: number;
+      marketMax: number;
+      marketRange: [number, number];
+    }> = [];
+
+    const allUserIds = Array.from(
+      new Set([...profiles.map((p) => p.id), ...allSessions.map((s) => s.user_id)])
+    ).filter(Boolean);
+    const compUsersCount = Math.max(1, allUserIds.length);
+    const companyBenchmarkPct = averages.companyAvgActivePct || 17;
+
+    // Curva dinâmica de tolerância / mercado ao longo do dia
+    const getHourlyMarketRange = (h: number): [number, number] => {
+      if (h <= 7) return [0, 20];
+      if (h === 8) return [10, 30];
+      if (h === 9) return [20, 45];
+      if (h === 10) return [30, 55];
+      if (h === 11) return [35, 55];
+      if (h === 12 || h === 13) return [30, 50]; // Almoço
+      if (h === 14 || h === 15) return [35, 55]; // Pico da Tarde
+      return [35, 50]; // Fechamento do Dia
+    };
+
+    if (dateFilter === "today" || dateFilter === "yesterday") {
+      // Evolução Horária Intraday (07h às 17h)
+      const targetDate = new Date(currentTime);
+      if (dateFilter === "yesterday") {
+        targetDate.setDate(targetDate.getDate() - 1);
+      }
+      const isToday = dateFilter === "today";
+      const currentHour = now.getHours();
+
+      // Horários do expediente (07h às 17h)
+      for (let h = 7; h <= 17; h++) {
+        // Se for hoje e o horário for no futuro, para
+        if (isToday && h > currentHour) {
+          continue;
+        }
+
+        const hourLabel = `${String(h).padStart(2, "0")}h`;
+        const pointDate = new Date(targetDate);
+        if (isToday && h === currentHour) {
+          pointDate.setTime(now.getTime());
+        } else {
+          pointDate.setHours(h + 1, 0, 0, 0);
+        }
+
+        const workdayProgress = getWorkdayProgress(pointDate);
+        const elapsedWorkdaySec = workdayProgress.elapsedWorkdaySeconds;
+
+        // Calcula tempo ativo acumulado do início do dia (07h30) até o ponto atual
+        let userAccumActiveSec = 0;
+        let companyAccumActiveSec = 0;
+
+        allSessions.forEach((s) => {
+          const sDate = new Date(s.started_at);
+          if (sDate.toDateString() === targetDate.toDateString()) {
+            const sEnd = s.ended_at
+              ? new Date(s.ended_at)
+              : s.isActive
+              ? pointDate
+              : new Date(sDate.getTime() + (s.duration_seconds || 0) * 1000);
+
+            const overlap = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              targetDate,
+              pointDate
+            );
+
+            if (selectedUserId && s.user_id === selectedUserId) {
+              userAccumActiveSec += overlap;
+            }
+            companyAccumActiveSec += overlap;
+          }
+        });
+
+        const userPct = elapsedWorkdaySec > 0
+          ? Math.min(100, Math.round((userAccumActiveSec / elapsedWorkdaySec) * 100))
+          : 0;
+
+        const companyPct = elapsedWorkdaySec > 0 && compUsersCount > 0
+          ? Math.min(100, Math.round((companyAccumActiveSec / (elapsedWorkdaySec * compUsersCount)) * 100))
+          : 0;
+
+        const [marketMin, marketMax] = getHourlyMarketRange(h);
+
+        result.push({
+          label: hourLabel,
+          fullLabel: isToday && h === currentHour
+            ? `${hourLabel} (${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} - Ao Vivo)`
+            : `${hourLabel}:00`,
+          userPct,
+          companyPct,
+          userSeconds: userAccumActiveSec,
+          companySeconds: Math.round(companyAccumActiveSec / compUsersCount),
+          marketMin,
+          marketMax,
+          marketRange: [marketMin, marketMax],
+        });
+      }
+    } else if (dateFilter === "thisWeek") {
+      // Semana atual (a partir de segunda-feira até hoje, garantindo pelo menos 5 dias no gráfico)
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      
+      const daysToDraw = Math.max(5, diffToMonday + 1);
+      const startDate = new Date(currentTime);
+      startDate.setDate(now.getDate() - (daysToDraw - 1));
+
+      for (let i = 0; i < daysToDraw; i++) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        const dateStr = d.toDateString();
+        const dOfWeek = d.getDay();
+        const isWeekend = dOfWeek === 0 || dOfWeek === 6;
+        const isFriday = dOfWeek === 5;
+        const baseDaySec = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+
+        const dayName = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][dOfWeek];
+        const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const isToday = dateStr === new Date(currentTime).toDateString();
+        const dayElapsedSec = isToday ? getWorkdayProgress(new Date(currentTime)).elapsedWorkdaySeconds : baseDaySec;
+
+        let userDayActiveSec = 0;
+        let companyDayActiveSec = 0;
+
+        allSessions.forEach((s) => {
+          if (new Date(s.started_at).toDateString() === dateStr) {
+            const sec = s.duration_seconds || 0;
+            if (selectedUserId && s.user_id === selectedUserId) {
+              userDayActiveSec += sec;
+            }
+            companyDayActiveSec += sec;
+          }
+        });
+
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
+
+        const marketMin = isWeekend ? 0 : 35;
+        const marketMax = isWeekend ? 0 : 50;
+
+        result.push({
+          label: `${dayName} (${dayFormatted})`,
+          fullLabel: d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" }),
+          userPct,
+          companyPct,
+          userSeconds: userDayActiveSec,
+          companySeconds: Math.round(companyDayActiveSec / compUsersCount),
+          marketMin,
+          marketMax,
+          marketRange: [marketMin, marketMax],
+        });
+      }
+    } else if (dateFilter === "last7") {
+      // Últimos 7 dias
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(currentTime);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toDateString();
+        const dayOfWeek = d.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isFriday = dayOfWeek === 5;
+        const baseDaySec = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+
+        const dayName = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][dayOfWeek];
+        const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const isToday = dateStr === new Date(currentTime).toDateString();
+        const dayElapsedSec = isToday ? getWorkdayProgress(new Date(currentTime)).elapsedWorkdaySeconds : baseDaySec;
+
+        let userDayActiveSec = 0;
+        let companyDayActiveSec = 0;
+
+        allSessions.forEach((s) => {
+          if (new Date(s.started_at).toDateString() === dateStr) {
+            const sec = s.duration_seconds || 0;
+            if (selectedUserId && s.user_id === selectedUserId) {
+              userDayActiveSec += sec;
+            }
+            companyDayActiveSec += sec;
+          }
+        });
+
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
+
+        const marketMin = isWeekend ? 0 : 35;
+        const marketMax = isWeekend ? 0 : 50;
+
+        result.push({
+          label: `${dayName} (${dayFormatted})`,
+          fullLabel: d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" }),
+          userPct,
+          companyPct,
+          userSeconds: userDayActiveSec,
+          companySeconds: Math.round(companyDayActiveSec / compUsersCount),
+          marketMin,
+          marketMax,
+          marketRange: [marketMin, marketMax],
+        });
+      }
+    } else if (dateFilter === "last15") {
+      // Últimos 15 dias
+      for (let i = 14; i >= 0; i--) {
+        const d = new Date(currentTime);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toDateString();
+        const dayOfWeek = d.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isFriday = dayOfWeek === 5;
+        const baseDaySec = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+        const isToday = dateStr === new Date(currentTime).toDateString();
+        const dayElapsedSec = isToday ? getWorkdayProgress(new Date(currentTime)).elapsedWorkdaySeconds : baseDaySec;
+
+        let userDayActiveSec = 0;
+        let companyDayActiveSec = 0;
+
+        allSessions.forEach((s) => {
+          if (new Date(s.started_at).toDateString() === dateStr) {
+            const sec = s.duration_seconds || 0;
+            if (selectedUserId && s.user_id === selectedUserId) {
+              userDayActiveSec += sec;
+            }
+            companyDayActiveSec += sec;
+          }
+        });
+
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
+
+        const marketMin = isWeekend ? 0 : 35;
+        const marketMax = isWeekend ? 0 : 50;
+        const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+        result.push({
+          label: dayFormatted,
+          fullLabel: d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }),
+          userPct,
+          companyPct,
+          userSeconds: userDayActiveSec,
+          companySeconds: Math.round(companyDayActiveSec / compUsersCount),
+          marketMin,
+          marketMax,
+          marketRange: [marketMin, marketMax],
+        });
+      }
+    } else if (dateFilter === "month") {
+      // Dias do mês atual até hoje (garantindo pelo menos os últimos 5 dias se o mês estiver começando)
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const lastDay = now.getDate();
+
+      const daysToDraw = Math.max(5, lastDay);
+      const startDate = new Date(currentTime);
+      startDate.setDate(now.getDate() - (daysToDraw - 1));
+
+      for (let i = 0; i < daysToDraw; i++) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        const dateStr = d.toDateString();
+        const dayOfWeek = d.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isFriday = dayOfWeek === 5;
+        const baseDaySec = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+        const isToday = dateStr === new Date(currentTime).toDateString();
+        const dayElapsedSec = isToday ? getWorkdayProgress(new Date(currentTime)).elapsedWorkdaySeconds : baseDaySec;
+
+        let userDayActiveSec = 0;
+        let companyDayActiveSec = 0;
+
+        allSessions.forEach((s) => {
+          if (new Date(s.started_at).toDateString() === dateStr) {
+            const sec = s.duration_seconds || 0;
+            if (selectedUserId && s.user_id === selectedUserId) {
+              userDayActiveSec += sec;
+            }
+            companyDayActiveSec += sec;
+          }
+        });
+
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
+
+        const marketMin = isWeekend ? 0 : 35;
+        const marketMax = isWeekend ? 0 : 50;
+
+        result.push({
+          label: `${String(d.getDate()).padStart(2, "0")}`,
+          fullLabel: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", weekday: "short" }),
+          userPct,
+          companyPct,
+          userSeconds: userDayActiveSec,
+          companySeconds: Math.round(companyDayActiveSec / compUsersCount),
+          marketMin,
+          marketMax,
+          marketRange: [marketMin, marketMax],
+        });
+      }
+    } else if (dateFilter === "last30") {
+      // Últimos 30 dias
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(currentTime);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toDateString();
+        const dayOfWeek = d.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isFriday = dayOfWeek === 5;
+        const baseDaySec = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+        const isToday = dateStr === new Date(currentTime).toDateString();
+        const dayElapsedSec = isToday ? getWorkdayProgress(new Date(currentTime)).elapsedWorkdaySeconds : baseDaySec;
+
+        let userDayActiveSec = 0;
+        let companyDayActiveSec = 0;
+
+        allSessions.forEach((s) => {
+          if (new Date(s.started_at).toDateString() === dateStr) {
+            const sec = s.duration_seconds || 0;
+            if (selectedUserId && s.user_id === selectedUserId) {
+              userDayActiveSec += sec;
+            }
+            companyDayActiveSec += sec;
+          }
+        });
+
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
+
+        const marketMin = isWeekend ? 0 : 35;
+        const marketMax = isWeekend ? 0 : 50;
+        const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+        result.push({
+          label: dayFormatted,
+          fullLabel: d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }),
+          userPct,
+          companyPct,
+          userSeconds: userDayActiveSec,
+          companySeconds: Math.round(companyDayActiveSec / compUsersCount),
+          marketMin,
+          marketMax,
+          marketRange: [marketMin, marketMax],
+        });
+      }
+    } else {
+      // Todo o Período / Histórico: Desde o primeiro registro coletado
+      if (allSessions.length === 0) {
+        return [];
+      }
+
+      // Encontra a data mais antiga entre todas as sessões registradas
+      let earliestTime = new Date(currentTime).getTime();
+      allSessions.forEach((s) => {
+        const t = new Date(s.started_at).getTime();
+        if (t < earliestTime) {
+          earliestTime = t;
+        }
+      });
+
+      const firstDate = new Date(earliestTime);
+      firstDate.setHours(0, 0, 0, 0);
+
+      const todayDate = new Date(currentTime);
+      todayDate.setHours(0, 0, 0, 0);
+
+      const diffTime = Math.max(0, todayDate.getTime() - firstDate.getTime());
+      const totalDays = Math.max(1, Math.round(diffTime / (1000 * 3600 * 24)) + 1);
+
+      // Se o período total for de até 60 dias (início de operação / poucos meses), plota DIA A DIA desde o início
+      if (totalDays <= 60) {
+        for (let i = 0; i < totalDays; i++) {
+          const d = new Date(firstDate);
+          d.setDate(firstDate.getDate() + i);
+          const dateStr = d.toDateString();
+          const dayOfWeek = d.getDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+          const isFriday = dayOfWeek === 5;
+          const baseDaySec = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+          const isToday = dateStr === new Date(currentTime).toDateString();
+          const dayElapsedSec = isToday ? getWorkdayProgress(new Date(currentTime)).elapsedWorkdaySeconds : baseDaySec;
+
+          let userDayActiveSec = 0;
+          let companyDayActiveSec = 0;
+
+          allSessions.forEach((s) => {
+            if (new Date(s.started_at).toDateString() === dateStr) {
+              const sec = s.duration_seconds || 0;
+              if (selectedUserId && s.user_id === selectedUserId) {
+                userDayActiveSec += sec;
+              }
+              companyDayActiveSec += sec;
+            }
+          });
+
+          const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
+          const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+          const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
+
+          const marketMin = isWeekend ? 0 : 35;
+          const marketMax = isWeekend ? 0 : 50;
+          const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+          result.push({
+            label: dayFormatted,
+            fullLabel: d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }),
+            userPct,
+            companyPct,
+            userSeconds: userDayActiveSec,
+            companySeconds: Math.round(companyDayActiveSec / compUsersCount),
+            marketMin,
+            marketMax,
+            marketRange: [marketMin, marketMax],
+          });
+        }
+      } else {
+        // Se houver mais de 60 dias (histórico maduro longo), agrupa por mês
+        const monthMap = new Map<string, { userSec: number; compSec: number; days: Set<string>; monthDate: Date }>();
+        allSessions.forEach((s) => {
+          const d = new Date(s.started_at);
+          const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          if (!monthMap.has(mKey)) {
+            monthMap.set(mKey, { userSec: 0, compSec: 0, days: new Set(), monthDate: d });
+          }
+          const entry = monthMap.get(mKey)!;
+          entry.days.add(d.toDateString());
+          const sec = s.duration_seconds || 0;
+          if (selectedUserId && s.user_id === selectedUserId) {
+            entry.userSec += sec;
+          }
+          entry.compSec += sec;
+        });
+
+        const sortedMonths = Array.from(monthMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+        sortedMonths.forEach(([, val]) => {
+          const expectedSec = Math.max(1, val.days.size * 8.8 * 3600);
+          const userPct = Math.min(100, Math.round((val.userSec / expectedSec) * 100));
+          const companyPct = Math.min(100, Math.round((val.compSec / (expectedSec * compUsersCount)) * 100));
+          const mName = val.monthDate.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+
+          result.push({
+            label: mName.toUpperCase(),
+            fullLabel: val.monthDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }),
+            userPct,
+            companyPct,
+            userSeconds: val.userSec,
+            companySeconds: Math.round(val.compSec / compUsersCount),
+            marketMin: 35,
+            marketMax: 50,
+            marketRange: [35, 50],
+          });
+        });
+      }
+    }
+
+    return result;
+  }, [allSessions, selectedUserId, dateFilter, currentTime, profiles, averages.companyAvgActivePct]);
+
+  // Gradiente dinâmico para a linha do usuário: verde se >= empresa, vermelho se < empresa
+  const userGradientStops = useMemo(() => {
+    if (!productivityTimelineData.length) return [];
+    const len = productivityTimelineData.length;
+    if (len === 1) {
+      const isAbove = productivityTimelineData[0].userPct >= productivityTimelineData[0].companyPct;
+      const color = isAbove ? "#10b981" : "#f43f5e";
+      return [
+        { offset: "0%", color },
+        { offset: "100%", color },
+      ];
+    }
+
+    const stops: Array<{ offset: string; color: string }> = [];
+    productivityTimelineData.forEach((pt, idx) => {
+      const isAbove = pt.userPct >= pt.companyPct;
+      const color = isAbove ? "#10b981" : "#f43f5e";
+      const pct = (idx / (len - 1)) * 100;
+      stops.push({ offset: `${pct.toFixed(1)}%`, color });
+    });
+    return stops;
+  }, [productivityTimelineData]);
 
   const ACTIVITY_PALETTE = [
     "#10b981", // Emerald
@@ -1152,8 +1687,11 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                 >
                   <option value="today" className="bg-[#0f172a] text-white font-bold">Hoje</option>
                   <option value="yesterday" className="bg-[#0f172a] text-white font-bold">Ontem</option>
-                  <option value="week" className="bg-[#0f172a] text-white font-bold">Últimos 7 dias</option>
+                  <option value="thisWeek" className="bg-[#0f172a] text-white font-bold">Esta Semana</option>
+                  <option value="last7" className="bg-[#0f172a] text-white font-bold">Últimos 7 dias</option>
+                  <option value="last15" className="bg-[#0f172a] text-white font-bold">Últimos 15 dias</option>
                   <option value="month" className="bg-[#0f172a] text-white font-bold">Este Mês</option>
+                  <option value="last30" className="bg-[#0f172a] text-white font-bold">Últimos 30 dias</option>
                   <option value="all" className="bg-[#0f172a] text-white font-bold">Todo o Período</option>
                 </select>
               </div>
@@ -1376,97 +1914,297 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
           </div>
         </div>
 
-        {/* Painel Direito: Lista de Atividades */}
-        <div className="p-5 rounded-2xl bg-black/40 border border-white/5 flex flex-col min-h-[420px] overflow-hidden">
+        {/* Painel Direito: Gráfico de Produtividade (%) Temporal OU Breakdown quando Expandido */}
+        <div className="p-5 rounded-2xl bg-black/40 border border-white/5 flex flex-col min-h-[420px] overflow-hidden justify-between">
           <div className="mb-3 shrink-0 flex items-center justify-between">
-            <div>
+            <div className="flex items-center gap-2">
               <h3 
                 className="text-xs font-black uppercase tracking-widest text-slate-300"
-                title="Relação de atividades trabalhadas pelo usuário no período"
+                title={isExpandedActive ? "Relação de atividades trabalhadas no período" : "Evolução percentual de tempo ativo (produtividade) ao longo do período"}
               >
-                Breakdown por Atividades
+                {isExpandedActive ? "Breakdown por Atividades" : "Evolução da Produtividade (%)"}
               </h3>
+              {!isExpandedActive && (
+                <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 uppercase tracking-wider">
+                  Usuário x Empresa
+                </span>
+              )}
             </div>
-            {highlightedActivityId && (
-              <button
-                type="button"
-                onClick={() => setHighlightedActivityId(null)}
-                className="px-2 py-0.5 rounded-lg text-[9px] font-mono uppercase bg-white/10 text-slate-300 hover:text-white cursor-pointer"
-              >
-                Limpar seleção
-              </button>
-            )}
-          </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-2">
-            {metrics.activities.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-muted-foreground italic">
-                Nenhuma atividade trabalhada no período.
+            {isExpandedActive ? (
+              <div className="flex items-center gap-2">
+                {highlightedActivityId && (
+                  <button
+                    type="button"
+                    onClick={() => setHighlightedActivityId(null)}
+                    className="px-2 py-0.5 rounded-lg text-[9px] font-mono uppercase bg-white/10 text-slate-300 hover:text-white cursor-pointer"
+                  >
+                    Limpar seleção
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsExpandedActive(false)}
+                  className="px-2.5 py-1 rounded-lg text-[9px] font-mono font-bold uppercase bg-slate-900 border border-white/20 text-slate-300 hover:text-white hover:border-emerald-400 cursor-pointer transition-all"
+                >
+                  Ver Gráfico
+                </button>
               </div>
             ) : (
-              metrics.activities.map((act, index) => {
-                const isSelected = highlightedActivityId === act.id;
-                const stageStyle = getStageStyle(act.stage, act.isInternal, act.title);
-
-                return (
-                  <div
-                    key={act.id}
-                    onClick={() => handleOpenActivityCard(act.id)}
-                    className={`group p-3 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
-                      isSelected
-                        ? `${stageStyle.activeCardClass} ring-2 ring-emerald-400`
-                        : act.hasActiveSession
-                        ? stageStyle.activeCardClass
-                        : "bg-white/[0.02] border-white/5 hover:bg-white/[0.06] hover:border-sky-500/30 hover:shadow-md"
-                    }`}
-                    title="Clique para abrir o card detalhado desta atividade no CRM"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className={`font-mono text-[10px] font-black shrink-0 min-w-[18px] ${stageStyle.textClass}`}>
-                        #{act.workOrderNumber}
-                      </span>
-                      <Briefcase className={`h-4 w-4 shrink-0 transition-colors ${stageStyle.textClass} ${act.hasActiveSession ? "animate-pulse" : "group-hover:brightness-125"}`} />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className={`text-xs font-bold truncate transition-colors ${stageStyle.textClass} group-hover:brightness-125`}>
-                            {act.title}
-                          </p>
-                          {act.hasActiveSession && (
-                            <span className={`font-mono text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest inline-flex items-center gap-1 animate-pulse shrink-0 ${stageStyle.activeBadgeClass}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full animate-ping ${stageStyle.activeDotClass}`} />
-                              Ao Vivo
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-[9px] font-mono text-muted-foreground uppercase">
-                          <span>
-                            {act.reqNumber ? (
-                              <>
-                                <span className={`font-bold ${stageStyle.textClass}`}>Nº {act.reqNumber}</span>
-                                <span> • </span>
-                              </>
-                            ) : null}
-                            {act.sessionsCount} {act.sessionsCount === 1 ? "sessão" : "sessões"}
-                          </span>
-                          <span className="opacity-0 group-hover:opacity-100 text-sky-400 font-bold lowercase tracking-normal flex items-center gap-0.5 transition-opacity">
-                            abrir card <ExternalLink className="h-2.5 w-2.5" />
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0 flex items-center gap-2.5">
-                      <span className={`text-xs font-black font-mono ${act.hasActiveSession ? "text-emerald-300 animate-pulse" : "text-emerald-400"}`}>
-                        {formatSeconds(act.seconds)}
-                      </span>
-                      <div className="p-1 rounded-lg bg-white/5 border border-white/10 text-muted-foreground group-hover:text-sky-300 group-hover:bg-sky-500/20 group-hover:border-sky-400/40 transition-all">
-                        <ExternalLink className="h-3 w-3" />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+              <div className="flex items-center gap-3 text-[10px] font-mono flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                  <span className="text-emerald-300 font-bold uppercase">{selectedUserId ? "Média Usuário" : "Média Período"}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
+                  <span className="text-amber-300 font-bold uppercase">Média Empresa</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2.5 rounded-sm bg-slate-400/30 border border-slate-400/60" />
+                  <span className="text-slate-400 font-bold uppercase">Padrão Mercado</span>
+                </div>
+              </div>
             )}
           </div>
+
+          {isExpandedActive ? (
+            /* Lista de Atividades Detalhada (Breakdown) */
+            <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-2">
+              {metrics.activities.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-muted-foreground italic">
+                  Nenhuma atividade trabalhada no período.
+                </div>
+              ) : (
+                metrics.activities.map((act) => {
+                  const isSelected = highlightedActivityId === act.id;
+                  const stageStyle = getStageStyle(act.stage, act.isInternal, act.title);
+
+                  return (
+                    <div
+                      key={act.id}
+                      onClick={() => handleOpenActivityCard(act.id)}
+                      className={`group p-3 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                        isSelected
+                          ? `${stageStyle.activeCardClass} ring-2 ring-emerald-400`
+                          : act.hasActiveSession
+                          ? stageStyle.activeCardClass
+                          : "bg-white/[0.02] border-white/5 hover:bg-white/[0.06] hover:border-sky-500/30 hover:shadow-md"
+                      }`}
+                      title="Clique para abrir o card detalhado desta atividade no CRM"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`font-mono text-[10px] font-black shrink-0 min-w-[18px] ${stageStyle.textClass}`}>
+                          #{act.workOrderNumber}
+                        </span>
+                        <Briefcase className={`h-4 w-4 shrink-0 transition-colors ${stageStyle.textClass} ${act.hasActiveSession ? "animate-pulse" : "group-hover:brightness-125"}`} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className={`text-xs font-bold truncate transition-colors ${stageStyle.textClass} group-hover:brightness-125`}>
+                              {act.title}
+                            </p>
+                            {act.hasActiveSession && (
+                              <span className={`font-mono text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest inline-flex items-center gap-1 animate-pulse shrink-0 ${stageStyle.activeBadgeClass}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full animate-ping ${stageStyle.activeDotClass}`} />
+                                Ao Vivo
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[9px] font-mono text-muted-foreground uppercase">
+                            <span>
+                              {act.reqNumber ? (
+                                <>
+                                  <span className={`font-bold ${stageStyle.textClass}`}>Nº {act.reqNumber}</span>
+                                  <span> • </span>
+                                </>
+                              ) : null}
+                              {act.sessionsCount} {act.sessionsCount === 1 ? "sessão" : "sessões"}
+                            </span>
+                            <span className="opacity-0 group-hover:opacity-100 text-sky-400 font-bold lowercase tracking-normal flex items-center gap-0.5 transition-opacity">
+                              abrir card <ExternalLink className="h-2.5 w-2.5" />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 flex items-center gap-2.5">
+                        <span className={`text-xs font-black font-mono ${act.hasActiveSession ? "text-emerald-300 animate-pulse" : "text-emerald-400"}`}>
+                          {formatSeconds(act.seconds)}
+                        </span>
+                        <div className="p-1 rounded-lg bg-white/5 border border-white/10 text-muted-foreground group-hover:text-sky-300 group-hover:bg-sky-500/20 group-hover:border-sky-400/40 transition-all">
+                          <ExternalLink className="h-3 w-3" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          ) : (
+            /* Gráfico de Linha / Área de Produtividade (%) Temporal em Tela Cheia do Card */
+            <div className="flex-1 w-full h-full min-h-[340px] pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={productivityTimelineData}
+                  margin={{ top: 10, right: 10, left: -22, bottom: -5 }}
+                >
+                  <defs>
+                    {/* Gradiente dinâmico na linha: Verde se >= empresa, Vermelho se < empresa */}
+                    <linearGradient id="userStrokeGrad" x1="0" y1="0" x2="1" y2="0">
+                      {userGradientStops.map((stop, i) => (
+                        <stop key={`stroke-stop-${i}`} offset={stop.offset} stopColor={stop.color} />
+                      ))}
+                    </linearGradient>
+
+                    {/* Gradiente dinâmico no preenchimento de área */}
+                    <linearGradient id="userFillGrad" x1="0" y1="0" x2="1" y2="0">
+                      {userGradientStops.map((stop, i) => (
+                        <stop key={`fill-stop-${i}`} offset={stop.offset} stopColor={stop.color} stopOpacity={0.25} />
+                      ))}
+                    </linearGradient>
+
+                    {/* Gradiente Amarelo / Âmbar para a Média Empresa */}
+                    <linearGradient id="compGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis 
+                    dataKey="label" 
+                    stroke="#64748b" 
+                    fontSize={10} 
+                    fontFamily="monospace"
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    domain={[0, 100]} 
+                    ticks={[0, 25, 50, 75, 100]} 
+                    stroke="#64748b" 
+                    fontSize={10} 
+                    fontFamily="monospace"
+                    unit="%"
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }: any) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const data = payload[0]?.payload;
+                      const isAboveCompany = data ? data.userPct >= data.companyPct : true;
+                      const userColor = isAboveCompany ? "#10b981" : "#f43f5e";
+
+                      return (
+                        <div className="p-3 rounded-xl bg-slate-950/95 border border-white/20 shadow-[0_0_25px_rgba(0,0,0,0.9)] backdrop-blur-md text-xs font-mono">
+                          <div className="flex items-center justify-between gap-3 mb-2 pb-1 border-b border-white/10">
+                            <p className="font-black text-white uppercase text-[11px]">
+                              {data?.fullLabel || label}
+                            </p>
+                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase ${
+                              isAboveCompany ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
+                            }`}>
+                              {isAboveCompany ? "Acima da Empresa" : "Abaixo da Empresa"}
+                            </span>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-bold flex items-center gap-1.5" style={{ color: userColor }}>
+                                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: userColor }} />
+                                {selectedUserId ? "Média Usuário:" : "Média Período:"}
+                              </span>
+                              <span className="text-white font-black">{data?.userPct}% ({formatSeconds(data?.userSeconds || 0)})</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-amber-400 font-bold flex items-center gap-1.5">
+                                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                Média Empresa:
+                              </span>
+                              <span className="text-white font-black">{data?.companyPct}% ({formatSeconds(data?.companySeconds || 0)})</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4 pt-1 mt-0.5 border-t border-white/5 text-[10px]">
+                              <span className="text-slate-400 flex items-center gap-1.5">
+                                <span className="h-1.5 w-2 rounded-sm bg-slate-400/40 border border-slate-400/60" />
+                                Padrão Mercado:
+                              </span>
+                              <span className="text-slate-300 font-bold">{data?.marketMin}% a {data?.marketMax}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+
+                  {/* 1. Faixa Padrão de Mercado em Tom Cinza Sombreado ao Fundo */}
+                  <Area
+                    type="monotone"
+                    dataKey="marketRange"
+                    name="Padrão Mercado"
+                    stroke="rgba(148, 163, 184, 0.45)"
+                    strokeWidth={1}
+                    strokeDasharray="3 3"
+                    fill="rgba(148, 163, 184, 0.12)"
+                    isAnimationActive={false}
+                  />
+
+                  {/* 2. Média da Empresa em Linha Amarela / Âmbar */}
+                  <Area
+                    type="monotone"
+                    dataKey="companyPct"
+                    name="Média Empresa"
+                    stroke="#f59e0b"
+                    strokeWidth={2.5}
+                    strokeDasharray="4 4"
+                    fillOpacity={1}
+                    fill="url(#compGrad)"
+                    dot={{ fill: "#f59e0b", r: 2.5, strokeWidth: 1.5, stroke: "#451a03" }}
+                    activeDot={{ r: 4.5, fill: "#fbbf24", stroke: "#ffffff", strokeWidth: 2 }}
+                  />
+
+                  {/* 3. Média do Usuário em Linha Sólida Dinâmica (Verde / Vermelho) no Topo */}
+                  <Area
+                    type="monotone"
+                    dataKey="userPct"
+                    name={selectedUserId ? "Média Usuário" : "Média Período"}
+                    stroke="url(#userStrokeGrad)"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#userFillGrad)"
+                    dot={(props: any) => {
+                      const { cx, cy, payload } = props;
+                      if (cx === undefined || cy === undefined || !payload) return null;
+                      const isAboveOrEqual = payload.userPct >= payload.companyPct;
+                      const color = isAboveOrEqual ? "#10b981" : "#f43f5e";
+                      return (
+                        <circle
+                          key={`user-dot-${props.index}`}
+                          cx={cx}
+                          cy={cy}
+                          r={3.5}
+                          fill={color}
+                          stroke="#0f172a"
+                          strokeWidth={1.5}
+                        />
+                      );
+                    }}
+                    activeDot={(props: any) => {
+                      const { cx, cy, payload } = props;
+                      if (cx === undefined || cy === undefined || !payload) return null;
+                      const isAboveOrEqual = payload.userPct >= payload.companyPct;
+                      const color = isAboveOrEqual ? "#34d399" : "#fb7185";
+                      return (
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={5.5}
+                          fill={color}
+                          stroke="#ffffff"
+                          strokeWidth={2}
+                        />
+                      );
+                    }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
       </div>

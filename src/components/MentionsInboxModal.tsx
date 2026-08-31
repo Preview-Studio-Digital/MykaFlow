@@ -7,6 +7,7 @@ export {
   getCleanDealTitle,
   getDealCompletionNotifications,
   isDealPendingAuthorAcceptance,
+  getMentionTextForUser,
 } from "./InboxModal";
 
 export type {

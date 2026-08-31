@@ -152,6 +152,71 @@ function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Helper para obter menção automática amigável (@Nome) de um membro da equipe ou autor
+export function getMentionTextForUser(
+  userNameOrId: string | undefined | null,
+  teamMembersList: Array<{ id: string; display_name?: string | null; email?: string }> = []
+): string {
+  if (!userNameOrId) return "";
+  const cleanSearch = userNameOrId.replace(/^@/, "").trim().toLowerCase();
+  if (!cleanSearch) return "";
+
+  // 1. Tenta encontrar pelo ID
+  let member = teamMembersList.find((m) => m.id === userNameOrId);
+
+  // 2. Se não encontrou pelo ID, tenta pelo display_name ou email
+  if (!member) {
+    member = teamMembersList.find((m) => {
+      const name = (m.display_name || "").trim().toLowerCase();
+      const email = (m.email || "").trim().toLowerCase();
+      const first = name.split(" ")[0];
+      return name === cleanSearch || email === cleanSearch || first === cleanSearch;
+    });
+  }
+
+  if (member) {
+    const name = member.display_name || member.email || "";
+    const firstName = name.split(" ")[0];
+    return `@${firstName} `;
+  }
+
+  const firstName = cleanSearch.split(" ")[0];
+  return `@${firstName} `;
+}
+
+export function isHistoryItemReply(item: { action_type?: string | null; description?: string | null; isReply?: boolean } | null | undefined): boolean {
+  if (!item) return false;
+  if (item.action_type === "reply" || item.action_type === "mention_reply" || item.action_type === "comment_reply") {
+    return true;
+  }
+  if (item.isReply) return true;
+  const desc = (item.description || "").trim();
+  if (desc.startsWith("↩")) return true;
+  if (/respondeu à menção/i.test(desc)) return true;
+  if (/respondeu à atualização/i.test(desc)) return true;
+  if (/respondeu:/i.test(desc)) return true;
+  if (/^↩?\s*resposta/i.test(desc)) return true;
+  return false;
+}
+
+export function extractReplyText(description: string, rawReplyText?: string): string {
+  if (rawReplyText && rawReplyText.trim()) return rawReplyText.trim();
+  let clean = (description || "").trim();
+  if (clean.startsWith("↩ Resposta à atualização:\n")) {
+    clean = clean.replace("↩ Resposta à atualização:\n", "");
+  } else if (clean.startsWith("↩ Resposta:\n")) {
+    clean = clean.replace("↩ Resposta:\n", "");
+  } else if (clean.startsWith("↩")) {
+    clean = clean.replace(/^↩\s*.*?:?\n?/, "");
+  } else if (/^.*?respondeu à menção de @.*?: "(.*)"$/s.test(clean)) {
+    const match = clean.match(/^.*?respondeu à menção de @.*?: "(.*)"$/s);
+    if (match && match[1]) clean = match[1];
+  } else if (/^.*?respondeu:\s*/i.test(clean)) {
+    clean = clean.replace(/^.*?respondeu:\s*/i, "");
+  }
+  return clean.trim();
+}
+
 export interface DealMentionReply {
   id: string;
   mention_id: string;
@@ -1152,7 +1217,7 @@ function FastDealCommentInput({
   };
 
   return (
-    <div className="relative flex-1 min-h-[85px] sm:min-h-[95px] flex flex-col">
+    <div className="relative flex-1 min-h-[65px] sm:min-h-[80px] flex flex-col overflow-hidden">
       <textarea
         ref={textareaRef}
         placeholder="Descreva a nova atualização desta atividade... Use @ para mencionar um colega (ex: @João)"
@@ -1181,7 +1246,7 @@ function FastDealCommentInput({
             setMentionCursorIndex(null);
           }
         }}
-        className="input-futuristic flex-1 min-h-[140px] w-full rounded-xl p-4 text-sm sm:text-base outline-none resize-none leading-relaxed custom-scrollbar font-medium"
+        className="input-futuristic flex-1 min-h-[65px] w-full rounded-xl p-3 sm:p-3.5 text-xs sm:text-sm outline-none resize-none leading-relaxed custom-scrollbar font-medium"
         autoFocus
       />
 
@@ -1309,14 +1374,28 @@ interface FastMentionReplyInputProps {
   deal: Deal;
   teamMembers: Array<{ id: string; display_name?: string | null; email?: string }>;
   onSend: (deal: Deal, mentionId: string, replyText: string) => Promise<any>;
+  initialText?: string;
+  placeholder?: string;
 }
 
-function FastMentionReplyInput({ targetId, deal, teamMembers, onSend }: FastMentionReplyInputProps) {
-  const [localText, setLocalText] = useState("");
+function FastMentionReplyInput({ targetId, deal, teamMembers, onSend, initialText = "", placeholder }: FastMentionReplyInputProps) {
+  const [localText, setLocalText] = useState(initialText);
   const [mentionSuggestions, setMentionSuggestions] = useState<Array<{ id: string; name: string }>>([]);
   const [mentionCursorIndex, setMentionCursorIndex] = useState<number | null>(null);
   const [isSending, setIsSending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setLocalText(initialText || "");
+  }, [initialText, targetId]);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+      const len = inputRef.current.value.length;
+      inputRef.current.setSelectionRange(len, len);
+    }
+  }, [targetId, initialText]);
 
   const handleSelectMention = (member: { id: string; name: string }) => {
     if (mentionCursorIndex === null) return;
@@ -1355,7 +1434,7 @@ function FastMentionReplyInput({ targetId, deal, teamMembers, onSend }: FastMent
       <input
         ref={inputRef}
         type="text"
-        placeholder="Responder a esta menção com @..."
+        placeholder={placeholder || "Responder a esta menção com @..."}
         value={localText}
         onChange={(e) => {
           const text = e.target.value;
@@ -1527,7 +1606,7 @@ function CrmDashboard() {
     // Mescla respostas de atualizações/menções que ainda não estejam presentes no histórico
     replies.forEach((rep) => {
       const isAlreadyInHistory = items.some(
-        (h) => h.id === rep.id || (h.action_type === "reply" && h.description.includes(rep.reply_text.trim()))
+        (h) => h.id === rep.id || (isHistoryItemReply(h) && (h.description?.includes(rep.reply_text.trim()) || (h as any).rawReplyText === rep.reply_text.trim()))
       );
       if (!isAlreadyInHistory) {
         items.push({
@@ -2227,9 +2306,22 @@ function CrmDashboard() {
 
           const latestRealDate = historyDateMap.get(d.id) || d.created_at;
 
+          // Se a atividade mudou de etapa no passado e manteve prazo residual da etapa anterior, extingue o prazo automaticamente
+          let effectiveDeadline = d.expected_close_date;
+          if (
+            effectiveDeadline &&
+            d.notes &&
+            (d.notes.includes("alterou a etapa de") || d.notes.includes("alterou a etapa para")) &&
+            !d.notes.includes("Novo prazo estipulado:")
+          ) {
+            effectiveDeadline = null;
+            supabase.from("crm_deals").update({ expected_close_date: null }).eq("id", d.id).then(() => {});
+          }
+
           return {
             ...d,
             stage: mappedStage,
+            expected_close_date: effectiveDeadline,
             customer_name:
               d.crm_customers?.company_name ||
               d.crm_customers?.name ||
@@ -3034,7 +3126,21 @@ function CrmDashboard() {
   };
 
   async function openDealHistory(deal: Deal) {
-    setSelectedDealForHistory(deal);
+    // 1. Extinção do prazo se a atividade mudou de etapa
+    let cleanDeadline = deal.expected_close_date;
+    if (
+      cleanDeadline &&
+      deal.notes &&
+      (deal.notes.includes("alterou a etapa de") || deal.notes.includes("alterou a etapa para")) &&
+      !deal.notes.includes("Novo prazo estipulado:")
+    ) {
+      cleanDeadline = null;
+      supabase.from("crm_deals").update({ expected_close_date: null }).eq("id", deal.id).then(() => {});
+      setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, expected_close_date: null } : d)));
+    }
+
+    const cleanDeal: Deal = { ...deal, expected_close_date: cleanDeadline };
+    setSelectedDealForHistory(cleanDeal);
     setModalUpdateTab("comment");
     setNewComment("");
     setAutoGeneratedLogs([]);
@@ -3044,15 +3150,16 @@ function CrmDashboard() {
     setIsQuoteUploaderOpen(false);
 
     // Marca como visualizado o alerta de tarefa concluída nesta atividade
-    if (unreadParentAlerts[deal.id]) {
-      handleMarkAlertAsSeen(deal.id);
+    if (unreadParentAlerts[cleanDeal.id]) {
+      handleMarkAlertAsSeen(cleanDeal.id);
     }
-    const currentLastSeen = getResponsibleLastSeen(deal);
+    const currentLastSeen = getResponsibleLastSeen(cleanDeal);
     setInitialLastSeenTime(currentLastSeen);
-    if (deal.assigned_user_id === user?.id) {
-      updateDealLastSeen(deal);
+    if (cleanDeal.assigned_user_id === user?.id) {
+      updateDealLastSeen(cleanDeal);
     }
-    setAdminEditDeadline(deal.expected_close_date || new Date().toISOString().split("T")[0]);
+
+    setAdminEditDeadline(cleanDeadline || new Date().toISOString().split("T")[0]);
     setIsEditingDeadline(false);
     setIsEditingTitle(false);
     setIsTimelineOpen(false);
@@ -3073,7 +3180,8 @@ function CrmDashboard() {
       }));
       setDealHistoryList(formattedHistory);
       if (formattedHistory.length > 0) {
-        const latestRealDate = formattedHistory[0].created_at;
+        const latestMain = formattedHistory.find((h) => !isHistoryItemReply(h) && h.action_type !== "subtask_completed");
+        const latestRealDate = latestMain ? latestMain.created_at : formattedHistory[0].created_at;
         setSelectedDealForHistory((prev) => (prev ? { ...prev, latest_update_at: latestRealDate } : null));
         setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, latest_update_at: latestRealDate } : d)));
       }
@@ -3751,13 +3859,19 @@ function CrmDashboard() {
     if (!user) return;
 
     // 1. Permissão: apenas o próprio responsável atribuído ou Administrador podem iniciar/parar
-    const isAssigned = isAdmin || deal.assigned_user_id === user.id;
+    const myName = (user?.user_metadata?.display_name || user?.email || "").toLowerCase().trim();
+    const assignedName = (deal.assigned_user_name || "").toLowerCase().trim();
+    const isAssigned =
+      isAdmin ||
+      deal.assigned_user_id === user.id ||
+      (Boolean(myName) && Boolean(assignedName) && (assignedName.includes(myName.split(" ")[0]) || myName.includes(assignedName.split(" ")[0])));
+
     if (!isAssigned) {
       toast.error("Somente o responsável atribuído ou o Administrador podem iniciar esta atividade.");
       return;
     }
 
-    if (isDealPendingAuthorAcceptance(deal) || deal.stage === "archived" || deal.stage === "completed" || deal.stage === "won" || deal.stage === "lost") {
+    if (isDealPendingAuthorAcceptance(deal) || deal.stage === "archived" || deal.stage === "completed" || deal.stage === "lost") {
       toast.error("Esta atividade já foi finalizada/armazenada e não pode ser iniciada.");
       return;
     }
@@ -3999,7 +4113,10 @@ function CrmDashboard() {
     teamMembers.forEach((member) => {
       const memberName = member.display_name || member.email || "";
       const firstName = memberName.split(" ")[0];
-      const mentionRegex = new RegExp(`@(${escapeRegExp(memberName)}|${escapeRegExp(firstName)}|${escapeRegExp(member.email || "")})\\b`, "i");
+      const nameEscaped = escapeRegExp(memberName);
+      const firstEscaped = escapeRegExp(firstName);
+      const emailEscaped = escapeRegExp(member.email || "");
+      const mentionRegex = new RegExp(`@(${nameEscaped}|${firstEscaped}|${emailEscaped})(?:$|[^A-Za-z0-9À-ÿ_])`, "i");
       if (mentionRegex.test(replyText)) {
         const mentionObj: DealMention = {
           id: crypto.randomUUID(),
@@ -4027,7 +4144,9 @@ function CrmDashboard() {
       action_type: "reply",
       description: historyDesc,
       created_at: nowIso,
-    };
+      isReply: true,
+      rawReplyText: replyText,
+    } as any;
 
     try {
       // Salva a resposta no deal SEM alterar o updated_at para não modificar a coloração das atualizações
@@ -5366,8 +5485,10 @@ function CrmDashboard() {
         const memberName = member.display_name || member.email || "";
         const firstName = memberName.split(" ")[0];
         
-        // Verifica se o texto contém @Nome, @NomeCompleto ou @Email
-        const mentionRegex = new RegExp(`@(${escapeRegExp(memberName)}|${escapeRegExp(firstName)}|${escapeRegExp(member.email || "")})\\b`, "i");
+        const nameEscaped = escapeRegExp(memberName);
+        const firstEscaped = escapeRegExp(firstName);
+        const emailEscaped = escapeRegExp(member.email || "");
+        const mentionRegex = new RegExp(`@(${nameEscaped}|${firstEscaped}|${emailEscaped})(?:$|[^A-Za-z0-9À-ÿ_])`, "i");
         if (mentionRegex.test(commentRaw)) {
           const mentionObj: DealMention = {
             id: crypto.randomUUID(),
@@ -5385,7 +5506,10 @@ function CrmDashboard() {
       });
 
       const updatePayload: any = { updated_at: nowIso };
-      if (isStageChanged) updatePayload.stage = targetStage;
+      if (isStageChanged) {
+        updatePayload.stage = targetStage;
+        updatePayload.expected_close_date = null; // Prazo é extinto automaticamente ao mudar de coluna
+      }
       if (isReassigned) updatePayload.assigned_user_id = reassignTo;
       
       // Preserva tags de metadados existentes (QUOTE_FILE, PARENT_DEAL, WORK_LOG, MENTION_REPLY, etc.)
@@ -5414,6 +5538,9 @@ function CrmDashboard() {
           const fromStageName = STAGES.find((s) => s.id === deal.stage)?.title || deal.stage;
           const toStageName = STAGES.find((s) => s.id === targetStage)?.title || targetStage;
           autoLines.push(`${currentUserName} alterou a etapa de "${fromStageName}" para "${toStageName}".`);
+          if (deal.expected_close_date) {
+            autoLines.push(`Prazo anterior encerrado.`);
+          }
         }
       }
       autoLines = Array.from(new Set(autoLines));
@@ -5455,6 +5582,7 @@ function CrmDashboard() {
             ? {
                 ...d,
                 stage: targetStage,
+                expected_close_date: isStageChanged ? null : d.expected_close_date,
                 notes: combinedNotesText ? combinedNotesText : d.notes,
                 latest_update_author: combinedNotesText ? currentUserName : (d.latest_update_author || currentUserName),
                 assigned_user_id: isReassigned ? reassignTo : d.assigned_user_id,
@@ -5679,10 +5807,44 @@ function CrmDashboard() {
     }
   }
 
-  // Visibilidade do CRM: todos os usuários visualizam o quadro geral completo de atividades
+  // Conjunto de IDs de Administradores
+  const adminUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    teamMembers.forEach((m) => {
+      if (m.role === "admin" || (m.email && m.email.toLowerCase().includes("admin"))) {
+        ids.add(m.id);
+      }
+    });
+    if (isAdmin && user?.id) {
+      ids.add(user.id);
+    }
+    return ids;
+  }, [teamMembers, isAdmin, user?.id]);
+
+  // Visibilidade do CRM:
+  // - Administradores visualizam todas as atividades (inclusive de outros ADMs e de todos os colaboradores).
+  // - Usuários NÃO-ADM visualizam apenas suas próprias atividades e as de outros colaboradores comuns.
+  //   Atividades pertencentes a Administradores (atribuídas a um ADM) não são visíveis para não-ADMs.
   const visibleDeals = useMemo(() => {
-    return deals;
-  }, [deals]);
+    if (isAdmin) return deals;
+
+    return deals.filter((d) => {
+      // Se a atividade está atribuída ao próprio usuário comum logado, ele vê
+      if (d.assigned_user_id === user?.id) return true;
+
+      // Se a atividade está atribuída a um Administrador, o usuário não-ADM NÃO vê
+      if (d.assigned_user_id && adminUserIds.has(d.assigned_user_id)) {
+        return false;
+      }
+
+      // Se não tem responsável, mas foi criada por um Administrador como atividade própria do ADM
+      if (d.user_id && adminUserIds.has(d.user_id) && (!d.assigned_user_id || adminUserIds.has(d.assigned_user_id))) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [deals, isAdmin, user?.id, adminUserIds]);
 
   // Alertas automáticos para Administradores (apenas requisições internas ativas possuem prazo)
   const overdueAlerts = useMemo(() => {
@@ -6190,7 +6352,7 @@ function CrmDashboard() {
                           <span className="uppercase font-black tracking-wide truncate">Quadro Geral (Todos)</span>
                         </div>
                         <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-black/50 text-sky-400 border border-sky-500/30 shrink-0">
-                          {deals.filter((d) => d.stage !== "archived").length}
+                          {visibleDeals.filter((d) => d.stage !== "archived").length}
                         </span>
                       </button>
 
@@ -6203,7 +6365,12 @@ function CrmDashboard() {
 
                       {/* Lista de Membros da Equipe (Usuários ativos no topo) */}
                       {teamMembers
-                        .filter((m) => m.id !== user?.id)
+                        .filter((m) => {
+                          if (m.id === user?.id) return false;
+                          // Usuários não-ADM não visualizam Administradores no menu
+                          if (!isAdmin && (m.role === "admin" || adminUserIds.has(m.id))) return false;
+                          return true;
+                        })
                         .sort((a, b) => {
                           const isAActive = deals.some((d) => {
                             const worker = getDealActiveWorker(d);
@@ -6220,7 +6387,7 @@ function CrmDashboard() {
                           return nameA.localeCompare(nameB);
                         })
                         .map((m) => {
-                          const count = deals.filter((d) => isDealUserMatching(d, m.id) && d.stage !== "archived").length;
+                          const count = visibleDeals.filter((d) => isDealUserMatching(d, m.id) && d.stage !== "archived").length;
                           const isSelected = effectiveFilterUser === m.id;
                           const mFirstName = getFirstName(m.display_name || m.email || "Membro");
                           const mRole = (m.id === user?.id && isAdmin) ? "admin" : m.role;
@@ -7769,7 +7936,7 @@ function CrmDashboard() {
                 {(() => {
                   const isPending = isPendingModal;
                   const isArchived = selectedDealForHistory.stage === "archived";
-                  const isCompleted = selectedDealForHistory.stage === "completed" || selectedDealForHistory.stage === "won" || selectedDealForHistory.stage === "lost";
+                  const isCompleted = selectedDealForHistory.stage === "completed" || selectedDealForHistory.stage === "lost";
                   if (isPending || isArchived || isCompleted) return <div className="w-[105px] shrink-0" />;
 
                   const activeWorker = getDealActiveWorker(selectedDealForHistory);
@@ -7796,7 +7963,12 @@ function CrmDashboard() {
                   }
 
                   const isWorking = Boolean(activeWorker && activeWorker.userId === user?.id);
-                  const isAssigned = isAdmin || selectedDealForHistory.assigned_user_id === user?.id;
+                  const myName = (user?.user_metadata?.display_name || user?.email || "").toLowerCase().trim();
+                  const assignedName = (selectedDealForHistory.assigned_user_name || "").toLowerCase().trim();
+                  const isAssigned =
+                    isAdmin ||
+                    selectedDealForHistory.assigned_user_id === user?.id ||
+                    (Boolean(myName) && Boolean(assignedName) && (assignedName.includes(myName.split(" ")[0]) || myName.includes(assignedName.split(" ")[0])));
                   if (!isWorking && !isAssigned) return <div className="w-[105px] shrink-0" />;
 
                   return (
@@ -8186,7 +8358,7 @@ function CrmDashboard() {
                       </div>
                     ) : (
                       unifiedTimelineList.map((item) => {
-                        const isReply = item.action_type === "reply" || (item as any).isReply;
+                        const isReply = isHistoryItemReply(item);
                         const isSubtaskComp = item.action_type === "subtask_completed" || (item as any).isSubtaskCompletion;
                         const isQuoteAttachment = item.action_type === "quote_file_uploaded" || item.description.includes("[QUOTE_DOC:") || /anexou o documento de orçamento/i.test(item.description);
                         const isContractAttachment = item.action_type === "contract_file_uploaded" || item.description.includes("[CONTRACT_DOC:") || /anexou o contrato/i.test(item.description);
@@ -8299,20 +8471,52 @@ function CrmDashboard() {
                                   </span>
                                 )}
                               </div>
-                              <span className="font-mono text-xs text-muted-foreground">
-                                {new Date(item.created_at).toLocaleString("pt-BR")}
-                              </span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {new Date(item.created_at).toLocaleString("pt-BR")}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setReplyingToMentionId(replyingToMentionId === item.id ? null : item.id)}
+                                  className="p-1 rounded-md bg-sky-500/15 hover:bg-sky-500/30 text-sky-300 border border-sky-400/30 hover:scale-105 transition-all cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                                  title={`Responder para ${item.user_name}`}
+                                >
+                                  <Reply className="h-3 w-3" />
+                                  <span className="hidden sm:inline">Responder</span>
+                                </button>
+                              </div>
                             </div>
 
                             {/* Renderização Inteligente de Respostas ou Descrições */}
-                            {isReply && (item as any).rawReplyText ? (
+                            {isReply ? (
                               <div className="space-y-1 pt-1 pl-2">
                                 <p className="text-slate-100 text-sm sm:text-base whitespace-pre-wrap leading-relaxed font-normal">
-                                  {formatMentionsInText((item as any).rawReplyText)}
+                                  {formatMentionsInText(extractReplyText(item.description, (item as any).rawReplyText))}
                                 </p>
                               </div>
                             ) : (
                               renderInteractiveDescription(item.description, true)
+                            )}
+
+                            {replyingToMentionId === item.id && (
+                              <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
+                                <FastMentionReplyInput
+                                  targetId={item.id}
+                                  deal={selectedDealForHistory}
+                                  teamMembers={teamMembers}
+                                  initialText={getMentionTextForUser(item.user_name || (item as any).user_id, teamMembers)}
+                                  placeholder={`Responder para @${(item.user_name || "usuário").split(" ")[0]}...`}
+                                  onSend={handleSendMentionReply}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setReplyingToMentionId(null)}
+                                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center shrink-0"
+                                  title="cancelar"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
                             )}
                           </div>
                         );
@@ -8325,11 +8529,24 @@ function CrmDashboard() {
                   {/* Informações do Topo */}
                   <div className={`${isPendingModal ? "flex-1 min-h-0 flex flex-col" : "shrink-0"} space-y-2`}>
                     {selectedDealForHistory.notes && (
-                      <div className={`p-3 rounded-xl bg-white/5 border border-white/10 space-y-2 custom-scrollbar ${isPendingModal ? "flex-1 min-h-0 overflow-y-auto" : "max-h-[45vh] overflow-y-auto"}`}>
+                      <div className={`p-3 rounded-xl bg-white/5 border border-white/10 space-y-2 custom-scrollbar ${isPendingModal ? "flex-1 min-h-0 overflow-y-auto" : "max-h-[30vh] sm:max-h-[34vh] overflow-y-auto"}`}>
                         {(() => {
-                          const latestUpdateItem = dealHistoryList.find((h) => h.action_type !== "reply" && !h.description.startsWith("↩ Resposta")) || null;
-                          const latestAuthorName = (latestUpdateItem?.user_name || selectedDealForHistory.latest_update_author || selectedDealForHistory.creator_name || "Autor").toUpperCase();
-                          const latestTimestamp = latestUpdateItem?.created_at || selectedDealForHistory.latest_update_at || selectedDealForHistory.updated_at || selectedDealForHistory.created_at;
+                          const mainUpdateHistoryList = dealHistoryList.filter(
+                            (h) => !isHistoryItemReply(h) && h.action_type !== "subtask_completed" && h.action_type !== "quote_file_uploaded" && h.action_type !== "contract_file_uploaded"
+                          );
+                          const latestUpdateItem = mainUpdateHistoryList[0] || null;
+                          const latestAuthorName = (
+                            latestUpdateItem?.user_name ||
+                            selectedDealForHistory.latest_update_author ||
+                            selectedDealForHistory.creator_name ||
+                            selectedDealForHistory.assigned_user_name ||
+                            "Autor"
+                          ).toUpperCase();
+                          const latestTimestamp =
+                            latestUpdateItem?.created_at ||
+                            selectedDealForHistory.latest_update_at ||
+                            selectedDealForHistory.updated_at ||
+                            selectedDealForHistory.created_at;
 
                           return (
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-1.5">
@@ -8396,14 +8613,83 @@ function CrmDashboard() {
                             .replace(/\[RESPONSIBLE_LAST_SEEN:.*?\]\s*/g, "")
                             .trim();
 
-                          // Obtém a atualização mais recente (ignorando respostas a menções)
-                          const latestUpdateItem = dealHistoryList.find((h) => h.action_type !== "reply" && !h.description.startsWith("↩ Resposta")) || null;
+                          // Obtém a lista de atualizações principais (ignorando respostas e anexos)
+                          const mainUpdateHistoryList = dealHistoryList.filter(
+                            (h) => !isHistoryItemReply(h) && h.action_type !== "subtask_completed" && h.action_type !== "quote_file_uploaded" && h.action_type !== "contract_file_uploaded"
+                          );
+                          const latestUpdateItem = mainUpdateHistoryList[0] || null;
+                          const previousUpdateItem = mainUpdateHistoryList[1] || null;
+
+                          const latestAuthorName = (
+                            latestUpdateItem?.user_name ||
+                            selectedDealForHistory.latest_update_author ||
+                            selectedDealForHistory.creator_name ||
+                            selectedDealForHistory.assigned_user_name ||
+                            "Autor"
+                          ).toUpperCase();
+
+                          const latestTimestamp =
+                            latestUpdateItem?.created_at ||
+                            selectedDealForHistory.latest_update_at ||
+                            selectedDealForHistory.updated_at ||
+                            selectedDealForHistory.created_at;
+
                           const effectiveText = (latestUpdateItem?.description && latestUpdateItem.description.trim()) || cleanNotes;
-                          const latestTimestamp = latestUpdateItem?.created_at || selectedDealForHistory.latest_update_at || selectedDealForHistory.updated_at || selectedDealForHistory.created_at;
 
                           const dealMentions = getDealMentions(selectedDealForHistory);
-                          const dealReplies = getDealMentionReplies(selectedDealForHistory);
                           const dealSubtaskCompletions = getDealSubtaskCompletions(selectedDealForHistory);
+
+                          // Consolidação completa de todas as respostas vinculadas à última atualização (notas + histórico permanente)
+                          const notesReplies = getDealMentionReplies(selectedDealForHistory);
+                          const historyReplies: DealMentionReply[] = dealHistoryList
+                            .filter((h) => isHistoryItemReply(h))
+                            .map((h) => {
+                              const cleanReplyText = extractReplyText(h.description, (h as any).rawReplyText);
+                              return {
+                                id: h.id,
+                                mention_id: "latest_update",
+                                deal_id: selectedDealForHistory.id,
+                                user_id: (h as any).user_id || "",
+                                user_name: (h.user_name || "Usuário").toUpperCase(),
+                                reply_text: cleanReplyText,
+                                created_at: h.created_at,
+                              };
+                            });
+
+                          const combinedRepliesMap = new Map<string, DealMentionReply>();
+                          historyReplies.forEach((r) => {
+                            combinedRepliesMap.set(r.id, r);
+                          });
+                          notesReplies.forEach((r) => {
+                            let existingKey = r.id;
+                            for (const [key, existing] of combinedRepliesMap.entries()) {
+                              if (
+                                existing.id === r.id ||
+                                (existing.reply_text.trim() === r.reply_text.trim() &&
+                                  existing.user_name.toUpperCase() === (r.user_name || "").toUpperCase())
+                              ) {
+                                existingKey = key;
+                                break;
+                              }
+                            }
+                            combinedRepliesMap.set(existingKey, {
+                              ...r,
+                              user_name: (r.user_name || "Usuário").toUpperCase(),
+                            });
+                          });
+
+                          // Respostas vinculadas à última atualização:
+                          // Todas as respostas que foram postadas para a última atualização (ou seja, criadas após a atualização anterior se houver, ou todas da atividade)
+                          const currentUpdateReplies = Array.from(combinedRepliesMap.values())
+                            .filter((r) => {
+                              if (previousUpdateItem) {
+                                const repTime = new Date(r.created_at).getTime();
+                                const prevUpdateTime = new Date(previousUpdateItem.created_at).getTime();
+                                return repTime >= prevUpdateTime - 3000;
+                              }
+                              return true;
+                            })
+                            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
                           const userMention = dealMentions.find((m) => m.mentioned_user_id === user?.id);
                           const canMarkAsRead = Boolean(userMention && !userMention.read_by_user);
@@ -8559,7 +8845,7 @@ function CrmDashboard() {
                                             type="button"
                                             onClick={() => {
                                               const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
-                                              setReplyingToMentionId(targetId);
+                                              setReplyingToMentionId(replyingToMentionId === targetId ? null : targetId);
                                             }}
                                             className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
                                             title="responder"
@@ -8571,12 +8857,15 @@ function CrmDashboard() {
 
                                       {isReplyingCurrent && (() => {
                                         const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
+                                        const authorMention = getMentionTextForUser(latestAuthorName, teamMembers);
                                         return (
                                           <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
                                             <FastMentionReplyInput
                                               targetId={targetId}
                                               deal={selectedDealForHistory}
                                               teamMembers={teamMembers}
+                                              initialText={authorMention}
+                                              placeholder={`Responder para @${latestAuthorName.split(" ")[0]}...`}
                                               onSend={handleSendMentionReply}
                                             />
                                             <button
@@ -8717,19 +9006,26 @@ function CrmDashboard() {
                                 </div>
                               )}
 
-                              {dealReplies.length > 0 && (
+                              {/* Respostas à última atualização com exibição consolidada e botão de responder individual */}
+                              {currentUpdateReplies.length > 0 && (
                                 <div className="space-y-1.5 pt-1">
-                                  {dealReplies.map((reply) => {
+                                  <div className="text-[10px] font-black uppercase tracking-wider text-sky-300 flex items-center gap-1.5 pb-0.5">
+                                    <Reply className="h-3.5 w-3.5 text-sky-400" />
+                                    <span>Respostas à última atualização ({currentUpdateReplies.length}):</span>
+                                  </div>
+                                  {currentUpdateReplies.map((reply) => {
                                     const isNewReply = 
                                       reply.user_id !== selectedDealForHistory.assigned_user_id &&
                                       (!initialLastSeenTime || new Date(reply.created_at).getTime() > new Date(initialLastSeenTime).getTime());
+                                    const isReplyingThis = replyingToMentionId === reply.id;
+                                    const replyAuthorMention = getMentionTextForUser(reply.user_name || reply.user_id, teamMembers);
 
                                     return (
                                       <div
                                         key={reply.id}
-                                        className={`px-3 py-2 rounded-xl bg-black/40 border text-xs space-y-1 transition-all ${
+                                        className={`px-3 py-2 rounded-xl bg-black/40 border text-xs space-y-1.5 transition-all ${
                                           isNewReply 
-                                            ? "border-amber-500/40 bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.05)]" 
+                                            ? "border-amber-500/40 bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.05)] ring-1 ring-amber-400/20" 
                                             : "border-white/10"
                                         }`}
                                       >
@@ -8743,13 +9039,45 @@ function CrmDashboard() {
                                               </span>
                                             )}
                                           </div>
-                                          <span className="font-mono text-[10px]">
-                                            {new Date(reply.created_at).toLocaleString("pt-BR")}
-                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-mono text-[10px]">
+                                              {new Date(reply.created_at).toLocaleString("pt-BR")}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setReplyingToMentionId(isReplyingThis ? null : reply.id)}
+                                              className="p-1 rounded-md bg-sky-500/15 hover:bg-sky-500/30 text-sky-300 border border-sky-400/30 hover:scale-105 transition-all cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                                              title={`Responder para ${reply.user_name}`}
+                                            >
+                                              <Reply className="h-3 w-3" />
+                                              <span>Responder</span>
+                                            </button>
+                                          </div>
                                         </div>
                                         <p className="text-slate-100 text-xs sm:text-[13px] pl-3 leading-snug whitespace-pre-wrap font-normal">
                                           {formatMentionsInText(reply.reply_text)}
                                         </p>
+
+                                        {isReplyingThis && (
+                                          <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
+                                            <FastMentionReplyInput
+                                              targetId={reply.id}
+                                              deal={selectedDealForHistory}
+                                              teamMembers={teamMembers}
+                                              initialText={replyAuthorMention}
+                                              placeholder={`Responder para @${(reply.user_name || "usuário").split(" ")[0]}...`}
+                                              onSend={handleSendMentionReply}
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => setReplyingToMentionId(null)}
+                                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center shrink-0"
+                                              title="cancelar"
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -8885,15 +9213,17 @@ function CrmDashboard() {
                           </div>
 
                           {/* FORMULÁRIO DE ATUALIZAÇÃO SEMPRE VISÍVEL E PRONTO PARA DIGITAR */}
-                          <form onSubmit={handleAddHistoryOrReassign} className="flex-1 min-h-0 flex flex-col justify-between gap-2 overflow-visible">
-                            <FastDealCommentInput
-                              dealId={selectedDealForHistory.id}
-                              onTextChange={(text) => {
-                                newCommentRef.current = text;
-                              }}
-                              teamMembers={teamMembers}
-                              resetCounter={commentResetCounter}
-                            />
+                          <form onSubmit={handleAddHistoryOrReassign} className="flex-1 min-h-0 flex flex-col justify-between gap-2">
+                            <div className="flex-1 min-h-0 flex flex-col">
+                              <FastDealCommentInput
+                                dealId={selectedDealForHistory.id}
+                                onTextChange={(text) => {
+                                  newCommentRef.current = text;
+                                }}
+                                teamMembers={teamMembers}
+                                resetCounter={commentResetCounter}
+                              />
+                            </div>
 
                             {/* Bloco de Linhas Automáticas Imutáveis (Abaixo do texto digitado) */}
                             {autoGeneratedLogs.length > 0 && (
@@ -9836,34 +10166,85 @@ function CrmDashboard() {
           >
             {/* Cabeçalho do Calendário */}
             <div className="flex items-center justify-between border-b border-white/10 pb-4 gap-3 shrink-0">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.2)] shrink-0">
                   <Calendar className="h-6 w-6" />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <h3 className="text-lg font-black uppercase tracking-wider text-white leading-none">
-                    Calendário de Prazos
-                  </h3>
-                  <div>
-                    <select
-                      value={calendarUserFilter}
-                      onChange={(e) => setCalendarUserFilter(e.target.value)}
-                      className="input-futuristic rounded-lg px-2.5 py-1 text-xs outline-none bg-black text-white font-bold border border-white/20 cursor-pointer min-w-[180px]"
-                      title="Filtrar por Responsável"
-                    >
-                      <option value="ALL">Todos os Responsáveis</option>
-                      {teamMembers.map((p) => (
-                        <option key={p.id} value={p.id} className="bg-slate-900">
-                          {p.display_name || p.email}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                {(() => {
+                  const isMe = effectiveFilterUser === user?.id || effectiveFilterUser === "ME";
+                  const isAll = effectiveFilterUser === "ALL";
+                  const selectedMember = teamMembers.find((m) => m.id === effectiveFilterUser);
+                  const displayNameTitle = isAll
+                    ? "QUADRO GERAL"
+                    : isMe
+                    ? (user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email || "Você")
+                    : (selectedMember?.display_name || selectedMember?.email || "Colaborador");
+                  const firstName = isAll ? "QUADRO GERAL" : getFirstName(displayNameTitle);
+                  const targetUserId = isAll ? user?.id : (isMe ? user?.id : effectiveFilterUser);
+                  const activeDeal = deals.find((d) => {
+                    const worker = getDealActiveWorker(d);
+                    return Boolean(worker && worker.userId === targetUserId);
+                  });
+                  const activeWorker = activeDeal ? getDealActiveWorker(activeDeal) : null;
+
+                  return (
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-sky-400">
+                          CALENDÁRIO DE PRAZOS
+                        </span>
+                        <span className="text-white/40">•</span>
+                        <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white truncate leading-none">
+                          {firstName}
+                        </h3>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        {activeWorker && activeDeal ? (
+                          <div 
+                            onClick={() => {
+                              setIsCalendarModalOpen(false);
+                              openDealHistory(activeDeal);
+                            }}
+                            className="inline-flex items-center rounded-full border border-emerald-500/50 bg-emerald-950/80 text-emerald-300 shadow-sm text-xs font-bold cursor-pointer hover:bg-emerald-900/80 transition-colors"
+                            title="Clique para abrir detalhes da atividade em andamento"
+                          >
+                            <div className="flex items-center gap-2 pl-2.5 pr-2 py-0.5">
+                              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
+                              <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-wider truncate max-w-[220px] sm:max-w-[340px]">
+                                ATIVO EM:{" "}
+                                <span className="text-white font-black">
+                                  {getCleanDealTitle(activeDeal.title)}
+                                </span>
+                              </span>
+                            </div>
+                            <div className="flex items-center rounded-full border border-emerald-500/50 bg-emerald-900/80 px-2.5 py-0.5 text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold shrink-0 -my-px -mr-px">
+                              <LiveElapsedTimer startedAt={activeWorker.startedAt} />
+                            </div>
+                          </div>
+                        ) : isAll ? (
+                          <div className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
+                            <span className="h-2 w-2 rounded-full bg-sky-400 shrink-0" />
+                            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
+                              {visibleDeals.filter((d) => d.stage !== "archived").length} ATIVIDADES ATIVAS
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-2.5 py-0.5 rounded-full text-slate-400 text-xs font-bold font-mono">
+                            <span className="h-2 w-2 rounded-full bg-slate-500 shrink-0" />
+                            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider">
+                              INATIVO NO MOMENTO
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Ação no Canto Superior Direito: Apenas FECHAR */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsCalendarModalOpen(false)}
@@ -9878,13 +10259,14 @@ function CrmDashboard() {
             {/* Conteúdo do Calendário em Grade Mensal ou Lista do Dia Selecionado */}
             {(() => {
               // Atividades ativas com prazo definido
-              const activeDealsWithDeadline = deals.filter((d) => {
+              const activeDealsWithDeadline = visibleDeals.filter((d) => {
                 const hasDeadline = Boolean(d.expected_close_date) && d.stage !== "archived" && d.stage !== "won" && d.stage !== "completed" && d.stage !== "lost" && !isDealPendingAuthorAcceptance(d);
                 if (!hasDeadline) return false;
 
-                if (calendarUserFilter === "ALL") return true;
-                if (calendarUserFilter === "unassigned") return !d.assigned_user_id;
-                return d.assigned_user_id === calendarUserFilter;
+                if (effectiveFilterUser === "ALL") return true;
+                const filterUserId = effectiveFilterUser === "ME" ? user?.id : effectiveFilterUser;
+                if (!filterUserId) return true;
+                return isDealUserMatching(d, filterUserId);
               });
 
               // Agrupamento por data (YYYY-MM-DD)
@@ -10037,37 +10419,27 @@ function CrmDashboard() {
               // VISÃO PADRÃO: Grade do Mês em Tamanho Amplo
               return (
                 <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden animate-in fade-in">
-                  {/* Barra de Navegação do Mês */}
-                  <div className="shrink-0 flex items-center justify-between bg-white/[0.03] border border-white/10 rounded-xl p-3">
-                    <div className="flex items-center gap-2">
+                  {/* Barra de Navegação do Mês Centralizada */}
+                  <div className="shrink-0 flex items-center justify-center bg-white/[0.03] border border-white/10 rounded-xl p-2.5">
+                    <div className="flex items-center justify-center gap-4">
                       <button
                         type="button"
                         onClick={handlePrevMonth}
-                        className="btn-ghost-neon p-2 rounded-lg text-slate-300 hover:text-white border border-white/10 hover:border-white/25 cursor-pointer"
+                        className="btn-ghost-neon p-2 rounded-xl text-sky-400 hover:text-white border border-sky-500/20 hover:border-sky-400/50 bg-sky-500/10 hover:bg-sky-500/20 cursor-pointer shadow-sm hover:scale-105 transition-all"
                         title="Mês anterior"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
+                      <h4 className="text-sm sm:text-base font-black uppercase tracking-wider text-white capitalize text-center min-w-[200px]">
+                        {monthName}
+                      </h4>
                       <button
                         type="button"
                         onClick={handleNextMonth}
-                        className="btn-ghost-neon p-2 rounded-lg text-slate-300 hover:text-white border border-white/10 hover:border-white/25 cursor-pointer"
+                        className="btn-ghost-neon p-2 rounded-xl text-sky-400 hover:text-white border border-sky-500/20 hover:border-sky-400/50 bg-sky-500/10 hover:bg-sky-500/20 cursor-pointer shadow-sm hover:scale-105 transition-all"
                         title="Próximo mês"
                       >
                         <ChevronRight className="h-4 w-4" />
-                      </button>
-                      <h4 className="text-base font-black uppercase tracking-wider text-white capitalize pl-3">
-                        {monthName}
-                      </h4>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleTodayMonth}
-                        className="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 hover:bg-sky-500/30 cursor-pointer transition-all"
-                      >
-                        Hoje
                       </button>
                     </div>
                   </div>

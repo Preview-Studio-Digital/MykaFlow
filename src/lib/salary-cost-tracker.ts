@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getWorkdayProgress } from "@/lib/work-schedule";
 
 export interface UserSalaryConfig {
   userId: string;
@@ -578,5 +579,174 @@ export function extractDealCostAnalysis(
     userSummaries,
     allSessions: sessions,
     hasActiveSession,
+  };
+}
+
+/**
+ * Calcula o total de segundos trabalhados por um usuário em um determinado mês
+ */
+export function getUserMonthlyWorkedSeconds(
+  userId: string,
+  deals: Array<{ id: string; notes?: string | null }>,
+  targetDate: Date = new Date(),
+  currentLiveStartedAt?: string | null
+): number {
+  if (!userId || !deals) return 0;
+  const targetYear = targetDate.getFullYear();
+  const targetMonth = targetDate.getMonth();
+
+  let totalSeconds = 0;
+
+  deals.forEach((deal) => {
+    if (!deal.notes) return;
+
+    // 1. Sessões Concluídas [WORK_LOG:{...}]
+    try {
+      const regex = /\[WORK_LOG:(.*?)\]/g;
+      let match;
+      while ((match = regex.exec(deal.notes)) !== null) {
+        if (match[1]) {
+          const parsed = JSON.parse(match[1]);
+          if (parsed.user_id === userId && parsed.started_at) {
+            const sessDate = new Date(parsed.started_at);
+            if (sessDate.getFullYear() === targetYear && sessDate.getMonth() === targetMonth) {
+              totalSeconds += Number(parsed.duration_seconds) || 0;
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  });
+
+  // 2. Sessão ativa em tempo real
+  if (currentLiveStartedAt) {
+    try {
+      const liveDate = new Date(currentLiveStartedAt);
+      if (liveDate.getFullYear() === targetYear && liveDate.getMonth() === targetMonth) {
+        const liveSec = Math.max(0, Math.floor((Date.now() - liveDate.getTime()) / 1000));
+        totalSeconds += liveSec;
+      }
+    } catch (e) {}
+  }
+
+  return totalSeconds;
+}
+
+/**
+ * Calcula a taxa de ocupação / produtividade histórica do colaborador e o custo efetivo / hora
+ * sincronizada 100% com o cálculo de "Média Usuário" do WorkHoursManager:
+ * 
+ * 1. Coleta todas as sessões do usuário (WORK_LOG + WORK_ACTIVE).
+ * 2. Mapeia os dias únicos em que o usuário teve atividade.
+ * 3. Para cada dia com atividade:
+ *    - Se for hoje: usa os segundos transcorridos de expediente até o momento (todayProgress.elapsedWorkdaySeconds).
+ *    - Se for dia anterior: usa o expediente do dia (9h seg-qui, 8h sex).
+ * 4. Taxa de Ocupação Média do Usuário (%) = (userTotalActiveSec / userTotalElapsedSec)
+ * 5. Custo Efetivo / h = Custo Nominal / (userAvgActivePct / 100)
+ */
+export function computeHistoricalProductivityRate(
+  userId: string,
+  deals: Array<{ id: string; notes?: string | null }>,
+  baseSalary: number,
+  chargesMultiplier: number = 1.0,
+  nominalMonthlyHours: number = 160,
+  currentLiveStartedAt?: string | null
+): {
+  effectiveHourlyRate: number;
+  nominalHourlyRate: number;
+  occupancyRate: number;
+  totalWorkedHours: number;
+  expectedWorkHours: number;
+  totalMonthlyCost: number;
+  daysAnalyzed: number;
+} {
+  const safeSalary = Math.max(0, Number(baseSalary) || 0);
+  const safeMult = Math.max(1.0, Number(chargesMultiplier) || 1.0);
+  const totalMonthlyCost = safeSalary * safeMult;
+  const safeNominalHours = Math.max(1, Number(nominalMonthlyHours) || 160);
+  const nominalHourlyRate = totalMonthlyCost / safeNominalHours;
+
+  if (!userId || !deals || totalMonthlyCost <= 0) {
+    return {
+      effectiveHourlyRate: nominalHourlyRate,
+      nominalHourlyRate,
+      occupancyRate: 1.0,
+      totalWorkedHours: 0,
+      expectedWorkHours: 0,
+      totalMonthlyCost,
+      daysAnalyzed: 0,
+    };
+  }
+
+  // 1. Extrair todas as sessões do usuário
+  let userTotalActiveSec = 0;
+  const userUniqueDays = new Set<string>();
+  const today = new Date();
+  const todayStr = today.toDateString();
+  const todayProgress = getWorkdayProgress(today);
+
+  deals.forEach((deal) => {
+    if (!deal.notes) return;
+    try {
+      const regex = /\[WORK_LOG:(.*?)\]/g;
+      let match;
+      while ((match = regex.exec(deal.notes)) !== null) {
+        if (match[1]) {
+          const parsed = JSON.parse(match[1]);
+          if (parsed.user_id === userId && parsed.started_at) {
+            const sec = Number(parsed.duration_seconds) || 0;
+            userTotalActiveSec += sec;
+            userUniqueDays.add(new Date(parsed.started_at).toDateString());
+          }
+        }
+      }
+    } catch (e) {}
+  });
+
+  // Sessão ao vivo atual
+  if (currentLiveStartedAt) {
+    try {
+      const liveDate = new Date(currentLiveStartedAt);
+      const liveSec = Math.max(0, Math.floor((Date.now() - liveDate.getTime()) / 1000));
+      userTotalActiveSec += liveSec;
+      userUniqueDays.add(liveDate.toDateString());
+    } catch (e) {}
+  }
+
+  // 2. Calcular o tempo de expediente transcorrido nos dias de atividade do colaborador
+  let userTotalElapsedSec = 0;
+  userUniqueDays.forEach((dateStr) => {
+    const d = new Date(dateStr);
+    const dayOfWeek = d.getDay();
+    const isFriday = dayOfWeek === 5;
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const dailyBaseSeconds = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+
+    if (dateStr === todayStr) {
+      userTotalElapsedSec += todayProgress.elapsedWorkdaySeconds;
+    } else {
+      userTotalElapsedSec += dailyBaseSeconds;
+    }
+  });
+
+  // 3. Taxa de ocupação percentual idêntica à do card de horas
+  let userAvgActivePct = 100;
+  if (userTotalElapsedSec > 0) {
+    userAvgActivePct = Math.min(100, Math.round((userTotalActiveSec / userTotalElapsedSec) * 100));
+  } else if (userTotalActiveSec > 0) {
+    userAvgActivePct = 100;
+  }
+
+  const occupancyRate = Math.max(0.10, userAvgActivePct / 100);
+  const effectiveHourlyRate = nominalHourlyRate / occupancyRate;
+
+  return {
+    effectiveHourlyRate,
+    nominalHourlyRate,
+    occupancyRate: userAvgActivePct / 100,
+    totalWorkedHours: userTotalActiveSec / 3600,
+    expectedWorkHours: userTotalElapsedSec / 3600,
+    totalMonthlyCost,
+    daysAnalyzed: userUniqueDays.size,
   };
 }

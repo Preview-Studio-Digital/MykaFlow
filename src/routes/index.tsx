@@ -194,11 +194,7 @@ function ModuleHub() {
       </main>
 
       {/* Footer info */}
-      <footer className="w-full text-center py-4 px-4 text-xs text-muted-foreground border-t border-border/20 select-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-3">
-        <span className="font-semibold uppercase tracking-wider">
-          MYKAFLOW GESTÃO FINANCEIRA & COMERCIAL
-        </span>
-        <span className="hidden sm:inline opacity-40">•</span>
+      <footer className="w-full text-center py-4 px-4 text-xs text-muted-foreground border-t border-border/20 select-none flex items-center justify-center">
         <span className="text-[11px] font-medium text-slate-400">
           Desenvolvido por{" "}
           <a

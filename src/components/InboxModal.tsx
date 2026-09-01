@@ -258,6 +258,7 @@ interface InboxModalProps {
   teamMembers?: Array<{ id: string; display_name?: string | null; email?: string }>;
   onOpenDeal?: (deal: MentionDeal) => void;
   onAcceptCompletion?: (deal: MentionDeal, notificationId?: string) => Promise<void> | void;
+  onMarkMentionAsRead?: (deal: MentionDeal, mentionId: string) => Promise<void> | void;
 }
 
 export function InboxModal({
@@ -268,6 +269,7 @@ export function InboxModal({
   teamMembers: propTeamMembers,
   onOpenDeal,
   onAcceptCompletion,
+  onMarkMentionAsRead,
 }: InboxModalProps) {
   const navigate = useNavigate();
   const [internalDeals, setInternalDeals] = useState<MentionDeal[]>([]);
@@ -475,21 +477,42 @@ export function InboxModal({
   // Marcar menção como lida
   const handleMarkMentionAsRead = async (deal: MentionDeal, mentionId: string) => {
     if (!currentUser) return;
+
+    if (onMarkMentionAsRead) {
+      await onMarkMentionAsRead(deal, mentionId);
+      return;
+    }
+
     const mentions = getDealMentions(deal);
+    const targetMention = mentions.find((m) => m.id === mentionId);
+
+    // Regra estrita: Somente o próprio destinatário pode marcar como lida
+    if (targetMention && targetMention.mentioned_user_id !== currentUser.id) {
+      toast.error("Somente o destinatário da menção pode marcá-la como lida.");
+      return;
+    }
+
+    if (targetMention?.read_by_user) return;
+
     const updatedMentions = mentions.map((m) =>
       m.id === mentionId ? { ...m, read_by_user: true } : m
     );
 
-    let cleanNotes = (deal.notes || "").replace(/\[MENTION:.*?\]\s*/g, "").trim();
+    let cleanNotes = (deal.notes || "").replace(/\[MENTION:[\s\S]*?\]\s*/g, "").trim();
     const newTags = updatedMentions.map((m) => `[MENTION:${JSON.stringify(m)}]`).join("\n");
     const updatedNotes = newTags ? `${newTags}\n${cleanNotes}`.trim() : cleanNotes;
 
     try {
-      await supabase.from("crm_deals").update({ notes: updatedNotes }).eq("id", deal.id);
+      const { error } = await supabase.from("crm_deals").update({ notes: updatedNotes }).eq("id", deal.id);
+      if (error) throw error;
+
       setInternalDeals((prev) =>
         prev.map((d) => (d.id === deal.id ? { ...d, notes: updatedNotes } : d))
       );
-    } catch (e) {}
+      toast.success("Menção marcada como lida!");
+    } catch (e: any) {
+      toast.error("Erro ao marcar como lida: " + (e?.message || "Tente novamente"));
+    }
   };
 
   // Enviar resposta rápida à menção

@@ -524,6 +524,59 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     const todayStr = new Date(currentTime).toDateString();
     const todayProgress = getWorkdayProgress(new Date(currentTime));
 
+    // Determina todos os dias que compõem o período selecionado
+    const now = new Date(currentTime);
+    const periodDays = new Set<string>();
+
+    if (dateFilter === "today") {
+      periodDays.add(now.toDateString());
+    } else if (dateFilter === "yesterday") {
+      const y = new Date(currentTime);
+      y.setDate(now.getDate() - 1);
+      periodDays.add(y.toDateString());
+    } else if (dateFilter === "thisWeek") {
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const daysToDraw = Math.max(5, diffToMonday + 1);
+      const start = new Date(currentTime);
+      start.setDate(now.getDate() - (daysToDraw - 1));
+      for (let i = 0; i < daysToDraw; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        periodDays.add(d.toDateString());
+      }
+    } else if (dateFilter === "last7") {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(currentTime);
+        d.setDate(d.getDate() - i);
+        periodDays.add(d.toDateString());
+      }
+    } else if (dateFilter === "last15") {
+      for (let i = 14; i >= 0; i--) {
+        const d = new Date(currentTime);
+        d.setDate(d.getDate() - i);
+        periodDays.add(d.toDateString());
+      }
+    } else if (dateFilter === "month") {
+      const currentDayOfMonth = now.getDate();
+      for (let i = 1; i <= currentDayOfMonth; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth(), i);
+        periodDays.add(d.toDateString());
+      }
+    } else if (dateFilter === "last30") {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(currentTime);
+        d.setDate(d.getDate() - i);
+        periodDays.add(d.toDateString());
+      }
+    } else {
+      // "all"
+      allSessions.forEach((s) => {
+        periodDays.add(new Date(s.started_at).toDateString());
+      });
+      periodDays.add(now.toDateString());
+    }
+
     // Determina a lista de usuários a avaliar (usuário selecionado ou todos os perfis da equipe)
     const targetUserIds = selectedUserId
       ? [selectedUserId]
@@ -542,7 +595,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
       let userExpectedSec = 0;
       let userInactiveSec = 0;
 
-      uniqueDays.forEach((dateStr) => {
+      periodDays.forEach((dateStr) => {
         const d = new Date(dateStr);
         const dayOfWeek = d.getDay(); // 0 = Dom, 1 = Seg, ..., 5 = Sex, 6 = Sáb
         const isFriday = dayOfWeek === 5;
@@ -1415,23 +1468,28 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
       return null;
     }
 
-    const userPct = metrics.activePct;
+    let userPct = 0;
     let companyPct = 0;
 
     if (productivityTimelineData.length > 0) {
       if (dateFilter === "today" || dateFilter === "yesterday") {
         const lastPoint = productivityTimelineData[productivityTimelineData.length - 1];
+        userPct = lastPoint?.userPct ?? metrics.activePct;
         companyPct = lastPoint?.companyPct ?? (averages.companyAvgActivePct || 0);
       } else {
-        const validPoints = productivityTimelineData.filter((p) => p.companyPct > 0 || p.userPct > 0);
-        if (validPoints.length > 0) {
-          const sumComp = validPoints.reduce((acc, p) => acc + p.companyPct, 0);
-          companyPct = Math.round(sumComp / validPoints.length);
-        } else {
-          companyPct = averages.companyAvgActivePct || 0;
-        }
+        // Média real dos pontos de dias úteis traçados no gráfico do período
+        const businessPoints = productivityTimelineData.filter(
+          (p) => !p.label.startsWith("Sáb") && !p.label.startsWith("Dom") && !p.fullLabel?.toLowerCase().includes("sábado") && !p.fullLabel?.toLowerCase().includes("domingo")
+        );
+        const pointsToAvg = businessPoints.length > 0 ? businessPoints : productivityTimelineData;
+
+        const sumUser = pointsToAvg.reduce((acc, p) => acc + p.userPct, 0);
+        const sumComp = pointsToAvg.reduce((acc, p) => acc + p.companyPct, 0);
+        userPct = Math.round(sumUser / pointsToAvg.length);
+        companyPct = Math.round(sumComp / pointsToAvg.length);
       }
     } else {
+      userPct = metrics.activePct;
       companyPct = averages.companyAvgActivePct || 0;
     }
 
@@ -1972,18 +2030,23 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
         {/* Painel Direito: Gráfico de Produtividade (%) Temporal OU Breakdown quando Expandido */}
         <div className="p-5 rounded-2xl bg-black/40 border border-white/5 flex flex-col min-h-[420px] overflow-hidden justify-between">
-          <div className="mb-3 shrink-0 flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="mb-3 shrink-0 flex items-center justify-between gap-2 flex-nowrap">
+            {/* Título à Esquerda */}
+            <div className="flex items-center gap-2 shrink-0 flex-nowrap">
               <h3 
-                className="text-xs font-black uppercase tracking-widest text-slate-300"
+                className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-slate-300 whitespace-nowrap"
                 title={isExpandedActive ? "Relação de atividades trabalhadas no período" : "Evolução percentual de tempo ativo (produtividade) ao longo do período"}
               >
                 {isExpandedActive ? "Breakdown por Atividades" : "Evolução da Produtividade (%)"}
               </h3>
-              {!isExpandedActive && (
-                selectedUserId && relativePerformance ? (
+            </div>
+
+            {/* Tag / Métrica de Desempenho Relativo Centralizada */}
+            {!isExpandedActive && (
+              <div className="flex items-center justify-center flex-1 px-2 min-w-0">
+                {selectedUserId && relativePerformance ? (
                   <span
-                    className={`text-[9px] sm:text-[10px] font-mono font-black px-2 py-0.5 rounded-md border uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm ${
+                    className={`text-[10px] sm:text-[11px] font-mono font-black px-2.5 py-0.5 rounded-md border uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap transition-all shadow-sm ${
                       relativePerformance.isAbove
                         ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
                         : "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_12px_rgba(244,63,94,0.25)]"
@@ -1991,9 +2054,9 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                     title={`Desempenho Relativo no período: Usuário (${relativePerformance.userPct}%) vs Média da Empresa (${relativePerformance.companyPct}%). ${Math.abs(relativePerformance.delta)} pontos percentuais ${relativePerformance.isAbove ? "acima" : "abaixo"} da média da empresa.`}
                   >
                     {relativePerformance.isAbove ? (
-                      <TrendingUp className="h-3 w-3 text-emerald-400 shrink-0" />
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                     ) : (
-                      <TrendingDown className="h-3 w-3 text-rose-400 shrink-0" />
+                      <TrendingDown className="h-3.5 w-3.5 text-rose-400 shrink-0" />
                     )}
                     <span>
                       {relativePerformance.formattedDelta} vs Empresa
@@ -2001,18 +2064,18 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                   </span>
                 ) : (
                   <span 
-                    className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 uppercase tracking-wider flex items-center gap-1 shadow-sm"
+                    className="text-[10px] sm:text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap shadow-sm"
                     title="Visão Geral consolidada de toda a equipe da empresa"
                   >
-                    <Building2 className="h-3 w-3 text-rose-400 shrink-0" />
+                    <Building2 className="h-3.5 w-3.5 text-rose-400 shrink-0" />
                     <span>Média Consolidada</span>
                   </span>
-                )
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {isExpandedActive ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0 flex-nowrap">
                 {highlightedActivityId && (
                   <button
                     type="button"
@@ -2031,17 +2094,17 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-3 text-[10px] font-mono flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              <div className="flex items-center gap-2 sm:gap-3 text-[9px] sm:text-[10px] font-mono shrink-0 flex-nowrap whitespace-nowrap">
+                <div className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0" />
                   <span className="text-emerald-300 font-bold uppercase">{selectedUserId ? "Média Usuário" : "Média Período"}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
+                <div className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)] shrink-0" />
                   <span className="text-amber-300 font-bold uppercase">Média Empresa</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2.5 rounded-sm bg-slate-400/30 border border-slate-400/60" />
+                <div className="flex items-center gap-1">
+                  <span className="h-2 w-2.5 rounded-sm bg-slate-400/30 border border-slate-400/60 shrink-0" />
                   <span className="text-slate-400 font-bold uppercase">Padrão Mercado</span>
                 </div>
               </div>

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Clock, Briefcase, Calendar, Users, Percent, Hourglass, ArrowLeft, ArrowRight, Sparkles, ExternalLink } from "lucide-react";
+import { Clock, Briefcase, Calendar, Users, Percent, Hourglass, ArrowLeft, ArrowRight, Sparkles, ExternalLink, TrendingUp, TrendingDown, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   getWorkdayProgress,
@@ -920,46 +920,57 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     const compUsersCount = Math.max(1, allUserIds.length);
     const companyBenchmarkPct = averages.companyAvgActivePct || 17;
 
-    // Curva dinâmica de tolerância / mercado ao longo do dia
-    const getHourlyMarketRange = (h: number): [number, number] => {
-      if (h <= 7) return [0, 20];
-      if (h === 8) return [10, 30];
-      if (h === 9) return [20, 45];
-      if (h === 10) return [30, 55];
-      if (h === 11) return [35, 55];
-      if (h === 12 || h === 13) return [30, 50]; // Almoço
-      if (h === 14 || h === 15) return [35, 55]; // Pico da Tarde
+    // Curva dinâmica de tolerância / mercado ao longo do dia (meia em meia hora)
+    const getMarketRangeForTime = (totalMin: number): [number, number] => {
+      const hoursDecimal = totalMin / 60;
+      if (hoursDecimal <= 7.5) return [0, 20];
+      if (hoursDecimal <= 8.0) return [10, 30];
+      if (hoursDecimal <= 8.5) return [15, 38];
+      if (hoursDecimal <= 9.0) return [20, 45];
+      if (hoursDecimal <= 9.5) return [25, 50];
+      if (hoursDecimal <= 10.0) return [30, 55];
+      if (hoursDecimal <= 11.5) return [35, 55];
+      if (hoursDecimal <= 13.0) return [30, 50]; // Almoço
+      if (hoursDecimal <= 15.5) return [35, 55]; // Pico da Tarde
       return [35, 50]; // Fechamento do Dia
     };
 
     if (dateFilter === "today" || dateFilter === "yesterday") {
-      // Evolução Horária Intraday (07h às 17h)
+      // Evolução Intraday a cada 30 minutos (07h00 às 17h30)
       const targetDate = new Date(currentTime);
       if (dateFilter === "yesterday") {
         targetDate.setDate(targetDate.getDate() - 1);
       }
       const isToday = dateFilter === "today";
-      const currentHour = now.getHours();
+      const nowTotalMin = now.getHours() * 60 + now.getMinutes();
 
-      // Horários do expediente (07h às 17h)
-      for (let h = 7; h <= 17; h++) {
-        // Se for hoje e o horário for no futuro, para
-        if (isToday && h > currentHour) {
-          continue;
+      // De 07:00 (420 min) até 17:30 (1050 min) a cada 30 minutos
+      for (let totalMin = 7 * 60; totalMin <= 17 * 60 + 30; totalMin += 30) {
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        const isPastCurrent = isToday && totalMin > nowTotalMin;
+
+        // Se for hoje e o horário do slot for no futuro (mais de 15 min à frente do momento atual), encerra
+        if (isPastCurrent && totalMin - nowTotalMin > 15) {
+          break;
         }
 
-        const hourLabel = `${String(h).padStart(2, "0")}h`;
         const pointDate = new Date(targetDate);
-        if (isToday && h === currentHour) {
+        let isLivePoint = false;
+
+        if (isToday && (Math.abs(totalMin - nowTotalMin) <= 15 || (totalMin <= nowTotalMin && totalMin + 30 > nowTotalMin))) {
+          // Ponto em tempo real (Ao Vivo)
           pointDate.setTime(now.getTime());
+          isLivePoint = true;
         } else {
-          pointDate.setHours(h + 1, 0, 0, 0);
+          pointDate.setHours(h, m, 0, 0);
         }
 
+        const hourLabel = m === 0 ? `${String(h).padStart(2, "0")}h` : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
         const workdayProgress = getWorkdayProgress(pointDate);
         const elapsedWorkdaySec = workdayProgress.elapsedWorkdaySeconds;
 
-        // Calcula tempo ativo acumulado do início do dia (07h30) até o ponto atual
+        // Calcula tempo ativo acumulado do início do dia até o ponto atual
         let userAccumActiveSec = 0;
         let companyAccumActiveSec = 0;
 
@@ -994,13 +1005,13 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
           ? Math.min(100, Math.round((companyAccumActiveSec / (elapsedWorkdaySec * compUsersCount)) * 100))
           : 0;
 
-        const [marketMin, marketMax] = getHourlyMarketRange(h);
+        const [marketMin, marketMax] = getMarketRangeForTime(totalMin);
 
         result.push({
           label: hourLabel,
-          fullLabel: isToday && h === currentHour
+          fullLabel: isLivePoint
             ? `${hourLabel} (${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} - Ao Vivo)`
-            : `${hourLabel}:00`,
+            : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
           userPct,
           companyPct,
           userSeconds: userAccumActiveSec,
@@ -1009,6 +1020,10 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
           marketMax,
           marketRange: [marketMin, marketMax],
         });
+
+        if (isLivePoint) {
+          break;
+        }
       }
     } else if (dateFilter === "thisWeek") {
       // Semana atual (a partir de segunda-feira até hoje, garantindo pelo menos 5 dias no gráfico)
@@ -1393,6 +1408,47 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     });
     return stops;
   }, [productivityTimelineData]);
+
+  // Comparativo de Desempenho Relativo do Usuário vs Empresa no Período Selecionado
+  const relativePerformance = useMemo(() => {
+    if (!selectedUserId) {
+      return null;
+    }
+
+    const userPct = metrics.activePct;
+    let companyPct = 0;
+
+    if (productivityTimelineData.length > 0) {
+      if (dateFilter === "today" || dateFilter === "yesterday") {
+        const lastPoint = productivityTimelineData[productivityTimelineData.length - 1];
+        companyPct = lastPoint?.companyPct ?? (averages.companyAvgActivePct || 0);
+      } else {
+        const validPoints = productivityTimelineData.filter((p) => p.companyPct > 0 || p.userPct > 0);
+        if (validPoints.length > 0) {
+          const sumComp = validPoints.reduce((acc, p) => acc + p.companyPct, 0);
+          companyPct = Math.round(sumComp / validPoints.length);
+        } else {
+          companyPct = averages.companyAvgActivePct || 0;
+        }
+      }
+    } else {
+      companyPct = averages.companyAvgActivePct || 0;
+    }
+
+    const delta = userPct - companyPct;
+    const isAbove = delta >= 0;
+    const isZero = delta === 0;
+
+    return {
+      userPct,
+      companyPct,
+      delta,
+      isAbove,
+      isZero,
+      formattedDelta: `${isAbove && !isZero ? "+" : ""}${delta}%`,
+      formattedPP: `${isAbove && !isZero ? "+" : ""}${delta} p.p.`,
+    };
+  }, [selectedUserId, metrics.activePct, productivityTimelineData, dateFilter, averages.companyAvgActivePct]);
 
   const ACTIVITY_PALETTE = [
     "#10b981", // Emerald
@@ -1925,9 +1981,33 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                 {isExpandedActive ? "Breakdown por Atividades" : "Evolução da Produtividade (%)"}
               </h3>
               {!isExpandedActive && (
-                <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 uppercase tracking-wider">
-                  Usuário x Empresa
-                </span>
+                selectedUserId && relativePerformance ? (
+                  <span
+                    className={`text-[9px] sm:text-[10px] font-mono font-black px-2 py-0.5 rounded-md border uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm ${
+                      relativePerformance.isAbove
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+                        : "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_12px_rgba(244,63,94,0.25)]"
+                    }`}
+                    title={`Desempenho Relativo no período: Usuário (${relativePerformance.userPct}%) vs Média da Empresa (${relativePerformance.companyPct}%). ${Math.abs(relativePerformance.delta)} pontos percentuais ${relativePerformance.isAbove ? "acima" : "abaixo"} da média da empresa.`}
+                  >
+                    {relativePerformance.isAbove ? (
+                      <TrendingUp className="h-3 w-3 text-emerald-400 shrink-0" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3 text-rose-400 shrink-0" />
+                    )}
+                    <span>
+                      {relativePerformance.formattedDelta} vs Empresa
+                    </span>
+                  </span>
+                ) : (
+                  <span 
+                    className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 uppercase tracking-wider flex items-center gap-1 shadow-sm"
+                    title="Visão Geral consolidada de toda a equipe da empresa"
+                  >
+                    <Building2 className="h-3 w-3 text-rose-400 shrink-0" />
+                    <span>Média Consolidada</span>
+                  </span>
+                )
               )}
             </div>
 

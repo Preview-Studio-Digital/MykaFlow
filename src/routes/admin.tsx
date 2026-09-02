@@ -556,40 +556,95 @@ function AdminPage() {
                       </div>
                     </div>
 
-                    {/* Cards à Direita: Custo Nominal e Custo Efetivo / Hora baseado na Média Histórica de Produtividade */}
-                    {!isCompanyView && (() => {
-                      const sCfg = getUserSalaryConfig(selectedUserForProductivity.id);
-                      const {
-                        effectiveHourlyRate,
-                        nominalHourlyRate,
-                        occupancyRate,
-                        totalWorkedHours,
-                        expectedWorkHours,
-                        totalMonthlyCost,
-                        daysAnalyzed,
-                      } = computeHistoricalProductivityRate(
-                        selectedUserForProductivity.id,
-                        dealsWithNotes,
-                        sCfg.baseSalary,
-                        sCfg.chargesMultiplier,
-                        sCfg.monthlyHours || 160,
-                        activeActivities[selectedUserForProductivity.id]?.startedAt
-                      );
+                    {/* Cards à Direita: Custo Nominal e Custo Efetivo / Hora baseado na Média Histórica de Produtividade (Individual e Empresa) */}
+                    {(() => {
+                      let nominalHourlyRate = 0;
+                      let effectiveHourlyRate = 0;
+                      let occupancyPercent = 100;
+                      let totalWorkedHours = 0;
+                      let expectedWorkHours = 0;
+                      let totalMonthlyCost = 0;
+                      let daysAnalyzed = 0;
+                      let nominalHoursLabel = "160h";
+                      let nominalCardTooltip = "";
+                      let effectiveCardTooltip = "";
 
-                      const occupancyPercent = Math.round(occupancyRate * 100);
+                      if (isCompanyView) {
+                        // Consolidação de toda a equipe para a Gestão da Empresa
+                        let companyNominalHours = 0;
+                        profiles.forEach((p) => {
+                          const sCfg = getUserSalaryConfig(p.id);
+                          const userRate = computeHistoricalProductivityRate(
+                            p.id,
+                            dealsWithNotes,
+                            sCfg.baseSalary,
+                            sCfg.chargesMultiplier,
+                            sCfg.monthlyHours || 160,
+                            activeActivities[p.id]?.startedAt
+                          );
+
+                          totalMonthlyCost += userRate.totalMonthlyCost;
+                          companyNominalHours += sCfg.monthlyHours || 160;
+                          totalWorkedHours += userRate.totalWorkedHours;
+                          expectedWorkHours += userRate.expectedWorkHours;
+                          if (userRate.daysAnalyzed > daysAnalyzed) {
+                            daysAnalyzed = userRate.daysAnalyzed;
+                          }
+                        });
+
+                        nominalHoursLabel = `${companyNominalHours}h`;
+                        nominalHourlyRate = companyNominalHours > 0 ? totalMonthlyCost / companyNominalHours : 0;
+                        const companyOccupancyRate = expectedWorkHours > 0 ? Math.min(1, totalWorkedHours / expectedWorkHours) : (totalWorkedHours > 0 ? 1 : 1);
+                        occupancyPercent = Math.round(companyOccupancyRate * 100);
+                        effectiveHourlyRate = companyOccupancyRate > 0.05 ? nominalHourlyRate / companyOccupancyRate : nominalHourlyRate;
+
+                        nominalCardTooltip = `Custo Total Folha Empresa: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} / Base Contratual Total: ${companyNominalHours}h mês (${profiles.length} colaboradores)`;
+                        effectiveCardTooltip = totalWorkedHours > 0
+                          ? `Média Histórica da Empresa: ${occupancyPercent}% de ocupação produtiva (${totalWorkedHours.toFixed(1)}h ativas de ${expectedWorkHours.toFixed(0)}h esperadas em ${daysAnalyzed} dias úteis). Custo Nominal Médio R$ ${nominalHourlyRate.toFixed(2)}/h ÷ ${occupancyPercent}% = R$ ${effectiveHourlyRate.toFixed(2)}/h.`
+                          : `Sem histórico suficiente registrado da equipe. Custo total mensal da folha: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+                      } else {
+                        // Gestão Individual de um Colaborador
+                        const sCfg = getUserSalaryConfig(selectedUserForProductivity.id);
+                        const userRate = computeHistoricalProductivityRate(
+                          selectedUserForProductivity.id,
+                          dealsWithNotes,
+                          sCfg.baseSalary,
+                          sCfg.chargesMultiplier,
+                          sCfg.monthlyHours || 160,
+                          activeActivities[selectedUserForProductivity.id]?.startedAt
+                        );
+
+                        nominalHourlyRate = userRate.nominalHourlyRate;
+                        effectiveHourlyRate = userRate.effectiveHourlyRate;
+                        totalMonthlyCost = userRate.totalMonthlyCost;
+                        totalWorkedHours = userRate.totalWorkedHours;
+                        expectedWorkHours = userRate.expectedWorkHours;
+                        daysAnalyzed = userRate.daysAnalyzed;
+                        occupancyPercent = Math.round(userRate.occupancyRate * 100);
+                        nominalHoursLabel = `${sCfg.monthlyHours || 160}h`;
+
+                        nominalCardTooltip = `Custo Total Mensal: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} / Base Contratual: ${sCfg.monthlyHours || 160}h mês`;
+                        effectiveCardTooltip = totalWorkedHours > 0
+                          ? `Média Histórica: ${occupancyPercent}% de ocupação produtiva (${totalWorkedHours.toFixed(1)}h ativas de ${expectedWorkHours.toFixed(0)}h esperadas em ${daysAnalyzed} dias úteis). Custo Nominal R$ ${nominalHourlyRate.toFixed(2)}/h ÷ ${occupancyPercent}% = R$ ${effectiveHourlyRate.toFixed(2)}/h.`
+                          : `Sem histórico suficiente registrado. Custo total mensal: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+                      }
+
+                      const accentColor = isCompanyView ? "text-rose-400" : "text-cyan-400";
+                      const borderNominal = isCompanyView ? "border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.15)]" : "border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]";
+                      const subLabelColor = isCompanyView ? "text-rose-300/70" : "text-cyan-300/70";
 
                       return (
                         <div className="flex items-center gap-2.5 shrink-0 animate-in fade-in ml-auto pl-2">
-                          {/* Card 1: Custo Nominal / Hora (Custo Orçado Padrão de 160h) */}
+                          {/* Card 1: Custo Nominal / Hora (Custo Orçado Padrão) */}
                           <div 
-                            className="flex flex-col justify-center px-3 py-1.5 rounded-xl bg-slate-900/90 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)] text-left min-w-[130px] sm:min-w-[145px]"
-                            title={`Custo Total Mensal: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} / Base Contratual: ${sCfg.monthlyHours || 160}h mês`}
+                            className={`flex flex-col justify-center px-3 py-1.5 rounded-xl bg-slate-900/90 border ${borderNominal} text-left min-w-[130px] sm:min-w-[145px]`}
+                            title={nominalCardTooltip}
                           >
                             <div className="flex items-center justify-between gap-1">
-                              <span className="text-[9px] font-mono font-black uppercase tracking-wider text-cyan-400 leading-tight">
+                              <span className={`text-[9px] font-mono font-black uppercase tracking-wider ${accentColor} leading-tight`}>
                                 CUSTO NOMINAL / H
                               </span>
-                              <span className="text-[8px] font-mono text-cyan-300/70 font-bold">160h</span>
+                              <span className={`text-[8px] font-mono ${subLabelColor} font-bold`}>{nominalHoursLabel}</span>
                             </div>
                             <span className="text-xs sm:text-sm font-mono font-black text-white leading-tight mt-0.5">
                               {nominalHourlyRate > 0 ? `R$ ${nominalHourlyRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h` : "R$ 0,00/h"}
@@ -602,31 +657,45 @@ function AdminPage() {
                               effectiveHourlyRate > nominalHourlyRate * 1.05
                                 ? "border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
                                 : effectiveHourlyRate > 0
-                                ? "border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                                ? isCompanyView
+                                  ? "border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.2)]"
+                                  : "border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
                                 : "border-white/15 shadow-none"
                             }`}
-                            title={
-                              totalWorkedHours > 0
-                                ? `Média Histórica: ${occupancyPercent}% de ocupação produtiva (${totalWorkedHours.toFixed(1)}h ativas de ${expectedWorkHours.toFixed(0)}h esperadas em ${daysAnalyzed} dias úteis). Custo Nominal R$ ${nominalHourlyRate.toFixed(2)}/h ÷ ${occupancyPercent}% = R$ ${effectiveHourlyRate.toFixed(2)}/h.`
-                                : `Sem histórico suficiente registrado. Custo total mensal: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
-                            }
+                            title={effectiveCardTooltip}
                           >
                             <div className="flex items-center justify-between gap-1">
                               <span className={`text-[9px] font-mono font-black uppercase tracking-wider leading-tight ${
-                                effectiveHourlyRate > nominalHourlyRate * 1.05 ? "text-amber-400" : effectiveHourlyRate > 0 ? "text-emerald-400" : "text-slate-400"
+                                effectiveHourlyRate > nominalHourlyRate * 1.05
+                                  ? "text-amber-400"
+                                  : effectiveHourlyRate > 0
+                                  ? isCompanyView
+                                    ? "text-rose-400"
+                                    : "text-emerald-400"
+                                  : "text-slate-400"
                               }`}>
                                 CUSTO EFETIVO / H
                               </span>
                               {totalWorkedHours > 0 && (
                                 <span className={`text-[8px] font-mono font-black px-1.5 py-0.5 rounded ${
-                                  occupancyPercent < 75 ? "bg-amber-500/20 text-amber-300" : "bg-emerald-500/20 text-emerald-300"
+                                  occupancyPercent < 75
+                                    ? "bg-amber-500/20 text-amber-300"
+                                    : isCompanyView
+                                    ? "bg-rose-500/20 text-rose-300"
+                                    : "bg-emerald-500/20 text-emerald-300"
                                 }`} title={`Taxa Média de Ocupação: ${occupancyPercent}%`}>
                                   {occupancyPercent}%
                                 </span>
                               )}
                             </div>
                             <span className={`text-xs sm:text-sm font-mono font-black leading-tight mt-0.5 ${
-                              effectiveHourlyRate > nominalHourlyRate * 1.05 ? "text-amber-300" : effectiveHourlyRate > 0 ? "text-emerald-300" : "text-slate-400"
+                              effectiveHourlyRate > nominalHourlyRate * 1.05
+                                ? "text-amber-300"
+                                : effectiveHourlyRate > 0
+                                ? isCompanyView
+                                  ? "text-rose-300"
+                                  : "text-emerald-300"
+                                : "text-slate-400"
                             }`}>
                               {effectiveHourlyRate > 0 ? `R$ ${effectiveHourlyRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h` : "R$ 0,00/h"}
                             </span>
@@ -823,7 +892,7 @@ function UserList({
               <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                 <button
                   onClick={() => setSelectedUserForProductivity(companyProfile)}
-                  className="btn-ghost-neon px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider text-rose-400 border-rose-500/40 flex items-center gap-1.5 hover:bg-rose-500/15 hover:border-rose-400 hover:text-rose-200 cursor-pointer shadow-sm hover:scale-105 transition-all"
+                  className="px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold uppercase tracking-wider text-rose-300 hover:text-white bg-rose-500/20 hover:bg-rose-500/35 border border-rose-500/50 hover:border-rose-400 flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(244,63,94,0.2)] hover:shadow-[0_0_20px_rgba(244,63,94,0.35)] hover:scale-105 transition-all"
                   title="Ver métricas de produtividade e horas consolidadas da empresa"
                 >
                   <Clock className="h-3.5 w-3.5 text-rose-400" />

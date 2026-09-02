@@ -91,6 +91,8 @@ export interface MentionDeal {
   stage: string;
   notes?: string | null;
   req_number?: string | null;
+  customer_name?: string | null;
+  customer_id?: string | null;
   created_at?: string;
   user_id?: string | null;
   assigned_user_id?: string | null;
@@ -411,7 +413,7 @@ export function InboxModal({
     }
   };
 
-  // Aceitar Conclusão de Tarefa / Notificação
+  // Aceitar Armazenamento de Tarefa / Notificação
   const handleDirectAcceptCompletion = async (deal: MentionDeal, notification: TaskCompletionNotification) => {
     setAcceptingNotifId(notification.id);
     try {
@@ -440,7 +442,7 @@ export function InboxModal({
         const notifTags = updatedNotifs.map((n) => `[TASK_COMPLETION_NOTIFICATION:${JSON.stringify(n)}]`).join("\n");
         const originStage = deal.stage === "archived" ? "lead" : deal.stage;
         const originTag = (deal.notes || "").includes("<!-- ORIGIN_STAGE:") ? "" : `<!-- ORIGIN_STAGE:${originStage} -->\n`;
-        const autoLog = `${userName} aceitou a conclusão da atividade. Atividade armazenada com sucesso.`;
+        const autoLog = `${userName} aceitou o armazenamento da atividade. Atividade arquivada e armazenada com sucesso.`;
         const finalNotes = `${originTag}${notifTags}\n${cleanNotes}\n\n${autoLog}`.trim();
 
         const { error } = await supabase
@@ -460,15 +462,15 @@ export function InboxModal({
             user_id: currentUser?.id,
             user_name: userName,
             action_type: "completion_accepted",
-            description: `Conclusão aceita por ${userName}. Atividade armazenada como concluída.`,
+            description: `Armazenamento aceito por ${userName}. Atividade arquivada e armazenada.`,
           });
         } catch (hErr) {}
 
-        toast.success("Conclusão aceita com sucesso! A atividade foi arquivada.");
+        toast.success("Armazenamento aceito com sucesso! A atividade foi arquivada.");
         await fetchDeals();
       }
     } catch (err: any) {
-      toast.error("Erro ao aceitar conclusão: " + (err.message || "Tente novamente"));
+      toast.error("Erro ao aceitar armazenamento: " + (err.message || "Tente novamente"));
     } finally {
       setAcceptingNotifId(null);
     }
@@ -769,7 +771,7 @@ export function InboxModal({
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-amber-300">
-                      Notificações de Conclusão
+                      Notificações de Armazenamento
                     </h3>
                     {userNotificationsData.pendingCount > 0 && (
                       <span className="px-2 py-0.5 rounded-full bg-amber-500 text-black font-mono text-[10px] font-black animate-pulse">
@@ -778,7 +780,7 @@ export function InboxModal({
                     )}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Atividades criadas por você que foram finalizadas pelos responsáveis.
+                    Atividades criadas por você que foram armazenadas pelos responsáveis.
                   </p>
                 </div>
               </div>
@@ -827,17 +829,28 @@ export function InboxModal({
                 <div className="flex flex-col items-center justify-center text-center p-8 border border-dashed border-white/10 rounded-2xl bg-white/[0.01]">
                   <CheckCircle2 className="h-8 w-8 text-amber-400/50 mb-2" />
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
-                    Nenhuma notificação de conclusão
+                    Nenhuma notificação de armazenamento
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1 max-w-xs">
-                    Quando um responsável atribuído finalizar uma tarefa criada por você, o aviso de aceite aparecerá aqui.
+                    Quando um responsável atribuído armazenar uma tarefa criada por você, o aviso de aceite aparecerá aqui.
                   </p>
                 </div>
               ) : (
                 filteredNotifications.map(({ notification, deal }) => {
                   const isPending = notification.status === "pending_acceptance";
                   const reqNum = notification.req_number || getDealReqNumber(deal, deals);
-                  const cleanTitle = getCleanDealTitle(notification.deal_title || deal.title);
+                  const cleanTitle = (() => {
+                    const notifTitle = notification.deal_title ? getCleanDealTitle(notification.deal_title) : "";
+                    if (notifTitle && notifTitle.includes(" - ")) {
+                      return notifTitle;
+                    }
+                    const custName = (deal as any)?.customer_name;
+                    const baseTitle = notifTitle || getCleanDealTitle(deal.title);
+                    if (custName && custName !== "Uso Interno / Empresa" && !baseTitle.startsWith(custName.toUpperCase())) {
+                      return `${custName.trim().toUpperCase()} - ${baseTitle}`;
+                    }
+                    return baseTitle;
+                  })();
 
                   return (
                     <div
@@ -865,7 +878,7 @@ export function InboxModal({
                               : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                           }`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${isPending ? "bg-amber-400" : "bg-emerald-400"}`} />
-                            {isPending ? "AGUARDANDO SEU ACEITE" : "CONCLUSAO ACEITA"}
+                            {isPending ? "AGUARDANDO SEU ACEITE" : "ARMAZENAMENTO ACEITO"}
                           </span>
                         </div>
 
@@ -886,7 +899,7 @@ export function InboxModal({
                           <span className="font-bold text-amber-400 uppercase">
                             {notification.concluded_by_user_name}
                           </span>{" "}
-                          finalizou a sua atividade:
+                          armazenou a sua atividade:
                         </p>
                         <h4 className="text-sm font-black uppercase text-white tracking-wide">
                           {cleanTitle}
@@ -919,7 +932,7 @@ export function InboxModal({
                             className="px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-black bg-emerald-400 hover:bg-emerald-300 border border-emerald-300 flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-105 cursor-pointer transition-all"
                           >
                             <CheckCheck className="h-4 w-4" />
-                            <span>{acceptingNotifId === notification.id ? "Aceitando..." : "Aceitar Conclusão"}</span>
+                            <span>{acceptingNotifId === notification.id ? "Aceitando..." : "Aceitar Armazenamento"}</span>
                           </button>
                         )}
                       </div>
@@ -1012,7 +1025,12 @@ export function InboxModal({
                   const isUnread = !mention.read_by_user;
                   const itemNumber = userMentionsData.all.length - idx;
                   const formattedNumber = String(itemNumber).padStart(2, "0");
-                  const cleanTitle = getCleanDealTitle(deal.title);
+                  const custName = (deal as any)?.customer_name;
+                  const rawCleanTitle = getCleanDealTitle(deal.title);
+                  const cleanTitle =
+                    custName && custName !== "Uso Interno / Empresa" && !rawCleanTitle.startsWith(custName.toUpperCase())
+                      ? `${custName.trim().toUpperCase()} - ${rawCleanTitle}`
+                      : rawCleanTitle;
                   const dealReqNumber = getDealReqNumber(deal, deals);
                   const isReplying = replyingToMentionId === mention.id;
 

@@ -2520,6 +2520,23 @@ function CrmDashboard() {
     return null;
   };
 
+  // Helper para obter o título completo de exibição com cliente (ex: "CLIENTE - TÍTULO" ou apenas "TÍTULO")
+  const getDealDisplayTitle = (deal: Deal | null): string => {
+    if (!deal) return "";
+    const cardCustomer = getDealCustomer(deal);
+    const cardCustomerName =
+      cardCustomer?.company_name ||
+      cardCustomer?.name ||
+      (deal.customer_name && deal.customer_name !== "Uso Interno / Empresa"
+        ? deal.customer_name
+        : null);
+    const cleanTitle = getCleanDealTitle(deal.title);
+    if (cardCustomerName && cardCustomerName.trim() !== "") {
+      return `${cardCustomerName.trim().toUpperCase()} - ${cleanTitle}`;
+    }
+    return cleanTitle;
+  };
+
   // Helper para limpar e formatar notas para exibição no hover do card
   const getCleanHoverNote = (notes?: string | null, authorFallback?: string) => {
     if (!notes) return { author: (authorFallback || "Usuário").toUpperCase(), text: "Sem atualizações registradas." };
@@ -3002,6 +3019,7 @@ function CrmDashboard() {
 
         const currentDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
         const finalUrl = docUrl || currentDoc?.url;
+        const isBudget = isBudgetDeal(selectedDealForHistory);
 
         return (
           <div
@@ -3013,7 +3031,7 @@ function CrmDashboard() {
                 <FileCheck className="h-4 w-4" />
               </div>
               <span className="font-bold text-white uppercase">{userName}</span>
-              <span className="text-emerald-200/90 font-medium">anexou o Orçamento Oficial:</span>
+              <span className="text-emerald-200/90 font-medium">{isBudget ? "anexou o Orçamento Oficial:" : "anexou o Documento:"}</span>
               {finalUrl ? (
                 <button
                   type="button"
@@ -3022,7 +3040,7 @@ function CrmDashboard() {
                     setPreviewingQuoteFile({ url: finalUrl, name: fileName, isContract: false });
                   }}
                   className="font-black text-emerald-300 hover:text-emerald-200 underline underline-offset-2 cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1"
-                  title="Clique para visualizar o orçamento"
+                  title={isBudget ? "Clique para visualizar o orçamento" : "Clique para visualizar o documento"}
                 >
                   <span>{fileName}</span>
                   {fileSize ? <span className="font-mono text-[10px] no-underline font-normal text-muted-foreground">({fileSize})</span> : null}
@@ -4462,16 +4480,17 @@ function CrmDashboard() {
     }
 
     const reqNum = getDealReqNumber(deal, deals);
+    const displayTitle = getDealDisplayTitle(deal);
     const cleanTitle = getCleanDealTitle(deal.title);
     const isNotAuthor = Boolean(deal.user_id && deal.user_id !== user?.id);
 
     setCrmConfirmConfig({
       isOpen: true,
-      title: isNotAuthor ? `Finalizar Vinculada Nº ${reqNum}` : `Armazenar Vinculada Nº ${reqNum}`,
+      title: `Armazenar Vinculada Nº ${reqNum}`,
       description: isNotAuthor
-        ? `Deseja finalizar a Vinculada Nº ${reqNum} ("${cleanTitle}")?\n\nEla permanecerá visível na coluna até que o autor (${deal.creator_name || "Autor"}) aceite o fechamento, e o responsável pela atividade principal será notificado.`
-        : `Deseja armazenar a Vinculada Nº ${reqNum} ("${cleanTitle}")?\n\nEla será fechada e armazenada no repositório de arquivadas/armazenadas, e o responsável pela atividade principal receberá a notificação.`,
-      confirmText: isNotAuthor ? "Finalizar e Notificar Autor" : "Armazenar Vinculada",
+        ? `Deseja armazenar a Vinculada Nº ${reqNum} ("${displayTitle}")?\n\nEla permanecerá visível na coluna até que o autor (${deal.creator_name || "Autor"}) aceite o armazenamento, e o responsável pela atividade principal será notificado.`
+        : `Deseja armazenar a Vinculada Nº ${reqNum} ("${displayTitle}")?\n\nEla será fechada e armazenada no repositório de arquivadas/armazenadas, e o responsável pela atividade principal receberá a notificação.`,
+      confirmText: isNotAuthor ? "Armazenar e Notificar Autor" : "Armazenar Vinculada",
       variant: isNotAuthor ? "info" : "success",
       onConfirm: async () => {
         setCrmConfirmConfig(null);
@@ -4483,7 +4502,7 @@ function CrmDashboard() {
           const completionNotif: TaskCompletionNotification = {
             id: crypto.randomUUID(),
             deal_id: deal.id,
-            deal_title: cleanTitle,
+            deal_title: displayTitle,
             req_number: reqNum,
             author_id: deal.user_id || "",
             author_name: deal.creator_name || "Autor",
@@ -4496,7 +4515,7 @@ function CrmDashboard() {
           const notifTag = `[TASK_COMPLETION_NOTIFICATION:${JSON.stringify(completionNotif)}]`;
 
           // 1. Linha automática imutável do armazenamento na vinculada
-          const autoLogLine = `${userName} armazenou a vinculada "${cleanTitle}".`;
+          const autoLogLine = `${userName} armazenou a vinculada "${displayTitle}".`;
           const existingTags = (deal.notes || "").match(/\[(QUOTE_FILE|PARENT_DEAL|WORK_LOG|WORK_ACTIVE|QUOTE_DATA|MENTION|MENTION_REPLY|SUBTASK_COMPLETION|TASK_COMPLETION_NOTIFICATION):.*?\]/g) || [];
           const cleanOldNotes = (deal.notes || "")
             .replace(/\[(QUOTE_FILE|PARENT_DEAL|WORK_LOG|WORK_ACTIVE|QUOTE_DATA|MENTION|MENTION_REPLY|SUBTASK_COMPLETION|TASK_COMPLETION_NOTIFICATION):.*?\]\s*/g, "")
@@ -4532,7 +4551,7 @@ function CrmDashboard() {
             const subtaskCompletionObj: DealSubtaskCompletion = {
               id: crypto.randomUUID(),
               subtaskId: deal.id,
-              subtaskTitle: cleanTitle,
+              subtaskTitle: displayTitle,
               reqNumber: reqNum,
               userName: userName,
               user_id: user?.id || "",
@@ -4540,7 +4559,7 @@ function CrmDashboard() {
               created_at: nowIso,
             };
             const completionTag = `[SUBTASK_COMPLETION:${JSON.stringify(subtaskCompletionObj)}]`;
-            const parentAutoLog = `${userName} armazenou/finalizou a vinculada "${cleanTitle}" (Nº ${reqNum}).`;
+            const parentAutoLog = `${userName} armazenou a vinculada "${displayTitle}" (Nº ${reqNum}).`;
             const updatedParentNotes = parentDeal.notes
               ? `${completionTag}\n${parentDeal.notes}\n\n${parentAutoLog}`
               : `${completionTag}\n${parentAutoLog}`;
@@ -4583,7 +4602,7 @@ function CrmDashboard() {
           setSelectedDealForHistory(null);
           toast.success(
             isNotAuthor
-              ? `Vinculada Nº ${reqNum} finalizada! Notificação enviada ao autor para aceite.`
+              ? `Vinculada Nº ${reqNum} armazenada! Notificação enviada ao autor para aceite.`
               : `Vinculada Nº ${reqNum} armazenada com sucesso!`
           );
         } catch (err: any) {
@@ -4597,12 +4616,12 @@ function CrmDashboard() {
   function handleCompleteContract(deal: Deal) {
     const rawComment = (newCommentRef.current || newComment).trim();
     const reqNum = getDealReqNumber(deal, deals);
-    const cleanTitle = getCleanDealTitle(deal.title);
+    const displayTitle = getDealDisplayTitle(deal);
 
     setCrmConfirmConfig({
       isOpen: true,
       title: `Concluir Contrato Nº ${reqNum}`,
-      description: `Deseja concluir o Contrato Nº ${reqNum} ("${cleanTitle}")?\n\n• A atividade será finalizada e endereçada para a coluna "CONCLUÍDOS".\n• Qualquer prazo previamente estipulado será automaticamente desconsiderado e encerrado.`,
+      description: `Deseja concluir o Contrato Nº ${reqNum} ("${displayTitle}")?\n\n• A atividade será finalizada e endereçada para a coluna "CONCLUÍDOS".\n• Qualquer prazo previamente estipulado será automaticamente desconsiderado e encerrado.`,
       confirmText: "Concluir Contrato",
       variant: "success",
       onConfirm: async () => {
@@ -4662,12 +4681,12 @@ function CrmDashboard() {
     });
   }
 
-  // Arquivar / Concluir Atividade (Disponível para Tarefas, Concluídos e Perdidos)
+  // Arquivar / Armazenar Atividade (Disponível para Tarefas, Concluídos e Perdidos)
   function handleArchiveDeal(deal: Deal) {
     const isLinkedSubtask = Boolean(getParentDealInfo(deal));
     const reqNum = getDealReqNumber(deal, deals);
     const typeLabel = isLinkedSubtask ? "Vinculada" : "Atividade";
-    const cleanTitle = getCleanDealTitle(deal.title);
+    const displayTitle = getDealDisplayTitle(deal);
 
     // Se estiver em "archived", recupera o originStage anterior, senão usa o stage atual
     const originStage = deal.stage === "archived" ? getArchivedOriginStage(deal) : (deal.stage as "lead" | "completed" | "lost");
@@ -4676,11 +4695,11 @@ function CrmDashboard() {
 
     setCrmConfirmConfig({
       isOpen: true,
-      title: isNotAuthor ? `Finalizar ${typeLabel} Nº ${reqNum}` : `Arquivar ${typeLabel} Nº ${reqNum}`,
+      title: `Armazenar ${typeLabel} Nº ${reqNum}`,
       description: isNotAuthor
-        ? `Deseja finalizar a ${typeLabel} Nº ${reqNum} ("${cleanTitle}")?\n\nEla permanecerá visível na coluna até que o autor (${deal.creator_name || "Autor"}) aceite a conclusão.`
-        : `Deseja arquivar a ${typeLabel} Nº ${reqNum} ("${cleanTitle}")?\n\nEla sairá do quadro ativo e ficará armazenada no rodapé de "ARQUIVADAS" da coluna de ${destColumnName} com todo o seu histórico preservado.`,
-      confirmText: isNotAuthor ? "Finalizar e Notificar Autor" : "Arquivar Atividade",
+        ? `Deseja armazenar a ${typeLabel} Nº ${reqNum} ("${displayTitle}")?\n\nEla permanecerá visível na coluna até que o autor (${deal.creator_name || "Autor"}) aceite o armazenamento.`
+        : `Deseja armazenar a ${typeLabel} Nº ${reqNum} ("${displayTitle}")?\n\nEla sairá do quadro ativo e ficará armazenada no rodapé de "ARQUIVADAS" da coluna de ${destColumnName} com todo o seu histórico preservado.`,
+      confirmText: isNotAuthor ? "Armazenar e Notificar Autor" : `Armazenar ${typeLabel}`,
       variant: isNotAuthor ? "info" : "danger",
       onConfirm: async () => {
         setCrmConfirmConfig(null);
@@ -4698,7 +4717,7 @@ function CrmDashboard() {
           const completionNotif: TaskCompletionNotification = {
             id: crypto.randomUUID(),
             deal_id: deal.id,
-            deal_title: cleanTitle,
+            deal_title: displayTitle,
             req_number: reqNum,
             author_id: deal.user_id || "",
             author_name: deal.creator_name || "Autor",
@@ -4732,8 +4751,8 @@ function CrmDashboard() {
             deal.id,
             isNotAuthor ? "completion_submitted" : "archived",
             isNotAuthor
-              ? `${typeLabel} finalizada por ${userName}. Notificação de aceite enviada ao autor (${deal.creator_name || "Autor"}). Atualização: "${userNotes}"`
-              : `${typeLabel} arquivada por ${userName}. [ORIGIN_STAGE:${originStage}]. Atualização final: "${userNotes}"`
+              ? `${typeLabel} armazenada por ${userName}. Notificação de aceite enviada ao autor (${deal.creator_name || "Autor"}). Atualização: "${userNotes}"`
+              : `${typeLabel} armazenada por ${userName}. [ORIGIN_STAGE:${originStage}]. Atualização final: "${userNotes}"`
           );
 
           // Notifica a atividade mãe se esta for uma subtarefa vinculada
@@ -4752,8 +4771,8 @@ function CrmDashboard() {
           setIsTimelineOpen(false);
           toast.success(
             isNotAuthor
-              ? `${typeLabel} Nº ${reqNum} finalizada! Notificação enviada ao autor para aceite.`
-              : `${typeLabel} Nº ${reqNum} arquivada com sucesso!`
+              ? `${typeLabel} Nº ${reqNum} armazenada! Notificação enviada ao autor para aceite.`
+              : `${typeLabel} Nº ${reqNum} armazenada com sucesso!`
           );
         } catch (err: any) {
           toast.error("Erro ao processar atividade: " + (err.message || "Tente novamente"));
@@ -4762,7 +4781,7 @@ function CrmDashboard() {
     });
   }
 
-  // Aceitar Conclusão de Atividade (Autor ou Admin aceita o término e arquiva)
+  // Aceitar Armazenamento de Atividade (Autor ou Admin aceita o término e arquiva)
   async function handleAcceptCompletion(deal: Deal, notificationId?: string) {
     if (!user) return;
     const notifs = getDealCompletionNotifications(deal);
@@ -4792,7 +4811,7 @@ function CrmDashboard() {
     const allTags = [...existingTags, ...notifTags];
     const tagsPrefix = allTags.length > 0 ? allTags.join("\n") + "\n\n" : "";
     const originStage = getArchivedOriginStage(deal) || (deal.stage === "archived" ? "lead" : deal.stage);
-    const autoLog = `${userName} aceitou a conclusão da atividade. Atividade arquivada e armazenada.`;
+    const autoLog = `${userName} aceitou o armazenamento da atividade. Atividade arquivada e armazenada.`;
     const finalNotes = `<!-- ORIGIN_STAGE:${originStage} -->\n${tagsPrefix}${[cleanOldNotes, autoLog].filter(Boolean).join("\n\n")}`.trim();
 
     try {
@@ -4810,7 +4829,7 @@ function CrmDashboard() {
       await registerHistoryEntry(
         deal.id,
         "completion_accepted",
-        `Conclusão aceita por ${userName}. Atividade Nº ${reqNum} arquivada e armazenada.`
+        `Armazenamento aceito por ${userName}. Atividade Nº ${reqNum} arquivada e armazenada.`
       );
 
       const updatedDeal: Deal = {
@@ -4827,9 +4846,9 @@ function CrmDashboard() {
         setIsTimelineOpen(false);
       }
 
-      toast.success(`Conclusão da atividade Nº ${reqNum} aceita com sucesso!`);
+      toast.success(`Armazenamento da atividade Nº ${reqNum} aceito com sucesso!`);
     } catch (err: any) {
-      toast.error("Erro ao aceitar conclusão: " + (err.message || "Tente novamente"));
+      toast.error("Erro ao aceitar armazenamento: " + (err.message || "Tente novamente"));
     }
   }
 
@@ -7090,7 +7109,7 @@ function CrmDashboard() {
                         const authorFirstName = getFirstName(authorRawName).toUpperCase();
                         return (
                           <span
-                            title={`Atividade finalizada pelo responsável. Aguardando aceite de conclusão por ${authorRawName}.`}
+                            title={`Atividade armazenada pelo responsável. Aguardando aceite de armazenamento por ${authorRawName}.`}
                             className="text-[9px] font-mono font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5 truncate"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.9)] shrink-0" />
@@ -7124,7 +7143,7 @@ function CrmDashboard() {
                     </div>
                   )}
 
-                  {/* Documento Anexo Fixo no Card: Orçamento ou Contrato */}
+                  {/* Documento Anexo Fixo no Card: Orçamento, Contrato ou Documento */}
                   {(() => {
                     const parentInfo = getParentDealInfo(deal);
                     const parentDeal = parentInfo?.deal || (parentInfo?.id ? deals.find((d) => d.id === parentInfo.id) : null);
@@ -7134,6 +7153,9 @@ function CrmDashboard() {
                     if (!attachedDoc) return null;
 
                     const isContract = Boolean(cardContract);
+                    const isBudget = isBudgetDeal(deal) || (parentDeal ? isBudgetDeal(parentDeal) : false);
+                    const badgeLabel = isContract ? "CONTRATO" : isBudget ? "ORÇAMENTO" : "DOCUMENTO";
+                    const fallbackName = isContract ? "Contrato Oficial" : isBudget ? "Orçamento Oficial" : "Documento Oficial";
 
                     return (
                       <button
@@ -7143,7 +7165,7 @@ function CrmDashboard() {
                           if (attachedDoc.url) {
                             setPreviewingQuoteFile({
                               url: attachedDoc.url,
-                              name: attachedDoc.name || (isContract ? "Contrato Oficial" : "Orçamento Oficial"),
+                              name: attachedDoc.name || fallbackName,
                               isContract,
                             });
                           }
@@ -7156,12 +7178,14 @@ function CrmDashboard() {
                         title={
                           isContract
                             ? `Contrato Anexo: ${attachedDoc.name}. Clique para visualizar.`
-                            : `Orçamento Anexo: ${attachedDoc.name}${(attachedDoc as any).value ? ` • R$ ${Number((attachedDoc as any).value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}. Clique para visualizar.`
+                            : isBudget
+                            ? `Orçamento Anexo: ${attachedDoc.name}${(attachedDoc as any).value ? ` • R$ ${Number((attachedDoc as any).value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}. Clique para visualizar.`
+                            : `Documento Anexo: ${attachedDoc.name}. Clique para visualizar.`
                         }
                       >
                         <Paperclip className="h-2.5 w-2.5 shrink-0" />
                         <span className="truncate max-w-[85px] sm:max-w-[110px]">
-                          {isContract ? "CONTRATO" : "ORÇAMENTO"}
+                          {badgeLabel}
                         </span>
                       </button>
                     );
@@ -8212,8 +8236,9 @@ function CrmDashboard() {
                     </span>
                   </div>
 
-                  {/* LINHA DO ORÇAMENTO OFICIAL (Exibe o número do orçamento oficial se anexado/extraído) */}
+                  {/* LINHA DO ORÇAMENTO / DOCUMENTO OFICIAL (Exibe o número se anexado/extraído) */}
                   {(() => {
+                    const isBudget = isBudgetDeal(selectedDealForHistory);
                     const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
                     const quoteNum = quoteDoc?.quoteData?.quoteNumber;
                     if (!quoteNum) return null;
@@ -8221,7 +8246,7 @@ function CrmDashboard() {
                     return (
                       <div className="flex items-center justify-center gap-1.5 text-xs font-mono font-black tracking-wider text-emerald-300 mt-0.5">
                         <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/40 text-[11px] shadow-sm">
-                          ORÇAMENTO OFICIAL: Nº {quoteNum}
+                          {isBudget ? `ORÇAMENTO OFICIAL: Nº ${quoteNum}` : `DOCUMENTO OFICIAL: Nº ${quoteNum}`}
                         </span>
                       </div>
                     );
@@ -8451,6 +8476,8 @@ function CrmDashboard() {
                             }
                           }
 
+                          const isBudget = isBudgetDeal(selectedDealForHistory);
+
                           return (
                             <div
                               key={item.id}
@@ -8466,7 +8493,7 @@ function CrmDashboard() {
                                 </div>
                                 <span className="font-bold text-white uppercase">{userName}</span>
                                 <span className="text-slate-300 font-medium">
-                                  {isContract ? "anexou o Contrato:" : "anexou o Orçamento Oficial:"}
+                                  {isContract ? "anexou o Contrato:" : isBudget ? "anexou o Orçamento Oficial:" : "anexou o Documento:"}
                                 </span>
                                 {docUrl ? (
                                   <button
@@ -8478,7 +8505,7 @@ function CrmDashboard() {
                                     className={`font-black underline underline-offset-2 cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1 ${
                                       isContract ? "text-sky-300 hover:text-sky-200" : "text-emerald-300 hover:text-emerald-200"
                                     }`}
-                                    title={`Clique para visualizar ${isContract ? "o contrato" : "o orçamento"}`}
+                                    title={`Clique para visualizar ${isContract ? "o contrato" : isBudget ? "o orçamento" : "o documento"}`}
                                   >
                                     <span>{fileName}</span>
                                     {fileSize ? <span className="font-mono text-[10px] no-underline font-normal text-muted-foreground">({fileSize})</span> : null}
@@ -8591,70 +8618,6 @@ function CrmDashboard() {
                     {selectedDealForHistory.notes && (
                       <div className={`p-3 rounded-xl bg-white/5 border border-white/10 space-y-2 custom-scrollbar ${isPendingModal ? "flex-1 min-h-0 overflow-y-auto" : "max-h-[30vh] sm:max-h-[34vh] overflow-y-auto"}`}>
                         {(() => {
-                          const mainUpdateHistoryList = dealHistoryList.filter(
-                            (h) => !isHistoryItemReply(h) && h.action_type !== "subtask_completed" && h.action_type !== "quote_file_uploaded" && h.action_type !== "contract_file_uploaded"
-                          );
-                          const latestUpdateItem = mainUpdateHistoryList[0] || null;
-                          const latestAuthorName = (
-                            latestUpdateItem?.user_name ||
-                            selectedDealForHistory.latest_update_author ||
-                            selectedDealForHistory.creator_name ||
-                            selectedDealForHistory.assigned_user_name ||
-                            "Autor"
-                          ).toUpperCase();
-                          const latestTimestamp =
-                            latestUpdateItem?.created_at ||
-                            selectedDealForHistory.latest_update_at ||
-                            selectedDealForHistory.updated_at ||
-                            selectedDealForHistory.created_at;
-
-                          return (
-                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-1.5">
-                              <div className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm text-foreground">
-                                <User className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                                <span className="font-bold uppercase tracking-wide text-white">
-                                  {latestAuthorName}
-                                </span>
-                                <span className="text-slate-300 font-medium lowercase text-xs sm:text-sm">escreveu:</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 shrink-0">
-                                {(() => {
-                                  const agingText =
-                                    aging.days === 0
-                                      ? "Atualizado hoje"
-                                      : aging.days === 1
-                                      ? "1 dia sem atualização"
-                                      : aging.days > 15
-                                      ? "+15 dias sem atualização"
-                                      : `${aging.days} dias sem atualização`;
-
-                                  return (
-                                    <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
-                                      <span className={`h-2 w-2 rounded-full shrink-0 ${aging.dotColor}`} />
-                                      <span className={`${aging.accentText} uppercase tracking-wider`}>
-                                        {agingText}
-                                      </span>
-                                    </div>
-                                  );
-                                })()}
-                                <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 border border-sky-400/30 px-2.5 py-1 rounded-md flex items-center gap-1.5 shrink-0">
-                                  <Clock className="h-3.5 w-3.5 text-sky-400" />
-                                  {new Date(latestTimestamp).toLocaleString("pt-BR", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    second: "2-digit",
-                                  })}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {(() => {
                           const notes = selectedDealForHistory.notes || "";
                           const cleanNotes = notes
                             .replace(/<!--.*?-->\s*/g, "")
@@ -8673,12 +8636,11 @@ function CrmDashboard() {
                             .replace(/\[RESPONSIBLE_LAST_SEEN:.*?\]\s*/g, "")
                             .trim();
 
-                          // Obtém a lista de atualizações principais (ignorando respostas e anexos)
+                          // Obtém a lista de atualizações principais (ignorando respostas, conclusões de vinculadas e anexos)
                           const mainUpdateHistoryList = dealHistoryList.filter(
                             (h) => !isHistoryItemReply(h) && h.action_type !== "subtask_completed" && h.action_type !== "quote_file_uploaded" && h.action_type !== "contract_file_uploaded"
                           );
                           const latestUpdateItem = mainUpdateHistoryList[0] || null;
-                          const previousUpdateItem = mainUpdateHistoryList[1] || null;
 
                           const latestAuthorName = (
                             latestUpdateItem?.user_name ||
@@ -8699,7 +8661,7 @@ function CrmDashboard() {
                           const dealMentions = getDealMentions(selectedDealForHistory);
                           const dealSubtaskCompletions = getDealSubtaskCompletions(selectedDealForHistory);
 
-                          // Consolidação completa de todas as respostas vinculadas à última atualização (notas + histórico permanente)
+                          // Consolidação completa de todas as respostas (notas + histórico permanente)
                           const notesReplies = getDealMentionReplies(selectedDealForHistory);
                           const historyReplies: DealMentionReply[] = dealHistoryList
                             .filter((h) => isHistoryItemReply(h))
@@ -8738,16 +8700,13 @@ function CrmDashboard() {
                             });
                           });
 
-                          // Respostas vinculadas à última atualização:
-                          // Todas as respostas que foram postadas para a última atualização (ou seja, criadas após a atualização anterior se houver, ou todas da atividade)
+                          // Respostas vinculadas estritamente à última atualização:
+                          // Somente respostas que foram postadas após a última atualização (com tolerância de 3 segundos) e em ordem cronológica de acontecimento
+                          const latestUpdateTimeMs = new Date(latestTimestamp).getTime();
                           const currentUpdateReplies = Array.from(combinedRepliesMap.values())
                             .filter((r) => {
-                              if (previousUpdateItem) {
-                                const repTime = new Date(r.created_at).getTime();
-                                const prevUpdateTime = new Date(previousUpdateItem.created_at).getTime();
-                                return repTime >= prevUpdateTime - 3000;
-                              }
-                              return true;
+                              const repTimeMs = new Date(r.created_at).getTime();
+                              return repTimeMs >= latestUpdateTimeMs - 3000;
                             })
                             .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
@@ -8764,6 +8723,48 @@ function CrmDashboard() {
 
                           return (
                             <div className="space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-1.5">
+                                <div className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm text-foreground">
+                                  <User className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                                  <span className="font-bold uppercase tracking-wide text-white">
+                                    {latestAuthorName}
+                                  </span>
+                                  <span className="text-slate-300 font-medium lowercase text-xs sm:text-sm">escreveu:</span>
+                                </div>
+
+                                <div className="flex items-center gap-3 shrink-0">
+                                  {(() => {
+                                    const agingText =
+                                      aging.days === 0
+                                        ? "Atualizado hoje"
+                                        : aging.days === 1
+                                        ? "1 dia sem atualização"
+                                        : aging.days > 15
+                                        ? "+15 dias sem atualização"
+                                        : `${aging.days} dias sem atualização`;
+
+                                    return (
+                                      <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
+                                        <span className={`h-2 w-2 rounded-full shrink-0 ${aging.dotColor}`} />
+                                        <span className={`${aging.accentText} uppercase tracking-wider`}>
+                                          {agingText}
+                                        </span>
+                                      </div>
+                                    );
+                                  })()}
+                                  <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 border border-sky-400/30 px-2.5 py-1 rounded-md flex items-center gap-1.5 shrink-0">
+                                    <Clock className="h-3.5 w-3.5 text-sky-400" />
+                                    {new Date(latestTimestamp).toLocaleString("pt-BR", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      second: "2-digit",
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
                               {effectiveText && (
                                 isPendingModal ? (
                                   <div className="text-sm sm:text-base leading-relaxed text-slate-100 font-medium bg-amber-950/30 p-4 rounded-2xl border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] space-y-3">
@@ -8771,7 +8772,7 @@ function CrmDashboard() {
                                       <div className="flex items-center gap-2">
                                         <span className="font-mono text-sm sm:text-base font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                                           <AlertTriangle className="h-4 w-4 animate-pulse" />
-                                          Atividade Finalizada pelo Responsável ({pendingNotif?.concluded_by_user_name || selectedDealForHistory.assigned_user_name || "Responsável"})
+                                          Atividade Armazenada pelo Responsável ({pendingNotif?.concluded_by_user_name || selectedDealForHistory.assigned_user_name || "Responsável"})
                                         </span>
                                       </div>
                                       <span className="font-mono text-[10px] text-amber-300">
@@ -8791,7 +8792,7 @@ function CrmDashboard() {
                                             type="button"
                                             onClick={() => setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name, isContract: false })}
                                             className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-slate-900/90 border border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
-                                            title="Clique para visualizar o orçamento anexado"
+                                            title={isBudgetDeal(selectedDealForHistory) ? "Clique para visualizar o orçamento anexado" : "Clique para visualizar o documento anexado"}
                                           >
                                             <div className="flex items-center gap-2 text-xs min-w-0 flex-1">
                                               <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform">
@@ -8799,7 +8800,7 @@ function CrmDashboard() {
                                               </div>
                                               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
                                                 <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-400 shrink-0">
-                                                  ÚLTIMO ORÇAMENTO ANEXADO:
+                                                  {isBudgetDeal(selectedDealForHistory) ? "ÚLTIMO ORÇAMENTO ANEXADO:" : "ÚLTIMO DOCUMENTO ANEXADO:"}
                                                 </span>
                                                 {quoteDoc.quoteData?.quoteNumber && (
                                                   <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">
@@ -8863,21 +8864,21 @@ function CrmDashboard() {
                                       {isAuthor ? (
                                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-3">
                                           <span className="text-xs text-amber-200 font-medium">
-                                            A solicitação foi concluída pelo responsável e aguarda o seu aceite para ser arquivada definitivamente.
+                                            A solicitação foi armazenada pelo responsável e aguarda o seu aceite para ser arquivada definitivamente.
                                           </span>
                                           <button
                                             type="button"
                                             onClick={() => handleAcceptCompletion(selectedDealForHistory, pendingNotif?.id)}
                                             className="btn-ghost-neon px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-black bg-emerald-400 hover:bg-emerald-300 border border-emerald-300 shrink-0 cursor-pointer transition-all shadow-[0_0_20px_rgba(16,185,129,0.5)] hover:scale-105 flex items-center gap-2"
-                                            title="Aceitar a conclusão desta atividade e arquivá-la definitivamente"
+                                            title="Aceitar o armazenamento desta atividade e arquivá-la definitivamente"
                                           >
                                             <CheckCheck className="h-4 w-4" />
-                                            <span>Aceitar Conclusão</span>
+                                            <span>Aceitar Armazenamento</span>
                                           </button>
                                         </div>
                                       ) : (
                                         <span className="text-xs text-amber-300/90 italic">
-                                          Aguardando aceite de conclusão pelo autor ({selectedDealForHistory.creator_name || "Autor"}).
+                                          Aguardando aceite de armazenamento pelo autor ({selectedDealForHistory.creator_name || "Autor"}).
                                         </span>
                                       )}
                                     </div>
@@ -8949,7 +8950,7 @@ function CrmDashboard() {
                                             type="button"
                                             onClick={() => setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name, isContract: false })}
                                             className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-slate-900/90 border border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
-                                            title="Clique para visualizar o orçamento anexado"
+                                            title={isBudgetDeal(selectedDealForHistory) ? "Clique para visualizar o orçamento anexado" : "Clique para visualizar o documento anexado"}
                                           >
                                             <div className="flex items-center gap-2.5 text-xs min-w-0 flex-1">
                                               <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform">
@@ -8957,7 +8958,7 @@ function CrmDashboard() {
                                               </div>
                                               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
                                                 <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-400 shrink-0">
-                                                  ÚLTIMO ORÇAMENTO ANEXADO:
+                                                  {isBudgetDeal(selectedDealForHistory) ? "ÚLTIMO ORÇAMENTO ANEXADO:" : "ÚLTIMO DOCUMENTO ANEXADO:"}
                                                 </span>
                                                 {quoteDoc.quoteData?.quoteNumber && (
                                                   <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">

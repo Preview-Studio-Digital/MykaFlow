@@ -1477,9 +1477,16 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
     if (productivityTimelineData.length > 0) {
       if (dateFilter === "today" || dateFilter === "yesterday") {
-        const lastPoint = productivityTimelineData[productivityTimelineData.length - 1];
-        userPct = lastPoint?.userPct ?? metrics.activePct;
-        companyPct = lastPoint?.companyPct ?? (averages.companyAvgActivePct || 0);
+        // Média real dos pontos medidos durante o expediente do dia (desconsiderando marco zero 07h30)
+        const activePoints = productivityTimelineData.filter(
+          (p) => p.label !== "07:30" && (p.userPct > 0 || p.companyPct > 0 || p.marketMax > 0)
+        );
+        const pointsToAvg = activePoints.length > 0 ? activePoints : productivityTimelineData;
+
+        const sumUser = pointsToAvg.reduce((acc, p) => acc + p.userPct, 0);
+        const sumComp = pointsToAvg.reduce((acc, p) => acc + p.companyPct, 0);
+        userPct = Math.round(sumUser / pointsToAvg.length);
+        companyPct = Math.round(sumComp / pointsToAvg.length);
       } else {
         // Média real dos pontos de dias úteis traçados no gráfico do período
         const businessPoints = productivityTimelineData.filter(
@@ -1508,11 +1515,14 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
     if (productivityTimelineData.length > 0) {
       if (dateFilter === "today" || dateFilter === "yesterday") {
-        const lastPoint = productivityTimelineData[productivityTimelineData.length - 1];
-        if (lastPoint && lastPoint.marketMax > 0) {
-          expectedMin = lastPoint.marketMin;
-          expectedMax = lastPoint.marketMax;
-        }
+        const activePoints = productivityTimelineData.filter(
+          (p) => p.label !== "07:30" && (p.userPct > 0 || p.companyPct > 0 || p.marketMax > 0)
+        );
+        const pointsToAvg = activePoints.length > 0 ? activePoints : productivityTimelineData;
+        const sumMin = pointsToAvg.reduce((acc, p) => acc + (p.marketMin || 75), 0);
+        const sumMax = pointsToAvg.reduce((acc, p) => acc + (p.marketMax || 85), 0);
+        expectedMin = Math.round(sumMin / pointsToAvg.length);
+        expectedMax = Math.round(sumMax / pointsToAvg.length);
       }
     }
 
@@ -2300,7 +2310,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                     strokeDasharray="4 4"
                     fillOpacity={1}
                     fill="url(#compGrad)"
-                    dot={{ fill: "#f59e0b", r: 2.5, strokeWidth: 1.5, stroke: "#451a03" }}
+                    dot={false}
                     activeDot={{ r: 4.5, fill: "#fbbf24", stroke: "#ffffff", strokeWidth: 2 }}
                   />
 
@@ -2313,23 +2323,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                     strokeWidth={3}
                     fillOpacity={1}
                     fill="url(#userFillGrad)"
-                    dot={(props: any) => {
-                      const { cx, cy, payload } = props;
-                      if (cx === undefined || cy === undefined || !payload) return null;
-                      const isAboveOrEqual = payload.userPct >= payload.companyPct;
-                      const color = isAboveOrEqual ? "#10b981" : "#f43f5e";
-                      return (
-                        <circle
-                          key={`user-dot-${props.index}`}
-                          cx={cx}
-                          cy={cy}
-                          r={3.5}
-                          fill={color}
-                          stroke="#0f172a"
-                          strokeWidth={1.5}
-                        />
-                      );
-                    }}
+                    dot={false}
                     activeDot={(props: any) => {
                       const { cx, cy, payload } = props;
                       if (cx === undefined || cy === undefined || !payload) return null;

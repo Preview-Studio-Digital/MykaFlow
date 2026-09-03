@@ -974,14 +974,17 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     const companyBenchmarkPct = averages.companyAvgActivePct || 17;
 
     // Curva dinâmica de jornada / alocação esperada ao longo do dia (meia em meia hora)
-    // Começa do zero às 07:30 (simulando a tolerância de chegada/primeiros minutos) e sobe gradativamente até estabilizar no padrão de 75% a 85%
+    // Inicia suavemente a partir de 07:30 (simulando a tolerância e rampa orgânica da manhã, no mesmo ritmo suave das curvas de usuário e empresa)
     const getMarketRangeForTime = (totalMin: number): [number, number] => {
       const hoursDecimal = totalMin / 60;
-      if (hoursDecimal <= 7.5) return [0, 0];    // 07h30: Marco zero da jornada
-      if (hoursDecimal <= 8.0) return [20, 45];  // 08h00: Tolerância inicial de login e início da 1ª tarefa
-      if (hoursDecimal <= 8.5) return [45, 65];  // 08h30: Aquecimento e consolidação do fluxo
-      if (hoursDecimal <= 9.0) return [60, 80];  // 09h00: Rampa final de transição para o ritmo padrão
-      return [75, 85];                           // A partir das 09h30 até o fechamento: padrão consolidado de 75% a 85%
+      if (hoursDecimal <= 7.5) return [0, 0];    // 07h30: Marco zero
+      if (hoursDecimal <= 8.0) return [10, 25];  // 08h00: Subida suave inicial (tolerância de chegada e login)
+      if (hoursDecimal <= 8.5) return [25, 45];  // 08h30: Entrada no ritmo
+      if (hoursDecimal <= 9.0) return [42, 60];  // 09h00: Consolidação gradativa
+      if (hoursDecimal <= 9.5) return [55, 70];  // 09h30: Ritmo constante
+      if (hoursDecimal <= 10.0) return [65, 78]; // 10h00: Aproximação do pico
+      if (hoursDecimal <= 10.5) return [70, 82]; // 10h30: Transição suave
+      return [75, 85];                           // A partir das 11h00 até 17h30: Faixa consolidada (75% a 85%)
     };
 
     if (dateFilter === "today" || dateFilter === "yesterday") {
@@ -1075,27 +1078,32 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         }
       }
     } else if (dateFilter === "thisWeek") {
-      // Semana atual (a partir de segunda-feira até hoje, garantindo pelo menos 5 dias no gráfico)
+      // Semana atual: Segunda-feira até Sexta-feira da semana vigente
       const dayOfWeek = now.getDay();
       const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       
-      const daysToDraw = Math.max(5, diffToMonday + 1);
-      const startDate = new Date(currentTime);
-      startDate.setDate(now.getDate() - (daysToDraw - 1));
+      const mondayDate = new Date(currentTime);
+      mondayDate.setDate(now.getDate() - diffToMonday);
+      mondayDate.setHours(0, 0, 0, 0);
 
-      for (let i = 0; i < daysToDraw; i++) {
-        const d = new Date(startDate);
-        d.setDate(startDate.getDate() + i);
+      // Sempre renderiza os 5 dias úteis da semana (Segunda a Sexta)
+      for (let i = 0; i < 5; i++) {
+        const d = new Date(mondayDate);
+        d.setDate(mondayDate.getDate() + i);
         const dateStr = d.toDateString();
         const dOfWeek = d.getDay();
-        const isWeekend = dOfWeek === 0 || dOfWeek === 6;
         const isFriday = dOfWeek === 5;
-        const baseDaySec = isWeekend ? 0 : isFriday ? 8 * 3600 : 9 * 3600;
+        const baseDaySec = isFriday ? 8 * 3600 : 9 * 3600;
 
         const dayName = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][dOfWeek];
         const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
         const isToday = dateStr === new Date(currentTime).toDateString();
-        const dayElapsedSec = isToday ? getWorkdayProgress(new Date(currentTime)).elapsedWorkdaySeconds : baseDaySec;
+        const isFutureDay = d > now && !isToday;
+        const dayElapsedSec = isToday
+          ? getWorkdayProgress(new Date(currentTime)).elapsedWorkdaySeconds
+          : isFutureDay
+          ? 0
+          : baseDaySec;
 
         let userDayActiveSec = 0;
         let companyDayActiveSec = 0;
@@ -1111,11 +1119,11 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         });
 
         const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
-        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
-        const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
+        const userPct = isFutureDay ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const companyPct = isFutureDay ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
-        const marketMin = isWeekend ? 0 : 75;
-        const marketMax = isWeekend ? 0 : 85;
+        const marketMin = 75;
+        const marketMax = 85;
 
         result.push({
           label: `${dayName} (${dayFormatted})`,

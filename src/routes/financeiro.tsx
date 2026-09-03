@@ -9,7 +9,7 @@ import { EvolutionChart } from "@/components/EvolutionChart";
 import { fmtCurrency, MONTHS_PT } from "@/lib/finance-constants";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { TransactionCreateDialog } from "@/components/TransactionCreateDialog";
-import { InboxModal, getDealMentions, getDealCompletionNotifications } from "@/components/InboxModal";
+import { InboxModal, getDealMentions, getDealCompletionNotifications, getDealNewTaskNotification } from "@/components/InboxModal";
 import { LogOut, Zap, ChevronLeft, ShieldCheck, User as UserIcon, Lock, Users, LayoutGrid, AtSign, Inbox } from "lucide-react";
 import { toast } from "sonner";
 
@@ -96,6 +96,10 @@ function Dashboard() {
               count++;
             }
           });
+          const newTask = getDealNewTaskNotification(d, user.id);
+          if (newTask && !newTask.read_by_user) {
+            count++;
+          }
         });
         setInboxUnreadCount(count);
       }

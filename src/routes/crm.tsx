@@ -82,6 +82,7 @@ import {
   InboxModal,
   getDealCompletionNotifications,
   isDealPendingAuthorAcceptance,
+  getDealNewTaskNotification,
   type TaskCompletionNotification,
 } from "@/components/InboxModal";
 import { DealCostModal } from "@/components/DealCostModal";
@@ -3677,6 +3678,18 @@ function CrmDashboard() {
         ? `[ESTIMATED_DURATION:${subtaskDuration.trim().toUpperCase()}]`
         : "";
 
+      const isAssignedToOther = Boolean(subtaskAssignedTo && subtaskAssignedTo !== user?.id);
+      const newTaskNotifTag = isAssignedToOther
+        ? `[NEW_TASK_NOTIFICATION:${JSON.stringify({
+            id: crypto.randomUUID(),
+            creator_id: user?.id,
+            creator_name: creatorName,
+            assigned_user_id: subtaskAssignedTo,
+            created_at: new Date().toISOString(),
+            read_by_user: false,
+          })}]`
+        : "";
+
       const subtaskPayload = {
         title: `[TAREFA] ${subtaskTitle.trim().toUpperCase()}`,
         stage: targetStage,
@@ -3685,6 +3698,7 @@ function CrmDashboard() {
         assigned_user_id: subtaskAssignedTo,
         expected_close_date: subtaskDeadline || null,
         notes: [
+          newTaskNotifTag,
           durationTag,
           `${parentDealTag} Atividade vinculada a: ${parentCleanTitle} (Nº ${parentReqNum})`,
           subtaskNotesFormatted,
@@ -5038,7 +5052,19 @@ function CrmDashboard() {
       ? `[ESTIMATED_DURATION:${newDealDuration.trim().toUpperCase()}]`
       : "";
 
-    const notesToSave = [durationTag, rawNotes].filter(Boolean).join("\n").trim();
+    const isAssignedToOther = Boolean(newDealAssignedTo && newDealAssignedTo !== user?.id);
+    const newTaskNotifTag = isAssignedToOther
+      ? `[NEW_TASK_NOTIFICATION:${JSON.stringify({
+          id: crypto.randomUUID(),
+          creator_id: user?.id,
+          creator_name: user?.user_metadata?.display_name || user?.email || "Colega",
+          assigned_user_id: newDealAssignedTo,
+          created_at: new Date().toISOString(),
+          read_by_user: false,
+        })}]`
+      : "";
+
+    const notesToSave = [newTaskNotifTag, durationTag, rawNotes].filter(Boolean).join("\n").trim();
 
     const typePrefix =
       activeReqModal === "interna"
@@ -6115,7 +6141,25 @@ function CrmDashboard() {
     };
   }, [deals, user]);
 
-  const totalInboxUnreadCount = userNotificationsData.pendingCount + userMentionsData.unreadCount;
+  // Novas Atividades direcionadas ao Usuário Logado (atribuídas por outros)
+  const userNewTasksData = useMemo(() => {
+    if (!user) return { all: [], unreadCount: 0 };
+    const myId = user.id;
+    const allTasks: any[] = [];
+    deals.forEach((deal) => {
+      const notif = getDealNewTaskNotification(deal as any, myId, teamMembers);
+      if (notif) {
+        allTasks.push({ notification: notif, deal });
+      }
+    });
+    const unreadCount = allTasks.filter((item) => !item.notification.read_by_user).length;
+    return { all: allTasks, unreadCount };
+  }, [deals, user, teamMembers]);
+
+  const totalInboxUnreadCount = 
+    userNotificationsData.pendingCount + 
+    userMentionsData.unreadCount + 
+    userNewTasksData.unreadCount;
 
   const pipelineMetrics = useMemo(() => {
     // Apenas orçamentos primários comerciais (desconsidera coluna de tarefas e tarefas vinculadas)
@@ -12175,6 +12219,7 @@ function CrmDashboard() {
         onClose={() => setIsMentionsInboxOpen(false)}
         currentUser={user}
         deals={deals}
+        teamMembers={teamMembers}
         onOpenDeal={(deal) => {
           setIsMentionsInboxOpen(false);
           const fullDeal = deals.find((d) => d.id === deal.id);

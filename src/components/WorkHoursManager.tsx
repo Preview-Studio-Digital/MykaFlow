@@ -973,23 +973,19 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     const compUsersCount = Math.max(1, allUserIds.length);
     const companyBenchmarkPct = averages.companyAvgActivePct || 17;
 
-    // Curva dinâmica de tolerância / mercado ao longo do dia (meia em meia hora)
+    // Curva dinâmica de jornada / alocação esperada ao longo do dia (meia em meia hora)
+    // Começa do zero às 07:30 (simulando a tolerância de chegada/primeiros minutos) e sobe gradativamente até estabilizar no padrão de 75% a 85%
     const getMarketRangeForTime = (totalMin: number): [number, number] => {
       const hoursDecimal = totalMin / 60;
-      if (hoursDecimal <= 7.5) return [0, 20];
-      if (hoursDecimal <= 8.0) return [10, 30];
-      if (hoursDecimal <= 8.5) return [15, 38];
-      if (hoursDecimal <= 9.0) return [20, 45];
-      if (hoursDecimal <= 9.5) return [25, 50];
-      if (hoursDecimal <= 10.0) return [30, 55];
-      if (hoursDecimal <= 11.5) return [35, 55];
-      if (hoursDecimal <= 13.0) return [30, 50]; // Almoço
-      if (hoursDecimal <= 15.5) return [35, 55]; // Pico da Tarde
-      return [35, 50]; // Fechamento do Dia
+      if (hoursDecimal <= 7.5) return [0, 0];    // 07h30: Marco zero da jornada
+      if (hoursDecimal <= 8.0) return [20, 45];  // 08h00: Tolerância inicial de login e início da 1ª tarefa
+      if (hoursDecimal <= 8.5) return [45, 65];  // 08h30: Aquecimento e consolidação do fluxo
+      if (hoursDecimal <= 9.0) return [60, 80];  // 09h00: Rampa final de transição para o ritmo padrão
+      return [75, 85];                           // A partir das 09h30 até o fechamento: padrão consolidado de 75% a 85%
     };
 
     if (dateFilter === "today" || dateFilter === "yesterday") {
-      // Evolução Intraday a cada 30 minutos (07h00 às 17h30)
+      // Evolução Intraday a cada 30 minutos (iniciando pontualmente às 07h30 até 17h30)
       const targetDate = new Date(currentTime);
       if (dateFilter === "yesterday") {
         targetDate.setDate(targetDate.getDate() - 1);
@@ -997,8 +993,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
       const isToday = dateFilter === "today";
       const nowTotalMin = now.getHours() * 60 + now.getMinutes();
 
-      // De 07:00 (420 min) até 17:30 (1050 min) a cada 30 minutos
-      for (let totalMin = 7 * 60; totalMin <= 17 * 60 + 30; totalMin += 30) {
+      // De 07:30 (450 min) até 17:30 (1050 min) a cada 30 minutos
+      for (let totalMin = 7 * 60 + 30; totalMin <= 17 * 60 + 30; totalMin += 30) {
         const h = Math.floor(totalMin / 60);
         const m = totalMin % 60;
         const isPastCurrent = isToday && totalMin > nowTotalMin;
@@ -1118,8 +1114,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
-        const marketMin = isWeekend ? 0 : 35;
-        const marketMax = isWeekend ? 0 : 50;
+        const marketMin = isWeekend ? 0 : 75;
+        const marketMax = isWeekend ? 0 : 85;
 
         result.push({
           label: `${dayName} (${dayFormatted})`,
@@ -1166,8 +1162,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
-        const marketMin = isWeekend ? 0 : 35;
-        const marketMax = isWeekend ? 0 : 50;
+        const marketMin = isWeekend ? 0 : 75;
+        const marketMax = isWeekend ? 0 : 85;
 
         result.push({
           label: `${dayName} (${dayFormatted})`,
@@ -1211,8 +1207,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
-        const marketMin = isWeekend ? 0 : 35;
-        const marketMax = isWeekend ? 0 : 50;
+        const marketMin = isWeekend ? 0 : 75;
+        const marketMax = isWeekend ? 0 : 85;
         const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 
         result.push({
@@ -1265,8 +1261,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
-        const marketMin = isWeekend ? 0 : 35;
-        const marketMax = isWeekend ? 0 : 50;
+        const marketMin = isWeekend ? 0 : 75;
+        const marketMax = isWeekend ? 0 : 85;
 
         result.push({
           label: `${String(d.getDate()).padStart(2, "0")}`,
@@ -1310,8 +1306,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
         const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
-        const marketMin = isWeekend ? 0 : 35;
-        const marketMax = isWeekend ? 0 : 50;
+        const marketMin = isWeekend ? 0 : 75;
+        const marketMax = isWeekend ? 0 : 85;
         const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 
         result.push({
@@ -1380,8 +1376,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
           const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
           const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
-          const marketMin = isWeekend ? 0 : 35;
-          const marketMax = isWeekend ? 0 : 50;
+          const marketMin = isWeekend ? 0 : 75;
+          const marketMax = isWeekend ? 0 : 85;
           const dayFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 
           result.push({
@@ -1428,9 +1424,9 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
             companyPct,
             userSeconds: val.userSec,
             companySeconds: Math.round(val.compSec / compUsersCount),
-            marketMin: 35,
-            marketMax: 50,
-            marketRange: [35, 50],
+            marketMin: 75,
+            marketMax: 85,
+            marketRange: [75, 85],
           });
         });
       }
@@ -1497,6 +1493,30 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
     const isAbove = delta >= 0;
     const isZero = delta === 0;
 
+    // Comparativo com a Jornada Esperada (Faixa de Tolerância: 75% a 85% | Meta Central: 80%)
+    let expectedMin = 75;
+    let expectedMax = 85;
+    const TARGET_BENCHMARK = 80; // Meta padrão considerada no cálculo
+
+    if (productivityTimelineData.length > 0) {
+      if (dateFilter === "today" || dateFilter === "yesterday") {
+        const lastPoint = productivityTimelineData[productivityTimelineData.length - 1];
+        if (lastPoint && lastPoint.marketMax > 0) {
+          expectedMin = lastPoint.marketMin;
+          expectedMax = lastPoint.marketMax;
+        }
+      }
+    }
+
+    const isWithinExpected = userPct >= expectedMin && userPct <= expectedMax;
+    const isAboveExpected = userPct > expectedMax;
+    const isBelowExpected = userPct < expectedMin;
+    
+    // O cálculo do desvio considera a meta padrão de 80% quando fora da faixa
+    const deltaExpected = isWithinExpected
+      ? 0
+      : userPct - TARGET_BENCHMARK;
+
     return {
       userPct,
       companyPct,
@@ -1505,6 +1525,14 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
       isZero,
       formattedDelta: `${isAbove && !isZero ? "+" : ""}${delta}%`,
       formattedPP: `${isAbove && !isZero ? "+" : ""}${delta} p.p.`,
+      expectedMin,
+      expectedMax,
+      targetBenchmark: TARGET_BENCHMARK,
+      isWithinExpected,
+      isAboveExpected,
+      isBelowExpected,
+      deltaExpected,
+      formattedExpectedDelta: `${deltaExpected > 0 ? "+" : ""}${deltaExpected}%`,
     };
   }, [selectedUserId, metrics.activePct, productivityTimelineData, dateFilter, averages.companyAvgActivePct]);
 
@@ -2041,39 +2069,6 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
               </h3>
             </div>
 
-            {/* Tag / Métrica de Desempenho Relativo Centralizada */}
-            {!isExpandedActive && (
-              <div className="flex items-center justify-center flex-1 px-2 min-w-0">
-                {selectedUserId && relativePerformance ? (
-                  <span
-                    className={`text-[10px] sm:text-[11px] font-mono font-black px-2.5 py-0.5 rounded-md border uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap transition-all shadow-sm ${
-                      relativePerformance.isAbove
-                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
-                        : "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_12px_rgba(244,63,94,0.25)]"
-                    }`}
-                    title={`Desempenho Relativo no período: Usuário (${relativePerformance.userPct}%) vs Média da Empresa (${relativePerformance.companyPct}%). ${Math.abs(relativePerformance.delta)} pontos percentuais ${relativePerformance.isAbove ? "acima" : "abaixo"} da média da empresa.`}
-                  >
-                    {relativePerformance.isAbove ? (
-                      <TrendingUp className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                    ) : (
-                      <TrendingDown className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-                    )}
-                    <span>
-                      {relativePerformance.formattedDelta} vs Empresa
-                    </span>
-                  </span>
-                ) : (
-                  <span 
-                    className="text-[10px] sm:text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap shadow-sm"
-                    title="Visão Geral consolidada de toda a equipe da empresa"
-                  >
-                    <Building2 className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-                    <span>Média Consolidada</span>
-                  </span>
-                )}
-              </div>
-            )}
-
             {isExpandedActive ? (
               <div className="flex items-center gap-2 shrink-0 flex-nowrap">
                 {highlightedActivityId && (
@@ -2105,7 +2100,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="h-2 w-2.5 rounded-sm bg-slate-400/30 border border-slate-400/60 shrink-0" />
-                  <span className="text-slate-400 font-bold uppercase">Padrão Mercado</span>
+                  <span className="text-slate-400 font-bold uppercase">Jornada Esperada</span>
                 </div>
               </div>
             )}
@@ -2265,7 +2260,7 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                             <div className="flex items-center justify-between gap-4 pt-1 mt-0.5 border-t border-white/5 text-[10px]">
                               <span className="text-slate-400 flex items-center gap-1.5">
                                 <span className="h-1.5 w-2 rounded-sm bg-slate-400/40 border border-slate-400/60" />
-                                Padrão Mercado:
+                                Jornada Esperada:
                               </span>
                               <span className="text-slate-300 font-bold">{data?.marketMin}% a {data?.marketMax}%</span>
                             </div>
@@ -2275,11 +2270,11 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                     }}
                   />
 
-                  {/* 1. Faixa Padrão de Mercado em Tom Cinza Sombreado ao Fundo */}
+                  {/* 1. Faixa de Jornada Esperada em Tom Cinza Sombreado ao Fundo */}
                   <Area
                     type="monotone"
                     dataKey="marketRange"
-                    name="Padrão Mercado"
+                    name="Jornada Esperada"
                     stroke="rgba(148, 163, 184, 0.45)"
                     strokeWidth={1}
                     strokeDasharray="3 3"
@@ -2346,6 +2341,78 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                   />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Barra Inferior com Métricas de Comparativo Abaixo do Gráfico */}
+          {!isExpandedActive && (
+            <div className="pt-2.5 mt-2 border-t border-white/5 flex items-center justify-between gap-3 flex-wrap text-xs font-mono select-none">
+              {selectedUserId && relativePerformance ? (() => {
+                const currentProfile = profiles.find((p) => p.id === selectedUserId);
+                const rawName = currentProfile?.display_name || currentProfile?.email?.split("@")[0] || "USUÁRIO";
+                const userFirstName = rawName.split(" ")[0].toUpperCase();
+
+                return (
+                  <>
+                    {/* Tag 1: NOME DO USUÁRIO X EMPRESA */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] uppercase font-bold text-slate-400">{userFirstName} X EMPRESA:</span>
+                      <span
+                        className={`text-xs sm:text-sm font-mono font-black px-3 py-1 rounded-lg border-2 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap transition-all shadow-md ${
+                          relativePerformance.isAbove
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.35)]"
+                            : "bg-rose-500/20 text-rose-300 border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.35)]"
+                        }`}
+                        title={`${userFirstName} (${relativePerformance.userPct}%) vs Média da Empresa (${relativePerformance.companyPct}%). Diferença de ${Math.abs(relativePerformance.delta)}% (${relativePerformance.formattedPP}).`}
+                      >
+                        {relativePerformance.isAbove ? (
+                          <TrendingUp className="h-4 w-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <TrendingDown className="h-4 w-4 text-rose-400 shrink-0" />
+                        )}
+                        <span>{relativePerformance.formattedDelta}</span>
+                      </span>
+                    </div>
+
+                    {/* Tag 2: NOME DO USUÁRIO X JORNADA */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] uppercase font-bold text-slate-400">{userFirstName} X JORNADA:</span>
+                      <span
+                        className={`text-xs sm:text-sm font-mono font-black px-3 py-1 rounded-lg border-2 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap transition-all shadow-md ${
+                          !relativePerformance.isBelowExpected
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.35)]"
+                            : "bg-rose-500/20 text-rose-300 border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.35)]"
+                        }`}
+                        title={`${userFirstName} (${relativePerformance.userPct}%) vs Faixa Esperada (${relativePerformance.expectedMin}% a ${relativePerformance.expectedMax}% | Meta: ${relativePerformance.targetBenchmark}%).`}
+                      >
+                        {!relativePerformance.isBelowExpected ? (
+                          <TrendingUp className="h-4 w-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <TrendingDown className="h-4 w-4 text-rose-400 shrink-0" />
+                        )}
+                        <span>
+                          {relativePerformance.isWithinExpected
+                            ? `${relativePerformance.userPct}%`
+                            : relativePerformance.formattedExpectedDelta}
+                        </span>
+                      </span>
+                    </div>
+                  </>
+                );
+              })() : (
+                <div className="flex items-center justify-between w-full">
+                  <span 
+                    className="text-[10px] sm:text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-md bg-white/5 text-slate-300 border border-white/10 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap shadow-sm"
+                    title="Visão Geral consolidada de toda a equipe da empresa"
+                  >
+                    <Building2 className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                    <span>Média Geral Consolidada da Empresa</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 uppercase font-mono">
+                    Faixa Padrão Esperada: 75% a 85% (Meta: 80%)
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

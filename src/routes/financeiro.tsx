@@ -60,6 +60,21 @@ function Dashboard() {
     return Number(localStorage.getItem("mykaflow_employees_count")) || 5;
   });
 
+  // Proteção da rota financeira: perfis sem acesso ao financeiro são redirecionados para o CRM
+  useEffect(() => {
+    if (!loading) {
+      if (!user) {
+        navigate({ to: "/login" });
+      } else {
+        const canAccessFinance = role === "admin" || role === "financeiro";
+        if (!canAccessFinance) {
+          toast.error("Acesso restrito: seu perfil não possui permissão para o Módulo Financeiro.");
+          navigate({ to: "/crm", replace: true });
+        }
+      }
+    }
+  }, [user, loading, role, navigate]);
+
   useEffect(() => {
     if (!user) return;
     const checkUnread = async () => {

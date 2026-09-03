@@ -21,10 +21,10 @@ export function AppHeader({ onOpenProfile }: AppHeaderProps) {
   const currentPath = routerState.location.pathname;
 
   const isAdmin = role === "admin";
-  const canAccessFinance = isAdmin || role === "financeiro" || role === "user";
-  const canAccessCrm = isAdmin || role === "crm" || role === "crm_vendedor" || role === "crm_gestor" || role === "user";
+  const canAccessFinance = isAdmin || role === "financeiro";
+  const canAccessCrm = isAdmin || role === "financeiro" || role === "crm" || role === "crm_vendedor" || role === "crm_gestor" || role === "user";
 
-  const isFinanceActive = currentPath === "/" || currentPath.startsWith("/financeiro");
+  const isFinanceActive = currentPath.startsWith("/financeiro");
   const isCrmActive = currentPath.startsWith("/crm");
   const isAdminActive = currentPath.startsWith("/admin");
 
@@ -54,7 +54,7 @@ export function AppHeader({ onOpenProfile }: AppHeaderProps) {
           <nav className="hidden md:flex items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1">
             {canAccessFinance && (
               <Link
-                to="/"
+                to="/financeiro"
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                   isFinanceActive
                     ? "bg-background text-foreground shadow-sm shadow-black/5"
@@ -102,7 +102,7 @@ export function AppHeader({ onOpenProfile }: AppHeaderProps) {
           <div className="flex md:hidden items-center gap-1">
             {canAccessFinance && (
               <Link
-                to="/"
+                to="/financeiro"
                 className={`p-2 rounded-lg text-xs ${isFinanceActive ? "bg-muted text-foreground" : "text-muted-foreground"}`}
                 title="Financeiro"
               >

@@ -26,10 +26,18 @@ function ModuleHub() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && !user) {
-      navigate({ to: "/login" });
+    if (!loading) {
+      if (!user) {
+        navigate({ to: "/login" });
+      } else {
+        const canAccessFinance = role === "admin" || role === "financeiro";
+        if (!canAccessFinance) {
+          // Usuários exclusivamente comerciais/operacionais vão direto para o CRM
+          navigate({ to: "/crm", replace: true });
+        }
+      }
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, role, navigate]);
 
   if (loading) {
     return (
@@ -129,15 +137,23 @@ function ModuleHub() {
               <ul className="space-y-2.5 pt-1 text-xs text-muted-foreground font-medium">
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
-                  Fluxo de Caixa e DRE em Tempo Real
+                  Fluxo de Caixa & DRE em Tempo Real
                 </li>
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
-                  Controle de Receitas, Despesas e Prazos
+                  Contas a Pagar & Receber
                 </li>
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
-                  Métricas Operacionais e Conciliação
+                  Conciliação & Métricas Operacionais
+                </li>
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                  Centros de Custo & Orçamentos
+                </li>
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                  Integração com Vendas & Operação
                 </li>
               </ul>
             </div>
@@ -173,11 +189,11 @@ function ModuleHub() {
               <ul className="space-y-2.5 pt-1 text-xs text-muted-foreground font-medium">
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
-                  Atividades Individuais
+                  Gestão de Atividades
                 </li>
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
-                  Acompanhamento de Fluxo
+                  Acompanhamento de Vendas & Histórico
                 </li>
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
@@ -185,7 +201,11 @@ function ModuleHub() {
                 </li>
                 <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
                   <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
-                  Automação Financeira
+                  Custos Operacionais
+                </li>
+                <li className="flex items-center gap-2.5 group-hover:text-slate-200 transition-colors">
+                  <CheckCircle className="h-4 w-4 text-sky-400 shrink-0" />
+                  Integração Financeira
                 </li>
               </ul>
             </div>

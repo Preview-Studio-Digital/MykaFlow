@@ -1507,6 +1507,7 @@ function FastMentionReplyInput({ targetId, deal, teamMembers, onSend, initialTex
 function CrmDashboard() {
   const { user, loading: authLoading, role, signOut } = useAuth();
   const isAdmin = role === "admin" || (user?.email ? user.email.includes("admin") : false);
+  const canAccessFinance = isAdmin || role === "financeiro";
   const navigate = useNavigate();
 
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -2083,7 +2084,7 @@ function CrmDashboard() {
 
   const handleExit = async () => {
     setIsSideMenuOpen(false);
-    if (role === "admin") {
+    if (role === "admin" || role === "financeiro") {
       navigate({ to: "/" });
     } else {
       await signOut();
@@ -6225,13 +6226,15 @@ function CrmDashboard() {
       {/* Header Principal com Tag Centralizada no Topo */}
       <header className="shrink-0 mb-1 flex items-center justify-between pb-0 relative">
         <div className="flex items-center gap-3 shrink-0">
-          <Link
-            to="/"
-            className="btn-ghost-neon h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shadow-sm hover:scale-105"
-            title="Voltar ao Seletor de Módulos (Hub Inicial)"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Link>
+          {canAccessFinance && (
+            <Link
+              to="/"
+              className="btn-ghost-neon h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shadow-sm hover:scale-105"
+              title="Voltar ao Seletor de Módulos (Hub Inicial)"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Link>
+          )}
           <div
             className="flex flex-col select-none justify-center focus:outline-none"
           >
@@ -6656,15 +6659,17 @@ function CrmDashboard() {
               </Link>
             )}
 
-            <button
-              type="button"
-              onClick={handleExit}
-              className="btn-ghost-neon h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-400/60 bg-rose-500/10 shadow-sm transition-all hover:scale-105 cursor-pointer"
-              title={role === "admin" ? "Voltar ao Seletor de Módulos" : "Sair do Sistema"}
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Sair</span>
-            </button>
+            {!canAccessFinance && (
+              <button
+                type="button"
+                onClick={handleExit}
+                className="h-9 rounded-xl px-3 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-rose-400 hover:text-rose-200 border border-rose-500/30 hover:border-rose-400/70 bg-rose-500/10 hover:bg-rose-500/20 shadow-sm hover:shadow-[0_0_18px_rgba(244,63,94,0.45)] transition-all hover:scale-105 cursor-pointer font-display"
+                title="Sair do Sistema"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sair</span>
+              </button>
+            )}
           </div>
         </div>
         </header>

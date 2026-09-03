@@ -10,15 +10,22 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const { user, loading, signIn } = useAuth();
+  const { user, loading, role, signIn } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) navigate({ to: "/" });
-  }, [user, loading, navigate]);
+    if (!loading && user) {
+      const canAccessFinance = role === "admin" || role === "financeiro";
+      if (canAccessFinance) {
+        navigate({ to: "/", replace: true });
+      } else {
+        navigate({ to: "/crm", replace: true });
+      }
+    }
+  }, [user, loading, role, navigate]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

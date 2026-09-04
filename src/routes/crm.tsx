@@ -8085,12 +8085,12 @@ function CrmDashboard() {
               }
               modalBackdropMouseDownRef.current = false;
             }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-5 animate-in fade-in overflow-hidden"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-0 animate-in fade-in overflow-hidden"
           >
             <div
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className={`w-full max-w-4xl max-h-[98vh] h-[98vh] rounded-2xl border p-4 sm:p-5 shadow-2xl flex flex-col backdrop-blur-2xl transition-all overflow-hidden ${modalBgClass}`}
+              className={`w-screen h-screen max-w-none max-h-none rounded-none border-0 p-4 sm:p-6 shadow-2xl flex flex-col backdrop-blur-2xl transition-all overflow-hidden ${modalBgClass}`}
             >
               {/* Header Fixo do Card Expandido com Botão Lateral Quadrado à Esquerda e Textos Centralizados */}
               <div className="shrink-0 flex items-stretch border-b border-white/10 pb-3 relative min-h-[105px]">
@@ -8467,20 +8467,550 @@ function CrmDashboard() {
                 );
               })()}
 
-              {/* CORPO DO MODAL: LINHA DO TEMPO EM TELA CHEIA DO CARD OU FORMULÁRIO DE DETALHES */}
-              {isTimelineOpen ? (
-                <div className="flex-1 min-h-0 flex flex-col space-y-3 pt-2.5 overflow-hidden animate-in fade-in duration-200">
-                  <div className="shrink-0 flex items-center justify-between p-2.5 rounded-xl bg-white/[0.04] border border-white/10">
+              {/* CORPO DO MODAL: ESTRUTURA DIVIDIDA 50/50 VERTICALMENTE - LADO ESQUERDO (ATUALIZAÇÃO) E LADO DIREITO (HISTÓRICO) */}
+              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-4 pt-3 overflow-hidden">
+                {/* LADO ESQUERDO (50%): Controles, Formulário de Atualização e Vinculadas */}
+                <div className="flex flex-col justify-between space-y-3 min-h-0 overflow-y-auto custom-scrollbar pr-1">
+                  {/* Se a atividade estiver pendente de aceite de armazenamento */}
+                  {isPendingModal && (
+                    <div className="text-xs sm:text-sm leading-relaxed text-slate-100 font-medium bg-amber-950/30 p-4 rounded-2xl border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] space-y-3 shrink-0">
+                      <div className="flex items-center justify-between border-b border-amber-500/30 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs sm:text-sm font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                            <AlertTriangle className="h-4 w-4 animate-pulse" />
+                            Atividade Armazenada pelo Responsável ({getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance")?.concluded_by_user_name || selectedDealForHistory.assigned_user_name || "Responsável"})
+                          </span>
+                        </div>
+                        <span className="font-mono text-[10px] text-amber-300">
+                          {new Date(getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance")?.created_at || selectedDealForHistory.updated_at).toLocaleString("pt-BR")}
+                        </span>
+                      </div>
+
+                      {getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance")?.completion_notes && (
+                        <div className="text-xs sm:text-sm text-slate-100 leading-relaxed pl-1 whitespace-pre-wrap font-normal">
+                          {renderInteractiveDescription(getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance")!.completion_notes)}
+                        </div>
+                      )}
+
+                      <div className="pt-2.5 border-t border-amber-500/30 flex items-center justify-between gap-3 flex-wrap">
+                        {Boolean(user?.id && selectedDealForHistory.user_id && user.id === selectedDealForHistory.user_id) ? (
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-3">
+                            <span className="text-xs text-amber-200 font-medium">
+                              A solicitação foi armazenada pelo responsável e aguarda o seu aceite para ser arquivada definitivamente.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptCompletion(selectedDealForHistory, getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance")?.id)}
+                              className="btn-ghost-neon px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-black bg-emerald-400 hover:bg-emerald-300 border border-emerald-300 shrink-0 cursor-pointer transition-all shadow-[0_0_20px_rgba(16,185,129,0.5)] hover:scale-105 flex items-center gap-2"
+                              title="Aceitar o armazenamento desta atividade e arquivá-la definitivamente"
+                            >
+                              <CheckCheck className="h-4 w-4" />
+                              <span>Aceitar Armazenamento</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-amber-300/90 italic">
+                            Aguardando aceite de armazenamento pelo autor ({selectedDealForHistory.creator_name || "Autor"}).
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CARD DE ÚLTIMO DOCUMENTO / ORÇAMENTO OU CONTRATO (Sem container extra e sem nome do arquivo) */}
+                  {(() => {
+                    const pinnedQuote = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
+                    const pinnedContract = getDealContractFile(selectedDealForHistory, dealHistoryList);
+                    if (!pinnedQuote && !pinnedContract) return null;
+                    const isBudget = isBudgetDeal(selectedDealForHistory);
+
+                    return (
+                      <div className="shrink-0 space-y-2 animate-in fade-in">
+                        {pinnedQuote && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewingQuoteFile({ url: pinnedQuote.url, name: pinnedQuote.name, isContract: false })}
+                            className="w-full flex items-center justify-between gap-2.5 p-2 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-slate-900/90 border border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-500/15 shadow-sm transition-all text-left cursor-pointer group"
+                            title={isBudget ? "Clique para visualizar o orçamento anexado" : "Clique para visualizar o documento anexado"}
+                          >
+                            <div className="flex items-center gap-2 text-xs min-w-0 flex-1">
+                              <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform">
+                                <FileCheck className="h-4 w-4" />
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
+                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-400 shrink-0">
+                                  {isBudget ? "ÚLTIMO ORÇAMENTO:" : "ÚLTIMO DOCUMENTO:"}
+                                </span>
+                                {pinnedQuote.quoteData?.quoteNumber && (
+                                  <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">
+                                    Nº {pinnedQuote.quoteData.quoteNumber}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {pinnedQuote.quoteData?.totalAmount && pinnedQuote.quoteData.totalAmount > 0 && (
+                                <span className="font-mono font-black text-emerald-400 text-xs px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-400/30 hidden sm:inline-block">
+                                  {`R$ ${pinnedQuote.quoteData.totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                </span>
+                              )}
+                              <span className="font-mono text-[10px] font-semibold text-emerald-300/80 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Clock className="h-3 w-3 text-emerald-400 shrink-0" />
+                                {new Date(pinnedQuote.uploadedAt).toLocaleString("pt-BR")}
+                              </span>
+                            </div>
+                          </button>
+                        )}
+
+                        {pinnedContract && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewingQuoteFile({ url: pinnedContract.url, name: pinnedContract.name, isContract: true })}
+                            className="w-full flex items-center justify-between gap-2.5 p-2 px-3 rounded-xl bg-gradient-to-r from-sky-950/60 via-slate-900/90 to-slate-900/90 border border-sky-500/40 hover:border-sky-400 hover:bg-sky-500/15 shadow-sm transition-all text-left cursor-pointer group"
+                            title="Clique para visualizar o contrato anexado"
+                          >
+                            <div className="flex items-center gap-2 text-xs min-w-0 flex-1">
+                              <div className="p-1 rounded-lg bg-sky-500/20 text-sky-400 shrink-0 group-hover:scale-110 transition-transform">
+                                <FileText className="h-4 w-4" />
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
+                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-sky-400 shrink-0">
+                                  ÚLTIMO CONTRATO:
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-mono text-[10px] font-semibold text-sky-300/80 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Clock className="h-3 w-3 text-sky-400 shrink-0" />
+                                {new Date(pinnedContract.uploadedAt).toLocaleString("pt-BR")}
+                              </span>
+                            </div>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Formulário de Atualização Integrado */}
+                  {!isPendingModal && (
+                    isAdmin || selectedDealForHistory.assigned_user_id === user?.id ? (
+                      <div className="flex-1 min-h-0 flex flex-col justify-between space-y-3 overflow-hidden">
+                        <div className="flex-1 min-h-0 flex flex-col p-4 rounded-2xl bg-white/[0.02] border border-white/10 space-y-3">
+                          {/* Linha Única de Ações: Tarefa Vinculada, Orçamento, Contrato */}
+                          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 pb-2 border-b border-white/10">
+                            {(() => {
+                              const parentInfo = getParentDealInfo(selectedDealForHistory);
+                              const isSubtaskDeal = Boolean(parentInfo);
+
+                              if (isSubtaskDeal) {
+                                return (
+                                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-sky-950/40 border border-sky-500/30 text-sky-300 text-xs font-bold">
+                                    <GitFork className="h-3.5 w-3.5 text-sky-400" />
+                                    <span>Vinculada a #{parentInfo?.reqNumber || "Principal"}</span>
+                                  </div>
+                                );
+                              }
+
+                              const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
+                              const contractDoc = getDealContractFile(selectedDealForHistory, dealHistoryList);
+                              const isBudget = isBudgetDeal(selectedDealForHistory);
+                              const isContractColumn = selectedDealForHistory.stage === "won" || selectedDealForHistory.stage === "completed" || Boolean(contractDoc);
+
+                              const attachLabel = isBudget ? "ANEXAR ORÇAMENTO" : "ANEXAR DOCUMENTO";
+                              const buttonHoverTitle = isBudget ? "Clique para selecionar e anexar orçamento" : "Clique para selecionar e anexar documento";
+
+                              return (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {/* 1. Vincular Atividade */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSubtaskTitle("");
+                                      setSubtaskAssignedTo("");
+                                      setSubtaskDeadline("");
+                                      setSubtaskDuration("");
+                                      setSubtaskNotes("");
+                                      setIsSubtaskModalOpen(true);
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm"
+                                    title="Criar e vincular uma atividade a esta atividade principal"
+                                  >
+                                    <PlusCircle className="h-3.5 w-3.5 text-emerald-400" /> VINCULAR ATIVIDADE
+                                  </button>
+
+                                  {/* 2. Anexo de Orçamento/Documento */}
+                                  <input
+                                    ref={quoteFileInputRef}
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    onChange={handleUploadQuoteFile}
+                                    disabled={isUploadingQuoteFile}
+                                    className="hidden"
+                                  />
+
+                                  {(quoteDoc || !isContractColumn) && (
+                                    <button
+                                      type="button"
+                                      disabled={isUploadingQuoteFile}
+                                      onClick={() => {
+                                        quoteFileInputRef.current?.click();
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                                      title={quoteDoc ? (isBudget ? "Clique para selecionar e anexar um novo orçamento" : "Clique para selecionar e anexar um novo documento") : buttonHoverTitle}
+                                    >
+                                      {isUploadingQuoteFile ? (
+                                        <>
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                                          <span>COMPACTANDO E ENVIANDO...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Paperclip className="h-3.5 w-3.5 text-emerald-400" />
+                                          <span>{quoteDoc ? (isBudget ? "ANEXAR NOVO ORÇAMENTO" : "ANEXAR NOVO DOCUMENTO") : attachLabel}</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+
+                                  {/* 3. Anexo de Contrato Exclusivo da Coluna CONTRATOS (ou atividades com contrato) */}
+                                  {isContractColumn && (
+                                    <>
+                                      <input
+                                        ref={contractFileInputRef}
+                                        type="file"
+                                        accept="image/*,application/pdf"
+                                        onChange={handleUploadContractFile}
+                                        disabled={isUploadingContractFile}
+                                        className="hidden"
+                                      />
+
+                                      <button
+                                        type="button"
+                                        disabled={isUploadingContractFile}
+                                        onClick={() => {
+                                          contractFileInputRef.current?.click();
+                                        }}
+                                        className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-sky-300 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                                        title={contractDoc ? "Clique para selecionar e anexar um novo contrato" : "Clique para selecionar e anexar contrato"}
+                                      >
+                                        {isUploadingContractFile ? (
+                                          <>
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
+                                            <span>COMPACTANDO E ENVIANDO...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <FileText className="h-3.5 w-3.5 text-sky-400" />
+                                            <span>{contractDoc ? "ANEXAR NOVO CONTRATO" : "ANEXAR CONTRATO"}</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* FORMULÁRIO DE ATUALIZAÇÃO SEMPRE VISÍVEL E PRONTO PARA DIGITAR */}
+                          <form onSubmit={handleAddHistoryOrReassign} className="flex-1 min-h-0 flex flex-col justify-between gap-2">
+                            <div className="flex-1 min-h-0 flex flex-col">
+                              <FastDealCommentInput
+                                dealId={selectedDealForHistory.id}
+                                onTextChange={(text) => {
+                                  newCommentRef.current = text;
+                                }}
+                                teamMembers={teamMembers}
+                                resetCounter={commentResetCounter}
+                              />
+                            </div>
+
+                            {/* Bloco de Linhas Automáticas Imutáveis */}
+                            {autoGeneratedLogs.length > 0 && (
+                              <div className="shrink-0 space-y-1.5 p-2.5 rounded-xl bg-sky-950/30 border border-sky-500/20 max-h-[100px] overflow-y-auto custom-scrollbar">
+                                {autoGeneratedLogs.map((log, idx) => (
+                                  <div key={idx} className="flex items-start gap-2 text-xs font-semibold text-sky-200">
+                                    <span className="text-sky-400 font-bold">•</span>
+                                    <span className="select-none leading-tight">{log}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Linha Inferior de Ações: Etapa, Responsável, Concluir/Arquivar e Atualizar */}
+                            <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 pt-2 pb-1.5 px-1 border-t border-white/5 overflow-visible">
+                              {/* Menus da Esquerda: Etapa e Responsável */}
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Etapa */}
+                                {(() => {
+                                  const isInternalDeal =
+                                    selectedDealForHistory.title.toLowerCase().includes("[req. interna]") ||
+                                    selectedDealForHistory.stage === "lead";
+
+                                  const isLinkedSubtask = Boolean(getParentDealInfo(selectedDealForHistory));
+                                  const currentStageName = STAGES.find((s) => s.id === selectedDealForHistory.stage)?.title || selectedDealForHistory.stage;
+
+                                  if (isInternalDeal || isLinkedSubtask) {
+                                    return (
+                                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa:</span>
+                                        <span className="font-bold text-sky-400 uppercase">{currentStageName}</span>
+                                      </div>
+                                    );
+                                  }
+
+                                  const curStageIndex = STAGES.findIndex((s) => s.id === (selectedDealForHistory.stage === "proposal" ? "negotiation" : selectedDealForHistory.stage));
+
+                                  const availableStages = STAGES.filter((s) => {
+                                    if (s.id === selectedDealForHistory.stage) return true;
+                                    const sIdx = STAGES.findIndex((st) => st.id === s.id);
+                                    if (sIdx < curStageIndex) return false;
+                                    if (selectedDealForHistory.stage === "qualification") {
+                                      return s.id === "negotiation";
+                                    }
+                                    if (selectedDealForHistory.stage === "negotiation" || (selectedDealForHistory.stage as string) === "proposal") {
+                                      return s.id === "won" || s.id === "lost";
+                                    }
+                                    if (selectedDealForHistory.stage === "won") {
+                                      return s.id === "completed" || s.id === "lost";
+                                    }
+                                    return sIdx === curStageIndex + 1;
+                                  });
+
+                                  const canChangeStage =
+                                    role === "admin" ||
+                                    !selectedDealForHistory.assigned_user_id ||
+                                    selectedDealForHistory.assigned_user_id === user?.id ||
+                                    selectedDealForHistory.user_id === user?.id;
+
+                                  return (
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa:</span>
+                                      {canChangeStage && availableStages.length > 1 ? (
+                                        <select
+                                          value={stageToMove || selectedDealForHistory.stage}
+                                          onChange={(e) => {
+                                            const targetStage = e.target.value as Deal["stage"];
+                                            if (targetStage) {
+                                              const originalStage = selectedDealForHistory.stage;
+                                              
+                                              if (targetStage === originalStage) {
+                                                setAutoGeneratedLogs((prev) =>
+                                                  prev.filter((l) => !l.includes("alterou a etapa de"))
+                                                );
+                                                setStageToMove(null);
+                                                return;
+                                              }
+
+                                              if (targetStage === "negotiation") {
+                                                const parentInfo = getParentDealInfo(selectedDealForHistory);
+                                                const parentDeal = parentInfo?.deal || deals.find((d) => d.id === parentInfo?.id);
+                                                const hasQuoteAttached = Boolean(
+                                                  getDealQuoteFile(selectedDealForHistory, dealHistoryList) ||
+                                                  (parentDeal && getDealQuoteFile(parentDeal))
+                                                );
+                                                if (!hasQuoteAttached) {
+                                                  return toast.error("Não é possível avançar para NEGOCIAÇÕES sem o orçamento anexado.");
+                                                }
+                                              }
+
+                                              const fromStageName = STAGES.find((s) => s.id === originalStage)?.title || originalStage;
+                                              const toStageName = STAGES.find((s) => s.id === targetStage)?.title || targetStage;
+                                              const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+                                              const stageLine = `${userName} alterou a etapa de "${fromStageName}" para "${toStageName}".`;
+                                              
+                                              setAutoGeneratedLogs((prev) => [
+                                                ...prev.filter((l) => !l.includes("alterou a etapa de")),
+                                                stageLine,
+                                              ]);
+                                              setStageToMove(targetStage);
+                                            }
+                                          }}
+                                          className="input-futuristic rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider bg-transparent text-accent border border-accent/40 outline-none cursor-pointer hover:border-accent"
+                                        >
+                                          {availableStages.map((s) => (
+                                            <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                                              {s.id === (stageToMove || selectedDealForHistory.stage) ? s.title : `➔ ${s.title}`}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <span className="font-bold text-accent uppercase">{currentStageName}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+
+                                {/* Responsável */}
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
+                                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                    Responsável:
+                                  </span>
+                                  <select
+                                    value={reassignTo || selectedDealForHistory.assigned_user_id || ""}
+                                    onChange={(e) => {
+                                      const selectedId = e.target.value;
+                                      setReassignTo(selectedId);
+                                      const originalId = selectedDealForHistory.assigned_user_id;
+
+                                      setAutoGeneratedLogs((prev) =>
+                                        prev.filter((l) => !l.includes("alterou o responsável de"))
+                                      );
+
+                                      if (selectedId && selectedId !== originalId) {
+                                        const selectedMember = teamMembers.find((m) => m.id === selectedId);
+                                        const newName = selectedMember?.display_name || selectedMember?.email || "Novo Responsável";
+                                        const currentName = selectedDealForHistory.assigned_user_name || "Anterior";
+                                        const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
+                                        const reassignLine = `${userName} alterou o responsável de "${currentName}" para "${newName}".`;
+                                        
+                                        setAutoGeneratedLogs((prev) => [
+                                          ...prev.filter((l) => !l.includes("alterou o responsável de")),
+                                          reassignLine,
+                                        ]);
+                                      }
+                                    }}
+                                    className="input-futuristic rounded px-2 py-0.5 text-xs outline-none bg-transparent font-bold border border-white/15 cursor-pointer max-w-[200px]"
+                                  >
+                                    <option value={selectedDealForHistory.assigned_user_id || ""} className="bg-slate-900">
+                                      {selectedDealForHistory.assigned_user_name || "Nenhum"}
+                                    </option>
+                                    {teamMembers
+                                      .filter((m) => m.id !== selectedDealForHistory.assigned_user_id)
+                                      .map((m) => (
+                                        <option key={m.id} value={m.id} className="bg-slate-900">
+                                          {m.display_name || m.email}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Ações da Direita */}
+                              <div className="flex items-center gap-2.5 py-1 px-1 overflow-visible shrink-0">
+                                {(() => {
+                                  const parentInfo = getParentDealInfo(selectedDealForHistory);
+                                  const isLinkedSubtask = Boolean(parentInfo);
+
+                                  if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCompleteSubtask(selectedDealForHistory)}
+                                        className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(244,63,94,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                        title="Armazenar e fechar esta atividade vinculada, notificando o responsável pela atividade principal"
+                                      >
+                                        <Archive className="h-4 w-4 text-rose-400" />
+                                        <span>Armazenar</span>
+                                      </button>
+                                    );
+                                  }
+
+                                  if (!isLinkedSubtask && selectedDealForHistory.stage === "won") {
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCompleteContract(selectedDealForHistory)}
+                                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25 border-2 !border-emerald-400 hover:!border-emerald-300 flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.35)] hover:shadow-[0_0_20px_rgba(16,185,129,0.55)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                        style={{ borderColor: "#10b981", color: "#10b981" }}
+                                        title="Concluir este contrato e movê-lo para a coluna CONCLUÍDOS (prazos serão desconsiderados)"
+                                      >
+                                        <CheckCircle2 className="h-4 w-4 text-emerald-400" style={{ color: "#10b981" }} />
+                                        <span className="text-emerald-400 font-black" style={{ color: "#10b981" }}>Concluir</span>
+                                      </button>
+                                    );
+                                  }
+
+                                  const originStage =
+                                    selectedDealForHistory.stage === "archived"
+                                      ? getArchivedOriginStage(selectedDealForHistory)
+                                      : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
+
+                                  const isArchivableStage =
+                                    originStage === "lead" ||
+                                    ((originStage === "completed" || originStage === "lost") && isAdmin);
+
+                                  if (!isLinkedSubtask && isArchivableStage) {
+                                    return selectedDealForHistory.stage === "archived" ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
+                                        className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                        title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
+                                      >
+                                        <ArchiveRestore className="h-4 w-4 text-emerald-400" />
+                                        <span>Desarquivar</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleArchiveDeal(selectedDealForHistory)}
+                                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                        style={{ borderColor: "#ef4444", color: "#ef4444" }}
+                                        title="Arquivar esta atividade totalmente finalizada"
+                                      >
+                                        <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
+                                        <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
+                                      </button>
+                                    );
+                                  }
+
+                                  return null;
+                                })()}
+
+                                <button
+                                  type="submit"
+                                  disabled={isSavingUpdate}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/40 hover:border-sky-400/60 flex items-center gap-1.5 shadow-[0_0_15px_rgba(56,189,248,0.25)] hover:shadow-[0_0_20px_rgba(56,189,248,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
+                                >
+                                  <Save className="h-4 w-4 text-sky-400" />
+                                  <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
+                                </button>
+                              </div>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center gap-3 shrink-0">
+                        <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+                          <Lock className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-bold uppercase tracking-wider text-[11px] text-amber-300">
+                            Modo de Apenas Leitura
+                          </p>
+                          <p className="text-white/80 mt-0.5 leading-relaxed">
+                            Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações no histórico ao lado.
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+
+                {/* LADO DIREITO (50%): Histórico Completo da Atividade */}
+                <div className="flex flex-col min-h-0 overflow-hidden bg-black/40 p-4 rounded-2xl border border-white/10 shadow-inner space-y-3">
+                  <div className="shrink-0 flex items-center justify-between pb-2.5 border-b border-white/10">
                     <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-sky-300">
-                      <History className="h-4 w-4 text-accent" /> Linha do Tempo Completa ({unifiedTimelineList.length} eventos)
+                      <History className="h-4 w-4 text-accent" /> Histórico Completo da Atividade ({unifiedTimelineList.length} {unifiedTimelineList.length === 1 ? "evento" : "eventos"})
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsTimelineOpen(false)}
-                      className="btn-ghost-neon px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-white border-white/20 hover:bg-white/10 flex items-center gap-1.5 transition-all shadow-sm"
-                    >
-                      <span>Voltar</span>
-                    </button>
+                    {aging && (
+                      <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${aging.dotColor}`} />
+                        <span className={`${aging.accentText} uppercase tracking-wider text-[11px]`}>
+                          {aging.days === 0
+                            ? "Atualizado hoje"
+                            : aging.days === 1
+                            ? "1 dia sem atualização"
+                            : aging.days > 15
+                            ? "+15 dias sem atualização"
+                            : `${aging.days} dias sem atualização`}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1.5 custom-scrollbar">
@@ -8542,25 +9072,22 @@ function CrmDashboard() {
                                 </div>
                                 <span className="font-bold text-white uppercase">{userName}</span>
                                 <span className="text-slate-300 font-medium">
-                                  {isContract ? "anexou o Contrato:" : isBudget ? "anexou o Orçamento Oficial:" : "anexou o Documento:"}
+                                  {isContract ? "anexou o Contrato" : isBudget ? "anexou o Orçamento Oficial" : "anexou o Documento"}
                                 </span>
-                                {docUrl ? (
+                                {docUrl && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setPreviewingQuoteFile({ url: docUrl, name: fileName, isContract });
                                     }}
-                                    className={`font-black underline underline-offset-2 cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1 ${
+                                    className={`font-mono text-xs font-black underline underline-offset-2 cursor-pointer transition-all hover:scale-105 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 border border-white/10 ${
                                       isContract ? "text-sky-300 hover:text-sky-200" : "text-emerald-300 hover:text-emerald-200"
                                     }`}
                                     title={`Clique para visualizar ${isContract ? "o contrato" : isBudget ? "o orçamento" : "o documento"}`}
                                   >
-                                    <span>{fileName}</span>
-                                    {fileSize ? <span className="font-mono text-[10px] no-underline font-normal text-muted-foreground">({fileSize})</span> : null}
+                                    <span>[Visualizar]</span>
                                   </button>
-                                ) : (
-                                  <span className="font-mono text-xs font-bold text-white truncate">{fileName}</span>
                                 )}
                               </div>
                               <span className="font-mono text-xs text-muted-foreground shrink-0 ml-auto">
@@ -8660,968 +9187,7 @@ function CrmDashboard() {
                     )}
                   </div>
                 </div>
-              ) : (
-                <div className={`flex-1 min-h-0 flex flex-col ${isPendingModal ? "justify-start h-full" : "justify-between"} pt-2.5 gap-2.5 overflow-hidden`}>
-                  {/* Informações do Topo */}
-                  <div className={`${isPendingModal ? "flex-1 min-h-0 flex flex-col" : "shrink-0"} space-y-2`}>
-                    {selectedDealForHistory.notes && (
-                      <div className={`p-3 rounded-xl bg-white/5 border border-white/10 space-y-2 custom-scrollbar ${isPendingModal ? "flex-1 min-h-0 overflow-y-auto" : "max-h-[30vh] sm:max-h-[34vh] overflow-y-auto"}`}>
-                        {(() => {
-                          const notes = selectedDealForHistory.notes || "";
-                          const cleanNotes = notes
-                            .replace(/<!--.*?-->\s*/g, "")
-                            .replace(/\[TASK_COMPLETION_NOTIFICATION:.*?\]\s*/g, "")
-                            .replace(/\[WORK_ACTIVE:.*?\]\s*/g, "")
-                            .replace(/\[WORK_LOG:.*?\]\s*/g, "")
-                            .replace(/\[QUOTE_DATA:.*?\]\s*/g, "")
-                            .replace(/\[QUOTE_FILE:.*?\]\s*/g, "")
-                            .replace(/\[CONTRACT_FILE:.*?\]\s*/g, "")
-                            .replace(/\[SUBTASK_LINK:.*?\]\s*/g, "")
-                            .replace(/\[SUBTASK_COMPLETED:.*?\]\s*/g, "")
-                            .replace(/\[SUBTASK_COMPLETION:.*?\]\s*/g, "")
-                            .replace(/\[PARENT_DEAL:.*?\]\s*/g, "")
-                            .replace(/\[MENTION:.*?\]\s*/g, "")
-                            .replace(/\[MENTION_REPLY:.*?\]\s*/g, "")
-                            .replace(/\[RESPONSIBLE_LAST_SEEN:.*?\]\s*/g, "")
-                            .trim();
-
-                          // Obtém a lista de atualizações principais (ignorando respostas, conclusões de vinculadas e anexos)
-                          const mainUpdateHistoryList = dealHistoryList.filter(
-                            (h) => !isHistoryItemReply(h) && h.action_type !== "subtask_completed" && h.action_type !== "quote_file_uploaded" && h.action_type !== "contract_file_uploaded"
-                          );
-                          const latestUpdateItem = mainUpdateHistoryList[0] || null;
-
-                          const latestAuthorName = (
-                            latestUpdateItem?.user_name ||
-                            selectedDealForHistory.latest_update_author ||
-                            selectedDealForHistory.creator_name ||
-                            selectedDealForHistory.assigned_user_name ||
-                            "Autor"
-                          ).toUpperCase();
-
-                          const latestTimestamp =
-                            latestUpdateItem?.created_at ||
-                            selectedDealForHistory.latest_update_at ||
-                            selectedDealForHistory.updated_at ||
-                            selectedDealForHistory.created_at;
-
-                          const effectiveText = (latestUpdateItem?.description && latestUpdateItem.description.trim()) || cleanNotes;
-
-                          const dealMentions = getDealMentions(selectedDealForHistory);
-                          const dealSubtaskCompletions = getDealSubtaskCompletions(selectedDealForHistory);
-
-                          // Consolidação completa de todas as respostas (notas + histórico permanente)
-                          const notesReplies = getDealMentionReplies(selectedDealForHistory);
-                          const historyReplies: DealMentionReply[] = dealHistoryList
-                            .filter((h) => isHistoryItemReply(h))
-                            .map((h) => {
-                              const cleanReplyText = extractReplyText(h.description, (h as any).rawReplyText);
-                              return {
-                                id: h.id,
-                                mention_id: "latest_update",
-                                deal_id: selectedDealForHistory.id,
-                                user_id: (h as any).user_id || "",
-                                user_name: (h.user_name || "Usuário").toUpperCase(),
-                                reply_text: cleanReplyText,
-                                created_at: h.created_at,
-                              };
-                            });
-
-                          const combinedRepliesMap = new Map<string, DealMentionReply>();
-                          historyReplies.forEach((r) => {
-                            combinedRepliesMap.set(r.id, r);
-                          });
-                          notesReplies.forEach((r) => {
-                            let existingKey = r.id;
-                            for (const [key, existing] of combinedRepliesMap.entries()) {
-                              if (
-                                existing.id === r.id ||
-                                (existing.reply_text.trim() === r.reply_text.trim() &&
-                                  existing.user_name.toUpperCase() === (r.user_name || "").toUpperCase())
-                              ) {
-                                existingKey = key;
-                                break;
-                              }
-                            }
-                            combinedRepliesMap.set(existingKey, {
-                              ...r,
-                              user_name: (r.user_name || "Usuário").toUpperCase(),
-                            });
-                          });
-
-                          // Respostas vinculadas estritamente à última atualização:
-                          // Somente respostas que foram postadas após a última atualização (com tolerância de 3 segundos) e em ordem cronológica de acontecimento
-                          const latestUpdateTimeMs = new Date(latestTimestamp).getTime();
-                          const currentUpdateReplies = Array.from(combinedRepliesMap.values())
-                            .filter((r) => {
-                              const repTimeMs = new Date(r.created_at).getTime();
-                              return repTimeMs >= latestUpdateTimeMs - 3000;
-                            })
-                            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-
-                          const userMention = dealMentions.find((m) => m.mentioned_user_id === user?.id);
-                          const canMarkAsRead = Boolean(userMention && !userMention.read_by_user);
-                          const isReplyingCurrent = Boolean(replyingToMentionId && (replyingToMentionId === (userMention?.id || dealMentions[0]?.id || "latest_update")));
-
-                          const pendingNotif = getDealCompletionNotifications(selectedDealForHistory).find((n) => n.status === "pending_acceptance");
-                          const isAuthor = Boolean(user?.id && selectedDealForHistory.user_id && user.id === selectedDealForHistory.user_id);
-                          const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
-                          const contractDoc = getDealContractFile(selectedDealForHistory, dealHistoryList);
-
-                          if (!effectiveText && dealMentions.length === 0 && dealSubtaskCompletions.length === 0 && !isPendingModal) return null;
-
-                          return (
-                            <div className="space-y-3">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-1.5">
-                                <div className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm text-foreground">
-                                  <User className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                                  <span className="font-bold uppercase tracking-wide text-white">
-                                    {latestAuthorName}
-                                  </span>
-                                  <span className="text-slate-300 font-medium lowercase text-xs sm:text-sm">escreveu:</span>
-                                </div>
-
-                                <div className="flex items-center gap-3 shrink-0">
-                                  {(() => {
-                                    const agingText =
-                                      aging.days === 0
-                                        ? "Atualizado hoje"
-                                        : aging.days === 1
-                                        ? "1 dia sem atualização"
-                                        : aging.days > 15
-                                        ? "+15 dias sem atualização"
-                                        : `${aging.days} dias sem atualização`;
-
-                                    return (
-                                      <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
-                                        <span className={`h-2 w-2 rounded-full shrink-0 ${aging.dotColor}`} />
-                                        <span className={`${aging.accentText} uppercase tracking-wider`}>
-                                          {agingText}
-                                        </span>
-                                      </div>
-                                    );
-                                  })()}
-                                  <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 border border-sky-400/30 px-2.5 py-1 rounded-md flex items-center gap-1.5 shrink-0">
-                                    <Clock className="h-3.5 w-3.5 text-sky-400" />
-                                    {new Date(latestTimestamp).toLocaleString("pt-BR", {
-                                      day: "2-digit",
-                                      month: "2-digit",
-                                      year: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      second: "2-digit",
-                                    })}
-                                  </span>
-                                </div>
-                              </div>
-                              {effectiveText && (
-                                isPendingModal ? (
-                                  <div className="text-sm sm:text-base leading-relaxed text-slate-100 font-medium bg-amber-950/30 p-4 rounded-2xl border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] space-y-3">
-                                    <div className="flex items-center justify-between border-b border-amber-500/30 pb-2">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-mono text-sm sm:text-base font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                                          <AlertTriangle className="h-4 w-4 animate-pulse" />
-                                          Atividade Armazenada pelo Responsável ({pendingNotif?.concluded_by_user_name || selectedDealForHistory.assigned_user_name || "Responsável"})
-                                        </span>
-                                      </div>
-                                      <span className="font-mono text-[10px] text-amber-300">
-                                        {new Date(pendingNotif?.created_at || latestTimestamp).toLocaleString("pt-BR")}
-                                      </span>
-                                    </div>
-
-                                    <div className="text-sm sm:text-base text-slate-100 leading-relaxed pl-1 whitespace-pre-wrap font-normal">
-                                      {renderInteractiveDescription(pendingNotif?.completion_notes || effectiveText)}
-                                    </div>
-
-                                    {/* Linhas de Verificação dos Últimos Documentos Anexados: Último Orçamento e Último Contrato */}
-                                    {(quoteDoc || contractDoc) && (
-                                      <div className="pt-2 border-t border-amber-500/20 space-y-2">
-                                        {quoteDoc && (
-                                          <button
-                                            type="button"
-                                            onClick={() => setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name, isContract: false })}
-                                            className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-slate-900/90 border border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
-                                            title={isBudgetDeal(selectedDealForHistory) ? "Clique para visualizar o orçamento anexado" : "Clique para visualizar o documento anexado"}
-                                          >
-                                            <div className="flex items-center gap-2 text-xs min-w-0 flex-1">
-                                              <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform">
-                                                <FileCheck className="h-4 w-4" />
-                                              </div>
-                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
-                                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-400 shrink-0">
-                                                  {isBudgetDeal(selectedDealForHistory) ? "ÚLTIMO ORÇAMENTO ANEXADO:" : "ÚLTIMO DOCUMENTO ANEXADO:"}
-                                                </span>
-                                                {quoteDoc.quoteData?.quoteNumber && (
-                                                  <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">
-                                                    Nº {quoteDoc.quoteData.quoteNumber}
-                                                  </span>
-                                                )}
-                                                <span className="font-mono text-xs font-bold text-white group-hover:text-emerald-300 group-hover:underline truncate max-w-[280px] sm:max-w-[420px]">
-                                                  {quoteDoc.name}
-                                                </span>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 shrink-0">
-                                              {quoteDoc.quoteData?.totalAmount && quoteDoc.quoteData.totalAmount > 0 && (
-                                                <span className="font-mono font-black text-emerald-400 text-xs px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-400/30 hidden sm:inline-block">
-                                                  {`R$ ${quoteDoc.quoteData.totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                                </span>
-                                              )}
-                                              <span className="font-mono text-[10px] sm:text-[11px] font-semibold text-emerald-300/80 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                                <Clock className="h-3 w-3 text-emerald-400 shrink-0" />
-                                                {new Date(quoteDoc.uploadedAt).toLocaleString("pt-BR")}
-                                              </span>
-                                            </div>
-                                          </button>
-                                        )}
-
-                                        {contractDoc && (
-                                          <button
-                                            type="button"
-                                            onClick={() => setPreviewingQuoteFile({ url: contractDoc.url, name: contractDoc.name, isContract: true })}
-                                            className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2 px-3 rounded-xl bg-gradient-to-r from-sky-950/60 via-slate-900/90 to-slate-900/90 border border-sky-500/40 hover:border-sky-400/80 hover:bg-sky-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
-                                            title="Clique para visualizar o contrato anexado"
-                                          >
-                                            <div className="flex items-center gap-2 text-xs min-w-0 flex-1">
-                                              <div className="p-1 rounded-lg bg-sky-500/20 text-sky-400 shrink-0 group-hover:scale-110 transition-transform">
-                                                <FileText className="h-4 w-4" />
-                                              </div>
-                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
-                                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-sky-400 shrink-0">
-                                                  ÚLTIMO CONTRATO ANEXADO:
-                                                </span>
-                                                <span className="font-mono text-xs font-bold text-white group-hover:text-sky-300 group-hover:underline truncate max-w-[280px] sm:max-w-[420px]">
-                                                  {contractDoc.name}
-                                                </span>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 shrink-0">
-                                              <span className="font-mono text-[10px] sm:text-[11px] font-semibold text-sky-300/80 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                                <Clock className="h-3 w-3 text-sky-400 shrink-0" />
-                                                {new Date(contractDoc.uploadedAt).toLocaleString("pt-BR")}
-                                              </span>
-                                            </div>
-                                          </button>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* BOTÃO DE ACEITE EXCLUSIVO DO AUTOR DA ATIVIDADE */}
-                                    <div className="pt-2.5 border-t border-amber-500/30 flex items-center justify-between gap-3 flex-wrap">
-                                      {isAuthor ? (
-                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-3">
-                                          <span className="text-xs text-amber-200 font-medium">
-                                            A solicitação foi armazenada pelo responsável e aguarda o seu aceite para ser arquivada definitivamente.
-                                          </span>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleAcceptCompletion(selectedDealForHistory, pendingNotif?.id)}
-                                            className="btn-ghost-neon px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-black bg-emerald-400 hover:bg-emerald-300 border border-emerald-300 shrink-0 cursor-pointer transition-all shadow-[0_0_20px_rgba(16,185,129,0.5)] hover:scale-105 flex items-center gap-2"
-                                            title="Aceitar o armazenamento desta atividade e arquivá-la definitivamente"
-                                          >
-                                            <CheckCheck className="h-4 w-4" />
-                                            <span>Aceitar Armazenamento</span>
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <span className="text-xs text-amber-300/90 italic">
-                                          Aguardando aceite de armazenamento pelo autor ({selectedDealForHistory.creator_name || "Autor"}).
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="space-y-2">
-                                    <div className="text-sm sm:text-base leading-relaxed text-slate-100 font-medium bg-black/30 p-4 rounded-xl border border-white/5 space-y-2">
-                                      <div className="flex items-start justify-between gap-2">
-                                        <div className="flex-1 min-w-0">
-                                          {renderInteractiveDescription(effectiveText)}
-                                        </div>
-
-                                        <div className="shrink-0 flex items-center gap-1.5 ml-2 pt-0.5 select-none">
-                                          {canMarkAsRead && userMention && (
-                                            <button
-                                              type="button"
-                                              onClick={() => handleMarkMentionAsRead(selectedDealForHistory, userMention.id)}
-                                              className="p-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
-                                              title="lido"
-                                            >
-                                              <Check className="h-4 w-4" />
-                                            </button>
-                                          )}
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
-                                              setReplyingToMentionId(replyingToMentionId === targetId ? null : targetId);
-                                            }}
-                                            className="p-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-400/40 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center"
-                                            title="responder"
-                                          >
-                                            <Reply className="h-4 w-4" />
-                                          </button>
-                                        </div>
-                                      </div>
-
-                                      {isReplyingCurrent && (() => {
-                                        const targetId = userMention?.id || dealMentions[0]?.id || "latest_update";
-                                        const authorMention = getMentionTextForUser(latestAuthorName, teamMembers);
-                                        return (
-                                          <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
-                                            <FastMentionReplyInput
-                                              targetId={targetId}
-                                              deal={selectedDealForHistory}
-                                              teamMembers={teamMembers}
-                                              initialText={authorMention}
-                                              placeholder={`Responder para @${latestAuthorName.split(" ")[0]}...`}
-                                              onSend={handleSendMentionReply}
-                                            />
-                                            <button
-                                              type="button"
-                                              onClick={() => setReplyingToMentionId(null)}
-                                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center shrink-0"
-                                              title="cancelar"
-                                            >
-                                              <X className="h-4 w-4" />
-                                            </button>
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-
-                                    {/* Linhas de Verificação dos Últimos Documentos Anexados: Último Orçamento e Último Contrato */}
-                                    {(quoteDoc || contractDoc) && (
-                                      <div className="space-y-2 pt-0.5">
-                                        {quoteDoc && (
-                                          <button
-                                            type="button"
-                                            onClick={() => setPreviewingQuoteFile({ url: quoteDoc.url, name: quoteDoc.name, isContract: false })}
-                                            className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-slate-900/90 border border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
-                                            title={isBudgetDeal(selectedDealForHistory) ? "Clique para visualizar o orçamento anexado" : "Clique para visualizar o documento anexado"}
-                                          >
-                                            <div className="flex items-center gap-2.5 text-xs min-w-0 flex-1">
-                                              <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform">
-                                                <FileCheck className="h-4 w-4" />
-                                              </div>
-                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
-                                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-400 shrink-0">
-                                                  {isBudgetDeal(selectedDealForHistory) ? "ÚLTIMO ORÇAMENTO ANEXADO:" : "ÚLTIMO DOCUMENTO ANEXADO:"}
-                                                </span>
-                                                {quoteDoc.quoteData?.quoteNumber && (
-                                                  <span className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">
-                                                    Nº {quoteDoc.quoteData.quoteNumber}
-                                                  </span>
-                                                )}
-                                                <span className="font-mono text-xs font-bold text-white group-hover:text-emerald-300 group-hover:underline truncate max-w-[320px] sm:max-w-[480px]">
-                                                  {quoteDoc.name}
-                                                </span>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 shrink-0">
-                                              {quoteDoc.quoteData?.totalAmount && quoteDoc.quoteData.totalAmount > 0 && (
-                                                <span className="font-mono font-black text-emerald-400 text-xs px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-400/30 hidden sm:inline-block">
-                                                  {`R$ ${quoteDoc.quoteData.totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                                </span>
-                                              )}
-                                              <span className="font-mono text-[11px] font-semibold text-emerald-300/80 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                                <Clock className="h-3 w-3 text-emerald-400 shrink-0" />
-                                                {new Date(quoteDoc.uploadedAt).toLocaleString("pt-BR")}
-                                              </span>
-                                            </div>
-                                          </button>
-                                        )}
-
-                                        {contractDoc && (
-                                          <button
-                                            type="button"
-                                            onClick={() => setPreviewingQuoteFile({ url: contractDoc.url, name: contractDoc.name, isContract: true })}
-                                            className="w-full flex flex-wrap items-center justify-between gap-2.5 p-2.5 px-3 rounded-xl bg-gradient-to-r from-sky-950/60 via-slate-900/90 to-slate-900/90 border border-sky-500/40 hover:border-sky-400/80 hover:bg-sky-500/15 shadow-sm transition-all text-left cursor-pointer group animate-in fade-in"
-                                            title="Clique para visualizar o contrato anexado"
-                                          >
-                                            <div className="flex items-center gap-2.5 text-xs min-w-0 flex-1">
-                                              <div className="p-1 rounded-lg bg-sky-500/20 text-sky-400 shrink-0 group-hover:scale-110 transition-transform">
-                                                <FileText className="h-4 w-4" />
-                                              </div>
-                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
-                                                <span className="font-mono text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-sky-400 shrink-0">
-                                                  ÚLTIMO CONTRATO ANEXADO:
-                                                </span>
-                                                <span className="font-mono text-xs font-bold text-white group-hover:text-sky-300 group-hover:underline truncate max-w-[320px] sm:max-w-[480px]">
-                                                  {contractDoc.name}
-                                                </span>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 shrink-0">
-                                              <span className="font-mono text-[11px] font-semibold text-sky-300/80 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                                <Clock className="h-3 w-3 text-sky-400 shrink-0" />
-                                                {new Date(contractDoc.uploadedAt).toLocaleString("pt-BR")}
-                                              </span>
-                                            </div>
-                                          </button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              )}
-
-                              {/* Lista de Conclusões de Vinculadas com Destaque de Notificação 'NOVA' */}
-                              {dealSubtaskCompletions.length > 0 && (
-                                <div className="space-y-1.5 pl-3 border-l-2 border-emerald-400/50">
-                                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
-                                    <GitFork className="h-3.5 w-3.5 text-emerald-400" />
-                                    <span>Conclusão de Vinculadas ({dealSubtaskCompletions.length}):</span>
-                                  </span>
-                                  {dealSubtaskCompletions.map((comp) => {
-                                    const isNewCompletion =
-                                      comp.user_id !== selectedDealForHistory.assigned_user_id &&
-                                      (!initialLastSeenTime || new Date(comp.created_at).getTime() > new Date(initialLastSeenTime).getTime());
-
-                                    return (
-                                      <div
-                                        key={comp.id}
-                                        className={`p-3 rounded-xl bg-black/40 border text-xs space-y-1.5 transition-all ${
-                                          isNewCompletion
-                                            ? "border-amber-500/50 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/30"
-                                            : "border-white/10"
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-white/5 pb-1">
-                                          <div className="flex items-center gap-1.5 font-bold text-emerald-200 uppercase">
-                                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                                            <span>{comp.userName} concluiu a vinculada "{comp.subtaskTitle}" (Nº {comp.reqNumber})</span>
-                                            {isNewCompletion && (
-                                              <span className="ml-1 text-[9px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/25 px-1.5 py-0.5 rounded border border-amber-500/50 animate-pulse shadow-sm">
-                                                Nova
-                                              </span>
-                                            )}
-                                          </div>
-                                          <span className="font-mono text-[10px]">
-                                            {new Date(comp.created_at).toLocaleString("pt-BR")}
-                                          </span>
-                                        </div>
-                                        {comp.completionText && (
-                                          <p className="text-slate-100 text-sm sm:text-base pl-5 leading-relaxed whitespace-pre-wrap font-normal">
-                                            <strong className="text-emerald-300 font-bold">Atualização de Fechamento: </strong>
-                                            {formatMentionsInText(comp.completionText)}
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Respostas à última atualização com exibição consolidada e botão de responder individual */}
-                              {currentUpdateReplies.length > 0 && (
-                                <div className="space-y-1.5 pt-1">
-                                  <div className="text-[10px] font-black uppercase tracking-wider text-sky-300 flex items-center gap-1.5 pb-0.5">
-                                    <Reply className="h-3.5 w-3.5 text-sky-400" />
-                                    <span>Respostas à última atualização ({currentUpdateReplies.length}):</span>
-                                  </div>
-                                  {currentUpdateReplies.map((reply) => {
-                                    const isNewReply = 
-                                      reply.user_id !== selectedDealForHistory.assigned_user_id &&
-                                      (!initialLastSeenTime || new Date(reply.created_at).getTime() > new Date(initialLastSeenTime).getTime());
-                                    const isReplyingThis = replyingToMentionId === reply.id;
-                                    const replyAuthorMention = getMentionTextForUser(reply.user_name || reply.user_id, teamMembers);
-
-                                    return (
-                                      <div
-                                        key={reply.id}
-                                        className={`px-3 py-2 rounded-xl bg-black/40 border text-xs space-y-1.5 transition-all ${
-                                          isNewReply 
-                                            ? "border-amber-500/40 bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.05)] ring-1 ring-amber-400/20" 
-                                            : "border-white/10"
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-white/5 pb-0.5">
-                                          <div className="flex items-center gap-1.5 font-bold text-sky-200 uppercase">
-                                            <Reply className="h-3 w-3 text-sky-400" />
-                                            <span>{reply.user_name} respondeu:</span>
-                                            {isNewReply && (
-                                              <span className="ml-1 text-[8px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/40 animate-pulse">
-                                                Nova
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <span className="font-mono text-[10px]">
-                                              {new Date(reply.created_at).toLocaleString("pt-BR")}
-                                            </span>
-                                            <button
-                                              type="button"
-                                              onClick={() => setReplyingToMentionId(isReplyingThis ? null : reply.id)}
-                                              className="p-1 rounded-md bg-sky-500/15 hover:bg-sky-500/30 text-sky-300 border border-sky-400/30 hover:scale-105 transition-all cursor-pointer flex items-center gap-1 text-[10px] font-bold"
-                                              title={`Responder para ${reply.user_name}`}
-                                            >
-                                              <Reply className="h-3 w-3" />
-                                              <span>Responder</span>
-                                            </button>
-                                          </div>
-                                        </div>
-                                        <p className="text-slate-100 text-xs sm:text-[13px] pl-3 leading-snug whitespace-pre-wrap font-normal">
-                                          {formatMentionsInText(reply.reply_text)}
-                                        </p>
-
-                                        {isReplyingThis && (
-                                          <div className="relative pt-2 border-t border-white/10 flex items-center gap-1.5 animate-in fade-in">
-                                            <FastMentionReplyInput
-                                              targetId={reply.id}
-                                              deal={selectedDealForHistory}
-                                              teamMembers={teamMembers}
-                                              initialText={replyAuthorMention}
-                                              placeholder={`Responder para @${(reply.user_name || "usuário").split(" ")[0]}...`}
-                                              onSend={handleSendMentionReply}
-                                            />
-                                            <button
-                                              type="button"
-                                              onClick={() => setReplyingToMentionId(null)}
-                                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white border border-white/10 hover:scale-110 transition-all cursor-pointer shadow-sm flex items-center justify-center shrink-0"
-                                              title="cancelar"
-                                            >
-                                              <X className="h-4 w-4" />
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Formulário de Atualização Integrado (Oculto se a atividade estiver finalizada e aguardando aceite) */}
-                  {!isPendingModal && (
-                    isAdmin || selectedDealForHistory.assigned_user_id === user?.id ? (
-                      <div className="flex-1 min-h-0 flex flex-col justify-between gap-2.5 overflow-hidden">
-                        <div className="flex-1 min-h-0 flex flex-col p-3.5 rounded-xl bg-white/[0.02] border border-white/10 space-y-2.5">
-                          {/* Linha Única de Ações: Tarefa Vinculada, Orçamento, Contrato, Etapa e Responsável */}
-                          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 pb-2 border-b border-white/10">
-                            {/* Ações da Esquerda: Tarefa Vinculada, Orçamento e Contrato */}
-                            {(() => {
-                              const parentInfo = getParentDealInfo(selectedDealForHistory);
-                              const isSubtaskDeal = Boolean(parentInfo);
-
-                              if (isSubtaskDeal) {
-                                return (
-                                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-sky-950/40 border border-sky-500/30 text-sky-300 text-xs font-bold">
-                                    <GitFork className="h-3.5 w-3.5 text-sky-400" />
-                                    <span>Vinculada a #{parentInfo?.reqNumber || "Principal"}</span>
-                                  </div>
-                                );
-                              }
-
-                              const quoteDoc = getDealQuoteFile(selectedDealForHistory, dealHistoryList);
-                              const contractDoc = getDealContractFile(selectedDealForHistory, dealHistoryList);
-                              const isBudget = isBudgetDeal(selectedDealForHistory);
-                              const isContractColumn = selectedDealForHistory.stage === "won" || selectedDealForHistory.stage === "completed" || Boolean(contractDoc);
-
-                              const attachLabel = isBudget ? "ANEXAR ORÇAMENTO" : "ANEXAR DOCUMENTO";
-                              const buttonHoverTitle = isBudget ? "Clique para selecionar e anexar orçamento" : "Clique para selecionar e anexar documento";
-
-                              return (
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {/* 1. Vincular Atividade */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSubtaskTitle("");
-                                      setSubtaskAssignedTo("");
-                                      setSubtaskDeadline("");
-                                      setSubtaskDuration("");
-                                      setSubtaskNotes("");
-                                      setIsSubtaskModalOpen(true);
-                                    }}
-                                    className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm"
-                                    title="Criar e vincular uma atividade a esta atividade principal"
-                                  >
-                                    <PlusCircle className="h-3.5 w-3.5 text-emerald-400" /> VINCULAR ATIVIDADE
-                                  </button>
-
-                                  {/* 2. Anexo de Orçamento/Documento */}
-                                  <input
-                                    ref={quoteFileInputRef}
-                                    type="file"
-                                    accept="image/*,application/pdf"
-                                    onChange={handleUploadQuoteFile}
-                                    disabled={isUploadingQuoteFile}
-                                    className="hidden"
-                                  />
-
-                                  {(quoteDoc || !isContractColumn) && (
-                                    <button
-                                      type="button"
-                                      disabled={isUploadingQuoteFile}
-                                      onClick={() => {
-                                        quoteFileInputRef.current?.click();
-                                      }}
-                                      className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                                      title={quoteDoc ? (isBudget ? "Clique para selecionar e anexar um novo orçamento" : "Clique para selecionar e anexar um novo documento") : buttonHoverTitle}
-                                    >
-                                      {isUploadingQuoteFile ? (
-                                        <>
-                                          <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                                          <span>COMPACTANDO E ENVIANDO...</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Paperclip className="h-3.5 w-3.5 text-emerald-400" />
-                                          <span>{quoteDoc ? (isBudget ? "ANEXAR NOVO ORÇAMENTO" : "ANEXAR NOVO DOCUMENTO") : attachLabel}</span>
-                                        </>
-                                      )}
-                                    </button>
-                                  )}
-
-                                  {/* 3. Anexo de Contrato Exclusivo da Coluna CONTRATOS (ou atividades com contrato) */}
-                                   {isContractColumn && (
-                                     <>
-                                       <input
-                                         ref={contractFileInputRef}
-                                         type="file"
-                                         accept="image/*,application/pdf"
-                                         onChange={handleUploadContractFile}
-                                         disabled={isUploadingContractFile}
-                                         className="hidden"
-                                       />
-
-                                       <button
-                                         type="button"
-                                         disabled={isUploadingContractFile}
-                                         onClick={() => {
-                                           contractFileInputRef.current?.click();
-                                         }}
-                                         className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 text-sky-300 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                                         title={contractDoc ? "Clique para selecionar e anexar um novo contrato" : "Clique para selecionar e anexar contrato"}
-                                       >
-                                         {isUploadingContractFile ? (
-                                           <>
-                                             <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
-                                             <span>COMPACTANDO E ENVIANDO...</span>
-                                           </>
-                                         ) : (
-                                           <>
-                                             <FileText className="h-3.5 w-3.5 text-sky-400" />
-                                             <span>{contractDoc ? "ANEXAR NOVO CONTRATO" : "ANEXAR CONTRATO"}</span>
-                                           </>
-                                         )}
-                                       </button>
-                                     </>
-                                   )}
-                                 </div>
-                               );
-                             })()}
-                          </div>
-
-                          {/* FORMULÁRIO DE ATUALIZAÇÃO SEMPRE VISÍVEL E PRONTO PARA DIGITAR */}
-                          <form onSubmit={handleAddHistoryOrReassign} className="flex-1 min-h-0 flex flex-col justify-between gap-2">
-                            <div className="flex-1 min-h-0 flex flex-col">
-                              <FastDealCommentInput
-                                dealId={selectedDealForHistory.id}
-                                onTextChange={(text) => {
-                                  newCommentRef.current = text;
-                                }}
-                                teamMembers={teamMembers}
-                                resetCounter={commentResetCounter}
-                              />
-                            </div>
-
-                            {/* Bloco de Linhas Automáticas Imutáveis (Abaixo do texto digitado) */}
-                            {autoGeneratedLogs.length > 0 && (
-                              <div className="shrink-0 space-y-1.5 p-2.5 rounded-xl bg-sky-950/30 border border-sky-500/20 max-h-[100px] overflow-y-auto custom-scrollbar">
-                                {autoGeneratedLogs.map((log, idx) => (
-                                  <div key={idx} className="flex items-start gap-2 text-xs font-semibold text-sky-200">
-                                    <span className="text-sky-400 font-bold">•</span>
-                                    <span className="select-none leading-tight">{log}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Linha Inferior de Ações: Etapa, Responsável, Concluir/Arquivar e Atualizar */}
-                            <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 pt-2 pb-1.5 px-1 border-t border-white/5 overflow-visible">
-                              {/* Menus da Esquerda: Etapa e Responsável */}
-                              <div className="flex flex-wrap items-center gap-2">
-                                {/* 1. Etapa: [Etapa atual / Mover] */}
-                                {(() => {
-                                  const isInternalDeal =
-                                    selectedDealForHistory.title.toLowerCase().includes("[req. interna]") ||
-                                    selectedDealForHistory.stage === "lead";
-
-                                  const isLinkedSubtask = Boolean(getParentDealInfo(selectedDealForHistory));
-
-                                  const currentStageName = STAGES.find((s) => s.id === selectedDealForHistory.stage)?.title || selectedDealForHistory.stage;
-
-                                  if (isInternalDeal || isLinkedSubtask) {
-                                    return (
-                                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa:</span>
-                                        <span className="font-bold text-sky-400 uppercase">{currentStageName}</span>
-                                      </div>
-                                    );
-                                  }
-
-                                  const curStageIndex = STAGES.findIndex((s) => s.id === (selectedDealForHistory.stage === "proposal" ? "negotiation" : selectedDealForHistory.stage));
-
-                                  // Regra: Uma atividade não pode retroceder. Um orçamento não pode passar direto para contratos ou perdidos sem ter passado por negociações.
-                                  const availableStages = STAGES.filter((s) => {
-                                    if (s.id === selectedDealForHistory.stage) return true;
-                                    const sIdx = STAGES.findIndex((st) => st.id === s.id);
-                                    if (sIdx < curStageIndex) return false; // Bloqueia retrocesso
-                                    if (selectedDealForHistory.stage === "qualification") {
-                                      // Se está em orçamentos, só pode avançar para negociações
-                                      return s.id === "negotiation";
-                                    }
-                                    if (selectedDealForHistory.stage === "negotiation" || (selectedDealForHistory.stage as string) === "proposal") {
-                                      // Se está em negociações, pode ir para CONTRATOS (won) ou PERDIDOS (lost)
-                                      return s.id === "won" || s.id === "lost";
-                                    }
-                                    if (selectedDealForHistory.stage === "won") {
-                                      // Se está em contratos, pode ir para CONCLUÍDAS (completed) ou PERDIDOS (lost)
-                                      return s.id === "completed" || s.id === "lost";
-                                    }
-                                    return sIdx === curStageIndex + 1;
-                                  });
-
-                                  const canChangeStage =
-                                    role === "admin" ||
-                                    !selectedDealForHistory.assigned_user_id ||
-                                    selectedDealForHistory.assigned_user_id === user?.id ||
-                                    selectedDealForHistory.user_id === user?.id;
-
-                                  return (
-                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
-                                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa:</span>
-                                      {canChangeStage && availableStages.length > 1 ? (
-                                        <select
-                                          value={stageToMove || selectedDealForHistory.stage}
-                                          onChange={(e) => {
-                                            const targetStage = e.target.value as Deal["stage"];
-                                            if (targetStage) {
-                                              const originalStage = selectedDealForHistory.stage;
-                                              
-                                              // Se voltou para a etapa original da atividade antes de atualizar
-                                              if (targetStage === originalStage) {
-                                                setAutoGeneratedLogs((prev) =>
-                                                  prev.filter((l) => !l.includes("alterou a etapa de"))
-                                                );
-                                                setStageToMove(null);
-                                                return;
-                                              }
-
-                                              if (targetStage === "negotiation") {
-                                                const parentInfo = getParentDealInfo(selectedDealForHistory);
-                                                const parentDeal = parentInfo?.deal || deals.find((d) => d.id === parentInfo?.id);
-                                                const hasQuoteAttached = Boolean(
-                                                  getDealQuoteFile(selectedDealForHistory, dealHistoryList) ||
-                                                  (parentDeal && getDealQuoteFile(parentDeal))
-                                                );
-                                                if (!hasQuoteAttached) {
-                                                  return toast.error("Não é possível avançar para NEGOCIAÇÕES sem o orçamento anexado.");
-                                                }
-                                              }
-
-                                              const fromStageName = STAGES.find((s) => s.id === originalStage)?.title || originalStage;
-                                              const toStageName = STAGES.find((s) => s.id === targetStage)?.title || targetStage;
-                                              const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-                                              const stageLine = `${userName} alterou a etapa de "${fromStageName}" para "${toStageName}".`;
-                                              
-                                              // Remove alteração anterior de etapa da lista se houver e adiciona a nova
-                                              setAutoGeneratedLogs((prev) => [
-                                                ...prev.filter((l) => !l.includes("alterou a etapa de")),
-                                                stageLine,
-                                              ]);
-                                              setStageToMove(targetStage);
-                                            }
-                                          }}
-                                          className="input-futuristic rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wider bg-transparent text-accent border border-accent/40 outline-none cursor-pointer hover:border-accent"
-                                        >
-                                          {availableStages.map((s) => (
-                                            <option key={s.id} value={s.id} className="bg-slate-900 text-white">
-                                              {s.id === (stageToMove || selectedDealForHistory.stage) ? s.title : `➔ ${s.title}`}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      ) : (
-                                        <span className="font-bold text-accent uppercase">{currentStageName}</span>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-
-                                {/* 2. Responsável: [Usuário] */}
-                                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-xs">
-                                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                                    Responsável:
-                                  </span>
-                                  <select
-                                    value={reassignTo || selectedDealForHistory.assigned_user_id || ""}
-                                    onChange={(e) => {
-                                      const selectedId = e.target.value;
-                                      setReassignTo(selectedId);
-                                      const originalId = selectedDealForHistory.assigned_user_id;
-
-                                      // Remove qualquer log prévio de alteração de responsável desta edição
-                                      setAutoGeneratedLogs((prev) =>
-                                        prev.filter((l) => !l.includes("alterou o responsável de"))
-                                      );
-
-                                      // Se o novo selecionado for diferente do responsável original da atividade, adiciona a linha atualizada
-                                      if (selectedId && selectedId !== originalId) {
-                                        const selectedMember = teamMembers.find((m) => m.id === selectedId);
-                                        const newName = selectedMember?.display_name || selectedMember?.email || "Novo Responsável";
-                                        const currentName = selectedDealForHistory.assigned_user_name || "Anterior";
-                                        const userName = user?.user_metadata?.display_name || user?.email || "Usuário";
-                                        const reassignLine = `${userName} alterou o responsável de "${currentName}" para "${newName}".`;
-                                        
-                                        setAutoGeneratedLogs((prev) => [
-                                          ...prev.filter((l) => !l.includes("alterou o responsável de")),
-                                          reassignLine,
-                                        ]);
-                                      }
-                                    }}
-                                    className="input-futuristic rounded px-2 py-0.5 text-xs outline-none bg-transparent font-bold border border-white/15 cursor-pointer max-w-[200px]"
-                                  >
-                                    <option value={selectedDealForHistory.assigned_user_id || ""} className="bg-slate-900">
-                                      {selectedDealForHistory.assigned_user_name || "Nenhum"}
-                                    </option>
-                                    {teamMembers
-                                      .filter((m) => m.id !== selectedDealForHistory.assigned_user_id)
-                                      .map((m) => (
-                                        <option key={m.id} value={m.id} className="bg-slate-900">
-                                          {m.display_name || m.email}
-                                        </option>
-                                      ))}
-                                  </select>
-                                </div>
-                              </div>
-
-                              {/* Ações da Direita: Concluir/Arquivar e Atualizar com Glow Desobstruído */}
-                              <div className="flex items-center gap-2.5 py-1 px-1 overflow-visible shrink-0">
-                                {(() => {
-                                  const parentInfo = getParentDealInfo(selectedDealForHistory);
-                                  const isLinkedSubtask = Boolean(parentInfo);
-
-                                  if (isLinkedSubtask && selectedDealForHistory.stage !== "archived") {
-                                    return (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCompleteSubtask(selectedDealForHistory)}
-                                        className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 border border-rose-500/40 hover:border-rose-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(244,63,94,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
-                                        title="Armazenar e fechar esta atividade vinculada, notificando o responsável pela atividade principal"
-                                      >
-                                        <Archive className="h-4 w-4 text-rose-400" />
-                                        <span>Armazenar</span>
-                                      </button>
-                                    );
-                                  }
-
-                                  if (!isLinkedSubtask && selectedDealForHistory.stage === "won") {
-                                    return (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCompleteContract(selectedDealForHistory)}
-                                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25 border-2 !border-emerald-400 hover:!border-emerald-300 flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.35)] hover:shadow-[0_0_20px_rgba(16,185,129,0.55)] cursor-pointer transition-all hover:scale-105 shrink-0"
-                                        style={{ borderColor: "#10b981", color: "#10b981" }}
-                                        title="Concluir este contrato e movê-lo para a coluna CONCLUÍDOS (prazos serão desconsiderados)"
-                                      >
-                                        <CheckCircle2 className="h-4 w-4 text-emerald-400" style={{ color: "#10b981" }} />
-                                        <span className="text-emerald-400 font-black" style={{ color: "#10b981" }}>Concluir</span>
-                                      </button>
-                                    );
-                                  }
-
-                                  const originStage =
-                                    selectedDealForHistory.stage === "archived"
-                                      ? getArchivedOriginStage(selectedDealForHistory)
-                                      : (selectedDealForHistory.stage as "lead" | "completed" | "lost");
-
-                                  const isArchivableStage =
-                                    originStage === "lead" ||
-                                    ((originStage === "completed" || originStage === "lost") && isAdmin);
-
-                                  if (!isLinkedSubtask && isArchivableStage) {
-                                    return selectedDealForHistory.stage === "archived" ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUnarchiveDeal(selectedDealForHistory)}
-                                        className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
-                                        title="Desarquivar e restaurar esta atividade ao seu quadro de origem"
-                                      >
-                                        <ArchiveRestore className="h-4 w-4 text-emerald-400" />
-                                        <span>Desarquivar</span>
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleArchiveDeal(selectedDealForHistory)}
-                                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-red-500 bg-red-500/15 hover:bg-red-500/25 border-2 !border-red-500 hover:!border-red-400 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_rgba(239,68,68,0.55)] cursor-pointer transition-all hover:scale-105 shrink-0"
-                                        style={{ borderColor: "#ef4444", color: "#ef4444" }}
-                                        title="Arquivar esta atividade totalmente finalizada"
-                                      >
-                                        <Archive className="h-4 w-4 text-red-500" style={{ color: "#ef4444" }} />
-                                        <span className="text-red-500 font-black" style={{ color: "#ef4444" }}>Arquivar</span>
-                                      </button>
-                                    );
-                                  }
-
-                                  return null;
-                                })()}
-
-                                <button
-                                  type="submit"
-                                  disabled={isSavingUpdate}
-                                  className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/40 hover:border-sky-400/60 flex items-center gap-1.5 shadow-[0_0_15px_rgba(56,189,248,0.25)] hover:shadow-[0_0_20px_rgba(56,189,248,0.45)] cursor-pointer transition-all hover:scale-105 shrink-0"
-                                >
-                                  <Save className="h-4 w-4 text-sky-400" />
-                                  <span>{isSavingUpdate ? "Gravando..." : "Atualizar"}</span>
-                                </button>
-                              </div>
-                            </div>
-                          </form>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center gap-3 shrink-0">
-                        <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
-                          <Lock className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="font-bold uppercase tracking-wider text-[11px] text-amber-300">
-                            Modo de Apenas Leitura
-                          </p>
-                          <p className="text-white/80 mt-0.5 leading-relaxed">
-                            Apenas o responsável pela atividade pode inserir novas atualizações, alterar a etapa ou reatribuir. Você pode responder às atualizações.
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  )}
-
-                  {/* Botão de Expansão da Linha do Tempo */}
-                  <button
-                    type="button"
-                    onClick={() => setIsTimelineOpen(true)}
-                    className="shrink-0 w-full flex items-center justify-between p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 transition-all text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-white shadow-sm"
-                  >
-                    <span className="flex items-center gap-2">
-                      <History className="h-4 w-4 text-accent" /> Abrir Linha do Tempo
-                    </span>
-                    <span className="text-[10px] font-mono font-bold text-accent px-2 py-0.5 rounded bg-accent/10 border border-accent/20">
-                      {unifiedTimelineList.length} {unifiedTimelineList.length === 1 ? "evento" : "eventos"}
-                    </span>
-                  </button>
-                </div>
-              )}
+              </div>
             </div>
           </div>
       );

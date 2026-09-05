@@ -650,7 +650,8 @@ export function computeHistoricalProductivityRate(
   baseSalary: number,
   chargesMultiplier: number = 1.0,
   nominalMonthlyHours: number = 160,
-  currentLiveStartedAt?: string | null
+  currentLiveStartedAt?: string | null,
+  isAdmin: boolean = false
 ): {
   effectiveHourlyRate: number;
   nominalHourlyRate: number;
@@ -729,10 +730,11 @@ export function computeHistoricalProductivityRate(
     }
   });
 
-  // 3. Taxa de ocupação percentual idêntica à do card de horas
+  // 3. Taxa de ocupação percentual (sem limitar a 100% para administradores)
   let userAvgActivePct = 100;
   if (userTotalElapsedSec > 0) {
-    userAvgActivePct = Math.min(100, Math.round((userTotalActiveSec / userTotalElapsedSec) * 100));
+    const rawPct = Math.round((userTotalActiveSec / userTotalElapsedSec) * 100);
+    userAvgActivePct = isAdmin ? rawPct : Math.min(100, rawPct);
   } else if (userTotalActiveSec > 0) {
     userAvgActivePct = 100;
   }

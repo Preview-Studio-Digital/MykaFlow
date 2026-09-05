@@ -292,8 +292,31 @@ export function getWorkdaySessionOverlapSeconds(
   sessionStartInput: Date | string,
   sessionEndInput: Date | string,
   dayDate: Date,
-  maxUpToTime?: Date
+  maxUpToTime?: Date,
+  isAdmin: boolean = false
 ): number {
+  const sessionStart = new Date(sessionStartInput);
+  let sessionEnd = new Date(sessionEndInput);
+
+  if (maxUpToTime && sessionEnd.getTime() > maxUpToTime.getTime()) {
+    sessionEnd = maxUpToTime;
+  }
+
+  if (sessionEnd <= sessionStart) return 0;
+
+  // Administradores podem trabalhar fora dos horários de corte e expediente.
+  // Para ADMs, contabiliza o tempo ativo real que ocorreu na data (incluindo almoço, fora de hora e finais de semana).
+  if (isAdmin) {
+    const dayStart = new Date(dayDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayDate);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const overlapStart = Math.max(sessionStart.getTime(), dayStart.getTime());
+    const overlapEnd = Math.min(sessionEnd.getTime(), dayEnd.getTime());
+    return Math.max(0, Math.floor((overlapEnd - overlapStart) / 1000));
+  }
+
   const day = dayDate.getDay();
   // Finais de semana e feriados não possuem expediente oficial
   if (day === 0 || day === 6 || isNationalHoliday(dayDate).isHoliday) {
@@ -311,15 +334,6 @@ export function getWorkdaySessionOverlapSeconds(
   // Janela 2: Tarde (13:00 até 17:30 / 16:30)
   const afternoonStart = new Date(startOfDay.getTime() + limits.lunchEndMinutes * 60 * 1000);
   const afternoonEnd = new Date(startOfDay.getTime() + limits.endMinutes * 60 * 1000);
-
-  const sessionStart = new Date(sessionStartInput);
-  let sessionEnd = new Date(sessionEndInput);
-
-  if (maxUpToTime && sessionEnd.getTime() > maxUpToTime.getTime()) {
-    sessionEnd = maxUpToTime;
-  }
-
-  if (sessionEnd <= sessionStart) return 0;
 
   // Overlap com a manhã
   const mOverlapStart = Math.max(sessionStart.getTime(), morningStart.getTime());

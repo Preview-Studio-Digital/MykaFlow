@@ -387,7 +387,6 @@ function getUserRoleTheme(role?: string | null, email?: string | null) {
   };
 }
 
-// Helper para obter a sessão ativa de trabalho do deal
 function getDealActiveWorker(deal: Deal | null): { userId: string; userName: string; startedAt: string } | null {
   if (!deal || !deal.notes) return null;
   if (deal.notes && deal.notes.includes("[WORK_ACTIVE:")) {

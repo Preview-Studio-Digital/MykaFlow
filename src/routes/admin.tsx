@@ -144,6 +144,12 @@ function AdminPage() {
         setDealsWithNotes(deals);
       }
 
+      const { data: rolesData } = await supabase.from("user_roles").select("*");
+      const adminRoleSet = new Set<string>();
+      (rolesData || []).forEach((r) => {
+        if (r.role === "admin") adminRoleSet.add(r.user_id);
+      });
+
       const activeMap: Record<
         string,
         { dealId: string; title: string; reqNumber?: string | null; startedAt: string }
@@ -604,6 +610,7 @@ function AdminPage() {
                           : `Sem histórico suficiente registrado da equipe. Custo total mensal da folha: R$ ${totalMonthlyCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
                       } else {
                         // Gestão Individual de um Colaborador
+                        const userIsAdmin = selectedUserForProductivity.role === "admin" || (roles || []).some((r: any) => r.user_id === selectedUserForProductivity.id && r.role === "admin");
                         const sCfg = getUserSalaryConfig(selectedUserForProductivity.id);
                         const userRate = computeHistoricalProductivityRate(
                           selectedUserForProductivity.id,
@@ -611,7 +618,8 @@ function AdminPage() {
                           sCfg.baseSalary,
                           sCfg.chargesMultiplier,
                           sCfg.monthlyHours || 160,
-                          activeActivities[selectedUserForProductivity.id]?.startedAt
+                          activeActivities[selectedUserForProductivity.id]?.startedAt,
+                          userIsAdmin
                         );
 
                         nominalHourlyRate = userRate.nominalHourlyRate;

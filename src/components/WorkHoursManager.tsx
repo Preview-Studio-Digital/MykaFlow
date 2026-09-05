@@ -9,6 +9,7 @@ import {
   getWorkdaySessionOverlapSeconds,
   getAutoCutoffInfo,
   isBusinessWorkTime,
+  getWorkDayCutoffMinutes,
 } from "@/lib/work-schedule";
 
 interface DealTimeSession {
@@ -618,7 +619,8 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
               s.started_at,
               sessionEnd,
               d,
-              isToday ? new Date(currentTime) : undefined
+              isToday ? new Date(currentTime) : undefined,
+              adminUserIds.has(uid)
             );
             dayWorkdayActiveSec += overlap;
           });
@@ -996,8 +998,28 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
       const isToday = dateFilter === "today";
       const nowTotalMin = now.getHours() * 60 + now.getMinutes();
 
-      // De 07:30 (450 min) até 17:30 (1050 min) a cada 30 minutos
-      for (let totalMin = 7 * 60 + 30; totalMin <= 17 * 60 + 30; totalMin += 30) {
+      let minSlotMin = 7 * 60 + 30; // 07:30
+      let maxSlotMin = 17 * 60 + 30; // 17:30
+
+      if (isToday && nowTotalMin > maxSlotMin) {
+        maxSlotMin = Math.min(23 * 60 + 30, Math.ceil(nowTotalMin / 30) * 30);
+      }
+
+      allSessions.forEach((s) => {
+        const sDate = new Date(s.started_at);
+        if (sDate.toDateString() === targetDate.toDateString()) {
+          const startMins = sDate.getHours() * 60 + sDate.getMinutes();
+          if (startMins < minSlotMin) minSlotMin = Math.max(0, Math.floor(startMins / 30) * 30);
+
+          const sEnd = s.ended_at ? new Date(s.ended_at) : s.isActive ? now : null;
+          if (sEnd && sEnd.toDateString() === targetDate.toDateString()) {
+            const endMins = sEnd.getHours() * 60 + sEnd.getMinutes();
+            if (endMins > maxSlotMin) maxSlotMin = Math.min(23 * 60 + 30, Math.ceil(endMins / 30) * 30);
+          }
+        }
+      });
+
+      for (let totalMin = minSlotMin; totalMin <= maxSlotMin; totalMin += 30) {
         const h = Math.floor(totalMin / 60);
         const m = totalMin % 60;
         const isPastCurrent = isToday && totalMin > nowTotalMin;
@@ -1035,29 +1057,53 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
               ? pointDate
               : new Date(sDate.getTime() + (s.duration_seconds || 0) * 1000);
 
-            const overlap = getWorkdaySessionOverlapSeconds(
+            const userOverlap = getWorkdaySessionOverlapSeconds(
               s.started_at,
               sEnd,
               targetDate,
-              pointDate
+              pointDate,
+              adminUserIds.has(s.user_id)
+            );
+
+            const companyOverlap = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              targetDate,
+              pointDate,
+              false // A Média da Empresa considera estritamente o expediente oficial limitado pelo corte
             );
 
             if (selectedUserId && s.user_id === selectedUserId) {
-              userAccumActiveSec += overlap;
+              userAccumActiveSec += userOverlap;
             }
-            companyAccumActiveSec += overlap;
+            companyAccumActiveSec += companyOverlap;
           }
         });
 
-        const userPct = elapsedWorkdaySec > 0
-          ? Math.min(100, Math.round((userAccumActiveSec / elapsedWorkdaySec) * 100))
+        const limits = getWorkDayCutoffMinutes(targetDate);
+        const shiftDurationSec = (limits.endMinutes - limits.startMinutes - (limits.lunchEndMinutes - limits.lunchStartMinutes)) * 60;
+
+        let totalElapsedTimelineSec = elapsedWorkdaySec;
+        if (totalMin > limits.endMinutes) {
+          const extraMin = totalMin - limits.endMinutes;
+          totalElapsedTimelineSec = shiftDurationSec + extraMin * 60;
+        }
+
+        const isSelectedUserAdmin = selectedUserId ? adminUserIds.has(selectedUserId) : false;
+        const isTargetWeekend = targetDate.getDay() === 0 || targetDate.getDay() === 6 || isNationalHoliday(targetDate).isHoliday;
+
+        // Em finais de semana/feriados para ADMs, calcula sobre a jornada padrão equivalente (9h)
+        const effectiveUserElapsedSec = elapsedWorkdaySec > 0 ? elapsedWorkdaySec : shiftDurationSec;
+        const userPct = isSelectedUserAdmin
+          ? (effectiveUserElapsedSec > 0 ? Math.round((userAccumActiveSec / effectiveUserElapsedSec) * 100) : 0)
+          : (elapsedWorkdaySec > 0 ? Math.min(100, Math.round((userAccumActiveSec / elapsedWorkdaySec) * 100)) : 0);
+
+        const companyPct = totalElapsedTimelineSec > 0 && compUsersCount > 0
+          ? Math.min(100, Math.round((companyAccumActiveSec / (totalElapsedTimelineSec * compUsersCount)) * 100))
           : 0;
 
-        const companyPct = elapsedWorkdaySec > 0 && compUsersCount > 0
-          ? Math.min(100, Math.round((companyAccumActiveSec / (elapsedWorkdaySec * compUsersCount)) * 100))
-          : 0;
-
-        const [marketMin, marketMax] = getMarketRangeForTime(totalMin);
+        // Faixa de Mercado ("JORNADA ESPERADA") fica zerada [0, 0] em finais de semana e feriados
+        const [marketMin, marketMax] = isTargetWeekend ? [0, 0] : getMarketRangeForTime(totalMin);
 
         result.push({
           label: hourLabel,
@@ -1110,16 +1156,40 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
         allSessions.forEach((s) => {
           if (new Date(s.started_at).toDateString() === dateStr) {
-            const sec = s.duration_seconds || 0;
+            const sEnd = s.ended_at
+              ? new Date(s.ended_at)
+              : s.isActive
+              ? (isToday ? new Date(currentTime) : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000))
+              : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000);
+
+            const userSec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              adminUserIds.has(s.user_id)
+            );
+
+            const companySec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              false
+            );
+
             if (selectedUserId && s.user_id === selectedUserId) {
-              userDayActiveSec += sec;
+              userDayActiveSec += userSec;
             }
-            companyDayActiveSec += sec;
+            companyDayActiveSec += companySec;
           }
         });
 
-        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
-        const userPct = isFutureDay ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const standardDaySec = isFriday ? 8 * 3600 : 9 * 3600;
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : standardDaySec;
+        const isSelectedUserAdmin = selectedUserId ? adminUserIds.has(selectedUserId) : false;
+
+        const userPct = isFutureDay ? 0 : (isSelectedUserAdmin ? Math.round((userDayActiveSec / effectiveExpected) * 100) : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100)));
         const companyPct = isFutureDay ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
         const marketMin = 75;
@@ -1158,16 +1228,40 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
         allSessions.forEach((s) => {
           if (new Date(s.started_at).toDateString() === dateStr) {
-            const sec = s.duration_seconds || 0;
+            const sEnd = s.ended_at
+              ? new Date(s.ended_at)
+              : s.isActive
+              ? (isToday ? new Date(currentTime) : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000))
+              : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000);
+
+            const userSec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              adminUserIds.has(s.user_id)
+            );
+
+            const companySec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              false
+            );
+
             if (selectedUserId && s.user_id === selectedUserId) {
-              userDayActiveSec += sec;
+              userDayActiveSec += userSec;
             }
-            companyDayActiveSec += sec;
+            companyDayActiveSec += companySec;
           }
         });
 
-        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
-        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const standardDaySec = isFriday ? 8 * 3600 : 9 * 3600;
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : standardDaySec;
+        const isSelectedUserAdmin = selectedUserId ? adminUserIds.has(selectedUserId) : false;
+
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : (isSelectedUserAdmin ? Math.round((userDayActiveSec / effectiveExpected) * 100) : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100)));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
         const marketMin = isWeekend ? 0 : 75;
@@ -1203,16 +1297,40 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
         allSessions.forEach((s) => {
           if (new Date(s.started_at).toDateString() === dateStr) {
-            const sec = s.duration_seconds || 0;
+            const sEnd = s.ended_at
+              ? new Date(s.ended_at)
+              : s.isActive
+              ? (isToday ? new Date(currentTime) : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000))
+              : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000);
+
+            const userSec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              adminUserIds.has(s.user_id)
+            );
+
+            const companySec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              false
+            );
+
             if (selectedUserId && s.user_id === selectedUserId) {
-              userDayActiveSec += sec;
+              userDayActiveSec += userSec;
             }
-            companyDayActiveSec += sec;
+            companyDayActiveSec += companySec;
           }
         });
 
-        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
-        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const standardDaySec = isFriday ? 8 * 3600 : 9 * 3600;
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : standardDaySec;
+        const isSelectedUserAdmin = selectedUserId ? adminUserIds.has(selectedUserId) : false;
+
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : (isSelectedUserAdmin ? Math.round((userDayActiveSec / effectiveExpected) * 100) : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100)));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
         const marketMin = isWeekend ? 0 : 75;
@@ -1257,16 +1375,40 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
         allSessions.forEach((s) => {
           if (new Date(s.started_at).toDateString() === dateStr) {
-            const sec = s.duration_seconds || 0;
+            const sEnd = s.ended_at
+              ? new Date(s.ended_at)
+              : s.isActive
+              ? (isToday ? new Date(currentTime) : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000))
+              : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000);
+
+            const userSec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              adminUserIds.has(s.user_id)
+            );
+
+            const companySec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              false
+            );
+
             if (selectedUserId && s.user_id === selectedUserId) {
-              userDayActiveSec += sec;
+              userDayActiveSec += userSec;
             }
-            companyDayActiveSec += sec;
+            companyDayActiveSec += companySec;
           }
         });
 
-        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
-        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const standardDaySec = isFriday ? 8 * 3600 : 9 * 3600;
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : standardDaySec;
+        const isSelectedUserAdmin = selectedUserId ? adminUserIds.has(selectedUserId) : false;
+
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : (isSelectedUserAdmin ? Math.round((userDayActiveSec / effectiveExpected) * 100) : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100)));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
         const marketMin = isWeekend ? 0 : 75;
@@ -1302,16 +1444,40 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
 
         allSessions.forEach((s) => {
           if (new Date(s.started_at).toDateString() === dateStr) {
-            const sec = s.duration_seconds || 0;
+            const sEnd = s.ended_at
+              ? new Date(s.ended_at)
+              : s.isActive
+              ? (isToday ? new Date(currentTime) : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000))
+              : new Date(new Date(s.started_at).getTime() + (s.duration_seconds || 0) * 1000);
+
+            const userSec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              adminUserIds.has(s.user_id)
+            );
+
+            const companySec = getWorkdaySessionOverlapSeconds(
+              s.started_at,
+              sEnd,
+              d,
+              isToday ? new Date(currentTime) : undefined,
+              false
+            );
+
             if (selectedUserId && s.user_id === selectedUserId) {
-              userDayActiveSec += sec;
+              userDayActiveSec += userSec;
             }
-            companyDayActiveSec += sec;
+            companyDayActiveSec += companySec;
           }
         });
 
-        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : 1;
-        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100));
+        const standardDaySec = isFriday ? 8 * 3600 : 9 * 3600;
+        const effectiveExpected = dayElapsedSec > 0 ? dayElapsedSec : standardDaySec;
+        const isSelectedUserAdmin = selectedUserId ? adminUserIds.has(selectedUserId) : false;
+
+        const userPct = isWeekend && userDayActiveSec === 0 ? 0 : (isSelectedUserAdmin ? Math.round((userDayActiveSec / effectiveExpected) * 100) : Math.min(100, Math.round((userDayActiveSec / effectiveExpected) * 100)));
         const companyPct = isWeekend && companyDayActiveSec === 0 ? 0 : Math.min(100, Math.round((companyDayActiveSec / (effectiveExpected * compUsersCount)) * 100));
 
         const marketMin = isWeekend ? 0 : 75;
@@ -2232,15 +2398,25 @@ export function WorkHoursManager({ initialUserId }: WorkHoursManagerProps = {}) 
                     fontFamily="monospace"
                     tickLine={false}
                   />
-                  <YAxis 
-                    domain={[0, 100]} 
-                    ticks={[0, 25, 50, 75, 100]} 
-                    stroke="#64748b" 
-                    fontSize={10} 
-                    fontFamily="monospace"
-                    unit="%"
-                    tickLine={false}
-                  />
+                  {(() => {
+                    const maxVal = Math.max(100, ...productivityTimelineData.map((d) => d.userPct || 0));
+                    const maxYVal = Math.ceil(maxVal / 25) * 25;
+                    const ticks = [0, 25, 50, 75, 100];
+                    for (let val = 125; val <= maxYVal; val += 25) {
+                      ticks.push(val);
+                    }
+                    return (
+                      <YAxis 
+                        domain={[0, maxYVal]} 
+                        ticks={ticks} 
+                        stroke="#64748b" 
+                        fontSize={10} 
+                        fontFamily="monospace"
+                        unit="%"
+                        tickLine={false}
+                      />
+                    );
+                  })()}
                   <Tooltip
                     content={({ active, payload, label }: any) => {
                       if (!active || !payload || !payload.length) return null;
